@@ -12,20 +12,25 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--module(emqx_rule_engine_app).
+-module(emqx_rule_action).
 
--behaviour(application).
+%%--------------------------------------------------------------------
+%% Rule Action Behavihour
+%%--------------------------------------------------------------------
+%%
 
--export([start/2]).
+-ifdef(use_specs).
 
--export([stop/1]).
+-callback(description() -> string()).
 
-start(_Type, _Args) ->
-    {ok, Sup} = emqx_rule_engine_sup:start_link(),
-    emqx_rule_engine:load(application:get_all_env()),
-    {ok, Sup}.
+-else.
 
-stop(_State) ->
-    emqx_rule_engine:unload(application:get_all_env()),
-	ok.
+-export([behaviour_info/1]).
+
+behaviour_info(callbacks) ->
+    [{description, 0}];
+behaviour_info(_Other) ->
+    undefined.
+
+-endif.
 

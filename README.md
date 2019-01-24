@@ -3,6 +3,12 @@
 
 EMQ X Rule Engine.
 
+## Design
+
+```
+Event | Message -> Rule Match -> Execute Action
+```
+
 ## License
 
 Copyright (c) 2018 [EMQ Technologies Co., Ltd](http://emqtt.io). All Rights Reserved.
