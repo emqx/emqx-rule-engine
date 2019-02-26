@@ -12,25 +12,29 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--module(emqx_rule_action).
+-record(rule, {
+          id,
+          hook,
+          name,
+          topic,
+          conditions,
+          action,
+          params
+         }).
 
-%%--------------------------------------------------------------------
-%% Rule Action Behavihour
-%%--------------------------------------------------------------------
-%%
+-record(rule_status, {
+          id,
+          enabled
+         }).
 
--ifdef(use_specs).
-
--callback(description() -> string()).
-
--else.
-
--export([behaviour_info/1]).
-
-behaviour_info(callbacks) ->
-    [{description, 0}];
-behaviour_info(_Other) ->
-    undefined.
-
--endif.
+-record(action, {
+          id,
+          name,
+          hook,
+          app,
+          module,
+          func,
+          params,
+          descr
+         }).
 

@@ -5,7 +5,7 @@ PROJECT_VERSION = 0.1.0
 NO_AUTOPATCH = cuttlefish
 
 BUILD_DEPS = emqx cuttlefish
-dep_emqx = git-emqx https://github.com/emqx/emqx master
+dep_emqx = git-emqx https://github.com/emqx/emqx develop
 dep_cuttlefish = git-emqx https://github.com/emqx/cuttlefish v2.2.1
 
 ERLC_OPTS += +debug_info

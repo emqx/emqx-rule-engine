@@ -14,71 +14,55 @@
 
 -module(emqx_rule_engine).
 
--include_lib("emqx/include/emqx.hrl").
--include_lib("emqx/include/logger.hrl").
+-include("emqx_rule_engine.hrl").
 
--export([load/1, unload/1]).
+-export([register/1,
+         find_actions/1,
+         unregister/1]).
 
--export([on_client_connected/4,
-         on_client_disconnected/3]).
--export([on_client_subscribe/3,
-         on_client_unsubscribe/3]).
--export([on_message_publish/2,
-         on_message_delivered/3,
-         on_message_acked/3]).
+-type(rule() :: #rule{}).
+-type(action() :: #action{}).
 
-%% Called when the plugin application start
-load(Env) ->
-    emqx:hook('client.connected', fun ?MODULE:on_client_connected/4, [Env]),
-    emqx:hook('client.disconnected', fun ?MODULE:on_client_disconnected/3, [Env]),
-    emqx:hook('client.subscribe', fun ?MODULE:on_client_subscribe/3, [Env]),
-    emqx:hook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3, [Env]),
-    emqx:hook('message.publish', fun ?MODULE:on_message_publish/2, [Env]),
-    emqx:hook('message.delivered', fun ?MODULE:on_message_delivered/3, [Env]),
-    emqx:hook('message.acked', fun ?MODULE:on_message_acked/3, [Env]).
+-export_type([rule/0, action/0]).
 
-on_client_connected(#{client_id := ClientId}, ConnAck, ConnAttrs, _Env) ->
-    ?LOG(info, "[RuleEngine] Client(~s) connected, connack: ~w, conn_attrs:~p",
-         [ClientId, ConnAck, ConnAttrs]).
+%% Register an application which provides actions.
+-spec(register(App :: atom()) -> ok).
+register(App) when is_atom(App) ->
+    Actions = find_actions(App),
+    emqx_rule_registry:add_actions(Actions).
 
-on_client_disconnected(#{client_id := ClientId}, ReasonCode, _Env) ->
-    ?LOG(info, "[RuleEngine] Client(~s) disconnected, reason_code: ~w",
-         [ClientId, ReasonCode]).
+-spec(find_actions(App :: atom()) -> list(action())).
+find_actions(App) ->
+    lists:map(fun new_action/1,
+              [{App, Mod, Attr} || {ok, Modules} <- [application:get_key(App, modules)],
+                                   Mod <- Modules,
+                                   {rule_action, Attrs} <- module_attributes(Mod),
+                                   Attr <- Attrs]).
 
-on_client_subscribe(#{client_id := ClientId}, RawTopicFilters, _Env) ->
-    ?LOG(info, "[RuleEngine] Client(~s) will subscribe: ~p",
-         [ClientId, RawTopicFilters]),
-    {ok, RawTopicFilters}.
+new_action({App, Mod, #{name := Name,
+                        hook := Hook,
+                        func := Func,
+                        descr := Descr}}) ->
+    true = erlang:function_exported(Mod, Func, 1),
+    Prefix = case App =:= ?MODULE of
+                 true -> default;
+                 false -> App
+             end,
+    Id = list_to_atom(lists:concat([Prefix, ".", Name])),
+    #action{id = Id, name = Name, hook = Hook, app = App,
+            module = Mod, func = Func, descr = Descr}.
 
-on_client_unsubscribe(#{client_id := ClientId}, RawTopicFilters, _Env) ->
-    ?LOG(info, "[RuleEngine] Client(~s) unsubscribe ~p",
-         [ClientId, RawTopicFilters]),
-    {ok, RawTopicFilters}.
+module_attributes(Module) ->
+    try Module:module_info(attributes)
+    catch
+        error:undef -> [];
+        error:Reason -> exit(Reason)
+    end.
 
-on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>}, _Env) ->
-    {ok, Message};
-
-on_message_publish(Message, _Env) ->
-    ?LOG(info, "[RuleEngine] Publish ~s", [emqx_message:format(Message)]),
-    {ok, Message}.
-
-on_message_delivered(#{client_id := ClientId}, Message, _Env) ->
-    ?LOG(info, "[RuleEngine] Delivered message to client(~s): ~s",
-         [ClientId, emqx_message:format(Message)]),
-    {ok, Message}.
-
-on_message_acked(#{client_id := ClientId}, Message, _Env) ->
-    ?LOG(info, "[RuleEngine] Session(~s) acked message: ~s",
-         [ClientId, emqx_message:format(Message)]),
-    {ok, Message}.
-
-%% Called when the rule engine application stop
-unload(_Env) ->
-    emqx:unhook('client.connected', fun ?MODULE:on_client_connected/4),
-    emqx:unhook('client.disconnected', fun ?MODULE:on_client_disconnected/3),
-    emqx:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/3),
-    emqx:unhook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3),
-    emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
-    emqx:unhook('message.delivered', fun ?MODULE:on_message_delivered/3),
-    emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3).
+%% Unregister an application.
+-spec(unregister(App :: atom()) -> ok).
+unregister(App) ->
+    %% TODO:
+    Actions = find_actions(App),
+    emqx_rule_registry:remove_actions(Actions).
 

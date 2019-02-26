@@ -20,12 +20,18 @@
 
 -export([stop/1]).
 
+-define(APP, emqx_rule_engine).
+
 start(_Type, _Args) ->
     {ok, Sup} = emqx_rule_engine_sup:start_link(),
-    emqx_rule_engine:load(application:get_all_env()),
+    ok = emqx_rule_engine:register(?APP),
+    ok = emqx_rule_runtime:start(env()),
     {ok, Sup}.
 
 stop(_State) ->
-    emqx_rule_engine:unload(application:get_all_env()),
-	ok.
+    ok = emqx_rule_runtime:stop(env()),
+    ok = emqx_rule_engine:unregister(?APP).
+
+env() ->
+    maps:from_list(application:get_all_env()).
 

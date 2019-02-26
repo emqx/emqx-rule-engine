@@ -1,0 +1,8 @@
+%%-*- mode: erlang -*-
+%% emqx_rule_engine config mapping
+
+{mapping, "rule_engine.ignore_sys_message", "emqx_rule_engine.ignore_sys_message", [
+  {default, on},
+  {datatype, flag}
+]}.
+
