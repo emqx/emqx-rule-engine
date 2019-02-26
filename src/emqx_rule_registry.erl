@@ -16,7 +16,11 @@
 
 -include("emqx_rule_engine.hrl").
 
+%% Mnesia bootstrap
 -export([mnesia/1]).
+
+-boot_mnesia({mnesia, [boot]}).
+-copy_mnesia({mnesia, [copy]}).
 
 %% Rule Management
 -export([get_rules/0,
@@ -85,7 +89,7 @@ get_rules() ->
 
 -spec(get_rules_for(Hook :: atom()) -> list(rule())).
 get_rules_for(Hook) ->
-    mnesia:dirty_index_read(?RULE_TAB, Hook).
+    mnesia:dirty_index_read(?RULE_TAB, Hook, #rule.hook).
 
 -spec(get_rule(Id :: binary()) -> {ok, rule()} | {error, not_found}).
 get_rule(Id) when is_binary(Id) ->
