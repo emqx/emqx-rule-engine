@@ -14,7 +14,7 @@
 
 -module(emqx_rule_registry).
 
--include("emqx_rule_engine.hrl").
+-include("rule_engine.hrl").
 
 %% Mnesia bootstrap
 -export([mnesia/1]).

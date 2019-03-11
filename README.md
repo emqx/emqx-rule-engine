@@ -3,74 +3,11 @@
 
 MQTT Message Routing Rule Engine for EMQ X Broker.
 
-## Concept
+## Design Guide
 
-```
-when
-    <conditions> | <predicates>
-then
-    <action>;
-```
-
-Rule matching
-
-```
-rule "Rule Name"
-  when
-    rule match
-  select
-    para1 = val1
-    para2 = val2
-  then
-    action(#{para2 => val1, #para2 => val2})
-```
-
-## Architecture
+See `docs/design.md` for design guide.
 
 
-```
-          |-----------------|
-   P ---->| Message Routing |----> S
-          |-----------------|
-               |     /|\
-              \|/     |
-          |-----------------|
-          |   Rule Engine   |
-          |-----------------|
-               |      |
-            Backends  Bridges
-```
-
-## Rule
-
-A rule consists of a SQL SELECT statement, a topic filter, and a rule action
-
-## Action
-
-Define a rule action in ADT:
-
-```
-action :: Application -> Resource -> Params -> IO ()
-```
-
-A rule action:
-
-Module:function(Args)
-
-## Design
-
-```
-Event | Message -> Rule Match -> Execute Action
-```
-
-
-## REST API
-
-## CLI
-
-rules list
-rules show
-rule-actions list
 
 ## License
 

@@ -17,15 +17,17 @@
 
 -include_lib("emqx/include/emqx.hrl").
 
--rule_action(#{name  => republish_message,
-               hook  => 'message.publish',
-               func  => republish_action,
-               descr => "Republish messages"
+-rule_action(#{name   => republish_message,
+               for    => 'message.publish',
+               func   => republish_action,
+               params => #{from => topic,
+                           to   => topic},
+               descr  => "Republish messages"
               }).
 
--type(action_func() :: fun((Data :: map()) -> Result :: term())).
+-type(action_fun() :: fun((Data :: map()) -> Result :: any())).
 
--export_type([action_func/0]).
+-export_type([action_fun/0]).
 
 -export([republish_action/1]).
 
@@ -33,9 +35,10 @@
 %% Default actions for the Rule Engine
 %%------------------------------------------------------------------------------
 
+%% A Demo Action.
 -spec(republish_action(#{from := emqx_topic:topic(),
                          to := emqx_topic:topic()})
-      -> action_func()).
+      -> action_fun()).
 republish_action(#{from := From, to := To}) ->
     fun(#{message := Msg = #message{topic = Origin}}) ->
             case emqx_topic:match(Origin, From) of

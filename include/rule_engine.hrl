@@ -13,28 +13,43 @@
 %% limitations under the License.
 
 -record(rule, {
-          id,
-          hook,
+          id :: binary(),
+          hook :: atom(),
           name,
           topic,
           conditions,
           action,
-          params
-         }).
-
--record(rule_status, {
-          id,
+          args,
           enabled
          }).
 
 -record(action, {
-          id,
-          name,
-          hook,
-          app,
-          module,
-          func,
-          params,
-          descr
+          id :: atom(),
+          name :: atom(),
+          for :: atom(),
+          app :: atom(),
+          module :: module(),
+          func :: atom(),
+          params :: #{atom() := atom()},
+          descr :: binary() | string()
          }).
+
+-record(resource, {
+          name :: {atom(), node()},
+          type :: atom(),
+          config :: #{},
+          fetch :: fun(),
+          write :: fun(),
+          state :: running | stopped,
+          conns :: list(pid()) | undefined,
+          descr :: string()
+         }).
+
+-record(resource_type, {
+          name :: atom(),
+          params :: #{},
+          validate :: fun(),
+          create :: fun(),
+          descr :: string()
+        }).
 
