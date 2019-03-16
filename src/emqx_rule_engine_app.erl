@@ -24,14 +24,14 @@
 
 start(_Type, _Args) ->
     {ok, Sup} = emqx_rule_engine_sup:start_link(),
-    ok = emqx_rule_engine:register(?APP),
-    ok = emqx_rule_runtime:start(env()),
+    ok = emqx_rule_engine:register_provider(?APP),
+    ok = emqx_rule_runtime:load(env()),
     {ok, Sup}.
 
 stop(_State) ->
-    ok = emqx_rule_runtime:stop(env()),
-    ok = emqx_rule_engine:unregister(?APP).
+    ok = emqx_rule_runtime:unload(env()),
+    ok = emqx_rule_engine:unregister_provider(?APP).
 
 env() ->
-    maps:from_list(application:get_all_env()).
+    maps:from_list(application:get_all_env(?APP)).
 

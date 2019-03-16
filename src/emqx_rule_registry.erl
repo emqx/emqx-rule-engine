@@ -14,13 +14,11 @@
 
 -module(emqx_rule_registry).
 
+-behaviour(gen_server).
+
 -include("rule_engine.hrl").
 
-%% Mnesia bootstrap
--export([mnesia/1]).
-
--boot_mnesia({mnesia, [boot]}).
--copy_mnesia({mnesia, [copy]}).
+-export([start_link/0]).
 
 %% Rule Management
 -export([get_rules/0,
@@ -33,18 +31,48 @@
         ]).
 
 %% Action Management
--export([get_actions/0,
+-export([add_action/1,
+         add_actions/1,
+         get_actions/0,
          get_actions_for/1,
          get_action/1,
-         add_action/1,
-         add_actions/1,
          remove_action/1,
-         remove_actions/1
+         remove_actions/1,
+         remove_actions_of/1
         ]).
+
+%% Resource Management
+-export([add_resource/1,
+         remove_resource/1
+        ]).
+
+%% Resource Types
+-export([register_resource_types/1,
+         unregister_resource_types_of/1
+        ]).
+
+%% gen_server Callbacks
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3
+        ]).
+
+%% Mnesia bootstrap
+-export([mnesia/1]).
+
+-boot_mnesia({mnesia, [boot]}).
+-copy_mnesia({mnesia, [copy]}).
+
+-define(REGISTRY, ?MODULE).
 
 %% Tables
 -define(RULE_TAB, emqx_rule).
 -define(ACTION_TAB, emqx_rule_action).
+-define(RES_TAB, emqx_resource).
+-define(RES_TYPE_TAB, emqx_resource_type).
 
 -type(rule() :: emqx_rule_engine:rule()).
 -type(action() :: emqx_rule_engine:action()).
@@ -53,7 +81,7 @@
 %% Mnesia bootstrap
 %%------------------------------------------------------------------------------
 
-%% @doc Create or replicate trie tables.
+%% @doc Create or replicate tables.
 -spec(mnesia(boot | copy) -> ok).
 mnesia(boot) ->
     %% Optimize storage
@@ -69,15 +97,41 @@ mnesia(boot) ->
     ok = ekka_mnesia:create_table(?ACTION_TAB, [
                 {ram_copies, [node()]},
                 {record_name, action},
-                {index, [#action.hook]},
+                {index, [#action.for, #action.app]},
                 {attributes, record_info(fields, action)},
+                {storage_properties, StoreProps}]),
+    %% Resource table
+    ok = ekka_mnesia:create_table(?RES_TAB, [
+                {disc_copies, [node()]},
+                {record_name, resource},
+                {index, [#resource.type]},
+                {attributes, record_info(fields, resource)},
+                {storage_properties, StoreProps}]),
+    %% Resource type table
+    ok = ekka_mnesia:create_table(?RES_TYPE_TAB, [
+                {ram_copies, [node()]},
+                {record_name, resource_type},
+                {index, [#resource_type.provider]},
+                {attributes, record_info(fields, resource_type)},
                 {storage_properties, StoreProps}]);
 
 mnesia(copy) ->
     %% Copy rule table
     ok = ekka_mnesia:copy_table(?RULE_TAB),
     %% Copy rule action table
-    ok = ekka_mnesia:copy_table(?ACTION_TAB).
+    ok = ekka_mnesia:copy_table(?ACTION_TAB),
+    %% Copy resource table
+    ok = ekka_mnesia:copy_table(?RES_TAB),
+    %% Copy resource type table
+    ok = ekka_mnesia:copy_table(?RES_TYPE_TAB).
+
+%%------------------------------------------------------------------------------
+%% Start the registry
+%%------------------------------------------------------------------------------
+
+-spec(start_link() -> {ok, pid()} | ignore | {error, Reason :: term()}).
+start_link() ->
+    gen_server:start_link({local, ?REGISTRY}, ?MODULE, [], []).
 
 %%------------------------------------------------------------------------------
 %% Rule Management
@@ -100,19 +154,19 @@ get_rule(Id) when is_binary(Id) ->
 
 -spec(add_rule(rule()) -> ok).
 add_rule(Rule) ->
-    mnesia_trans(fun write_rule/1, [Rule]).
+    trans(fun write_rule/1, [Rule]).
 
 -spec(add_rules(list(rule())) -> ok).
 add_rules(Rules) ->
-    mnesia_trans(fun lists:foreach/2, [fun write_rule/1, Rules]).
+    trans(fun lists:foreach/2, [fun write_rule/1, Rules]).
 
 -spec(remove_rule(rule()) -> ok).
 remove_rule(Rule) ->
-    mnesia_trans(fun delete_rule/1, [Rule]).
+    trans(fun delete_rule/1, [Rule]).
 
 -spec(remove_rules(list(rule())) -> ok).
 remove_rules(Rules) ->
-    mnesia_trans(fun lists:foreach/2, [fun delete_rule/1, Rules]).
+    trans(fun lists:foreach/2, [fun delete_rule/1, Rules]).
 
 %% @private
 write_rule(Rule) ->
@@ -126,38 +180,79 @@ delete_rule(Rule) ->
 %% Action Management
 %%------------------------------------------------------------------------------
 
+%% @doc Get all actions.
 -spec(get_actions() -> list(action())).
 get_actions() ->
     ets:tab2list(?ACTION_TAB).
 
+%% @doc Get actions for a hook.
 -spec(get_actions_for(Hook :: atom()) -> list(action())).
-get_actions_for(Hook) when is_atom(Hook) ->
-    mnesia:dirty_index_read(?ACTION_TAB, Hook, #action.hook).
+get_actions_for(Hook) ->
+    mnesia:dirty_index_read(?ACTION_TAB, Hook, #action.for).
 
--spec(get_action(Id :: atom()) -> {ok, action()} | {error, not_found}).
-get_action(Id) when is_atom(Id) ->
+%% @doc Get an action by Id.
+-spec(get_action(Id :: atom()) -> {ok, action()} | not_found).
+get_action(Id) ->
     case mnesia:dirty_read(?ACTION_TAB, Id) of
         [Action] -> {ok, Action};
-        [] -> {error, not_found}
+        [] -> not_found
     end.
 
+%% @doc Add an action.
 -spec(add_action(action()) -> ok).
 add_action(Action) when is_record(Action, action) ->
-    mnesia_trans(fun write_action/1, [Action]).
+    trans(fun write_action/1, [Action]).
 
+%% @doc Add actions.
 -spec(add_actions(list(action())) -> ok).
 add_actions(Actions) when is_list(Actions) ->
-    mnesia_trans(fun lists:foreach/2, [fun write_action/1, Actions]).
+    trans(fun lists:foreach/2, [fun write_action/1, Actions]).
 
+%% @doc Remove an action.
 -spec(remove_action(action()) -> ok).
 remove_action(Action) ->
-    %%TODO: How to handle the rules which depend on the action???
-    mnesia_trans(fun delete_action/1, [Action]).
+    trans(fun delete_action/1, [Action]).
 
+%% @doc Remove actions.
 -spec(remove_actions(list(action())) -> ok).
 remove_actions(Actions) ->
-    %%TODO: How to handle the rules which depend on the actions???
-    mnesia_trans(fun lists:foreach/2, [fun delete_action/1, Actions]).
+    trans(fun lists:foreach/2, [fun delete_action/1, Actions]).
+
+%% @doc Remove actions of the App.
+-spec(remove_actions_of(App :: atom()) -> ok).
+remove_actions_of(App) ->
+    trans(fun() ->
+              Actions = mnesia:index_read(?ACTION_TAB, App, #action.app),
+              lists:foreach(fun(Action) ->
+                                    mnesia:delete_object(?ACTION_TAB, Action, write)
+                            end, Actions)
+          end).
+
+%%------------------------------------------------------------------------------
+%% Resource Management
+%%------------------------------------------------------------------------------
+
+add_resource(_Resource) ->
+    ok.
+
+remove_resource(_Name) ->
+    ok.
+
+%%------------------------------------------------------------------------------
+%% Resource Type Management
+%%------------------------------------------------------------------------------
+
+register_resource_types(Types) ->
+    trans(fun lists:foreach/2, [fun insert_resource_type/1, Types]).
+
+%% @doc Unregister resource types of the App.
+unregister_resource_types_of(App) ->
+    trans(fun() ->
+              Types = mnesia:index_read(?RES_TYPE_TAB, App, #resource_type.provider),
+              lists:foreach(fun(Type) ->
+                                    mnesia:delete_object(?RES_TYPE_TAB, Type, write)
+                            end, Types)
+          end).
 
 %% @private
 write_action(Action) ->
@@ -167,14 +262,42 @@ write_action(Action) ->
 delete_action(Action) ->
     mnesia:delete_object(?ACTION_TAB, Action, write).
 
+insert_resource_type(Type) ->
+    mnesia:write(?RES_TYPE_TAB, Type, write).
+
+%%------------------------------------------------------------------------------
+%% gen_server callbacks
+%%------------------------------------------------------------------------------
+
+init([]) ->
+    {ok, #{}}.
+
+handle_call(_Request, _From, State) ->
+    Reply = ok,
+    {reply, Reply, State}.
+
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+handle_info(_Info, State) ->
+    {noreply, State}.
+
+terminate(_Reason, _State) ->
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
 %%------------------------------------------------------------------------------
 %% Private Functions
 %%------------------------------------------------------------------------------
 
-mnesia_trans(Fun, Args) ->
+trans(Fun) ->
+    trans(Fun, []).
+
+trans(Fun, Args) ->
     case mnesia:transaction(Fun, Args) of
         {atomic, ok} -> ok;
         {aborted, Reason} -> error(Reason)
     end.
-
 

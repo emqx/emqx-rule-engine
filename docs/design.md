@@ -134,14 +134,22 @@ bridge:rabbit:localhost
 4. Delete Resource
 5. Test Resource
 
-### Resource Lifecircle
+### Resource State (Lifecircle)
 
-0. Create Resource
+0. Create Resource and Validate a Resource
 1. Start/Connect Resource
 2. Bind resource name to instance
 3. Stop/Disconnect Resource
 4. Unbind resource name with instance
 5. Is Resource Alive?
+
+### Resource Type
+
+The properties and behaviors of resources is defined by resource types. A resoure type is provided(contributed) by a plugin.
+
+### Resource Type Provider
+
+Provider of resource type is a EMQ X Plugin.
 
 ### Resource Manager
 
@@ -153,6 +161,8 @@ Action ----> Proxy(Batch|Write) ----> Connection -----> ExternalResource
   |                                      /|\
   |------------------Fetch----------------|
 ```
+
+
 
 ## REST API
 

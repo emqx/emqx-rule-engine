@@ -12,23 +12,10 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--module(emqx_rule_engine_sup).
+-module(emqx_rule_funcs).
 
--behaviour(supervisor).
+-export([topic/1]).
 
--export([start_link/0]).
-
--export([init/1]).
-
-start_link() ->
-	supervisor:start_link({local, ?MODULE}, ?MODULE, []).
-
-init([]) ->
-    Registry = #{id => emqx_rule_registry,
-                 start => {emqx_rule_registry, start_link, []},
-                 restart => permanent,
-                 shutdown => 5000,
-                 type => worker,
-                 modules => [emqx_rule_registry]},
-    {ok, {{one_for_all, 10, 100}, [Registry]}}.
+topic(N) when is_integer(N) ->
+    fun(Topic) -> lists:nth(N, emqx_topic:tokens(Topic)) end.
 

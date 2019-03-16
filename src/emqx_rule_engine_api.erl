@@ -82,7 +82,7 @@ list_rules(_Bindings, _Params) ->
     %% TODO: List all rules
     emqx_mgmt:return({ok, []}).
 
-show_rule(#{id := Id}, _Params) ->
+show_rule(#{id := _Id}, _Params) ->
     %% TODO:
     emqx_mgmt:return({ok, #{}}).
 
@@ -98,7 +98,7 @@ list_actions(_Bindings, _Params) ->
     %% TODO:
     emqx_mgmt:return({ok, []}).
 
-show_action(#{id := Id}, Params) ->
+show_action(#{id := _Id}, _Params) ->
     %% TODO:
     emqx_mgmt:return({ok, #{}}).
 

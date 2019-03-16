@@ -30,17 +30,25 @@
 
 -spec(load() -> ok).
 load() ->
-    lists:foreach(fun(Cmd) ->
-                          emqx_ctl:register_command(Cmd, {?MODULE, Cmd}, [])
-                  end, commands()).
+    lists:foreach(
+      fun({Cmd, Func}) ->
+              emqx_ctl:register_command(Cmd, {?MODULE, Func}, []);
+         (Cmd) ->
+              emqx_ctl:register_command(Cmd, {?MODULE, Cmd}, [])
+      end, commands()).
 
--spec(commands() -> list(atom()).
+-spec(commands() -> list(atom())).
 commands() ->
-    [rules, 'rule-actions', resources].
+    [rules, {'rule-actions', actions}, resources].
 
 -spec(unload() -> ok).
 unload() ->
-    lists:foreach(fun emqx_ctl:unregister_command/1, commands()).
+    lists:foreach(
+      fun({Cmd, _Func}) ->
+              emqx_ctl:unregister_command(Cmd);
+         (Cmd) ->
+              emqx_ctl:unregister_command(Cmd)
+      end, commands()).
 
 %%-----------------------------------------------------------------------------
 %% 'rules' command
@@ -63,20 +71,20 @@ rules(_usage) ->
 %% 'rule-actions' command
 %%-----------------------------------------------------------------------------
 
-'rule-actions'(["list"]) ->
+actions(["list"]) ->
     emqx_cli:print("TODO: list rule-actions...~n");
 
-'rule-actions'(["show", ActionId]) ->
+actions(["show", ActionId]) ->
     emqx_cli:print("TODO: show rule-action - ~s~n", [ActionId]);
 
-'rule-actions'(_usage) ->
+actions(_usage) ->
     emqx_cli:usage([{"rule-actions list",            "List all actions"},
                     {"rule-actions show <ActionId>", "Show a rule action"}
                    ]).
 
-%%-----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% 'resources' command
-%%-----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
 resources(["list"]) ->
     emqx_cli:print("TODO: list resources...~n");

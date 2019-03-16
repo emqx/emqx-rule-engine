@@ -14,13 +14,13 @@
 
 -record(rule, {
           id :: binary(),
+          name :: binary(),
           hook :: atom(),
-          name,
-          topic,
-          conditions,
-          action,
-          args,
-          enabled
+          topic :: binary(),
+          conditions :: list(),
+          actions :: list({atom(), Args :: list()}),
+          enabled :: boolean(),
+          description :: string()
          }).
 
 -record(action, {
@@ -30,26 +30,27 @@
           app :: atom(),
           module :: module(),
           func :: atom(),
-          params :: #{atom() := atom()},
-          descr :: binary() | string()
+          params :: #{atom() := term()},
+          description :: binary() | string()
          }).
 
 -record(resource, {
-          name :: {atom(), node()},
-          type :: atom(),
+          name :: {string(), node()},
+          type :: atom(), %% Resource Type
           config :: #{},
-          fetch :: fun(),
-          write :: fun(),
-          state :: running | stopped,
+          request :: fun(),
           conns :: list(pid()) | undefined,
-          descr :: string()
+          attrs :: #{},
+          description :: binary()
          }).
 
 -record(resource_type, {
           name :: atom(),
+          provider :: atom(),
           params :: #{},
-          validate :: fun(),
           create :: fun(),
-          descr :: string()
+          connect :: fun() | undefined,
+          disconnect :: fun() | undefined,
+          description :: binary()
         }).
 
