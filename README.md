@@ -1,13 +1,11 @@
 
 # emqx-rule-engine
 
-MQTT Message Routing Rule Engine for EMQ X Broker.
+Rule Engine for EMQ X Broker.
 
 ## Design Guide
 
 See `docs/design.md` for design guide.
-
-
 
 ## License
 

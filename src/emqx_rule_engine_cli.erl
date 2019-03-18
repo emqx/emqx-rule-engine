@@ -14,14 +14,14 @@
 
 -module(emqx_rule_engine_cli).
 
--export([load/0,
-         commands/0,
-         unload/0
+-export([ load/0
+        , commands/0
+        , unload/0
         ]).
 
--export([rules/1,
-         actions/1,
-         resources/1
+-export([ rules/1
+        , actions/1
+        , resources/1
         ]).
 
 %%-----------------------------------------------------------------------------

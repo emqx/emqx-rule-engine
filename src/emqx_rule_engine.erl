@@ -16,8 +16,12 @@
 
 -include("rule_engine.hrl").
 
--export([register_provider/1,
-         unregister_provider/1
+-export([ register_provider/1
+        , unregister_provider/1
+        ]).
+
+-export([ create_rule/1
+        , create_resource/1
         ]).
 
 -type(rule() :: #rule{}).
@@ -25,11 +29,15 @@
 -type(resource() :: #resource{}).
 -type(resource_type() :: #resource_type{}).
 
--export_type([rule/0,
-              action/0,
-              resource/0,
-              resource_type/0
+-export_type([ rule/0
+             , action/0
+             , resource/0
+             , resource_type/0
              ]).
+
+%%------------------------------------------------------------------------------
+%% Register an application as rule-engine's provider
+%%------------------------------------------------------------------------------
 
 %% Register an application as rule engine's provider.
 -spec(register_provider(App :: atom()) -> ok).
@@ -67,8 +75,8 @@ new_action({App, Mod, #{name := Name,
                  true -> default;
                  false -> App
              end,
-    Id = list_to_atom(lists:concat([Prefix, ":", Name])),
-    #action{id = Id, name = Name, for = Hook, app = App,
+    Name1 = list_to_atom(lists:concat([Prefix, ":", Name])),
+    #action{name = Name1, for = Hook, app = App,
             module = Mod, func = Func, params = Params,
             description = Descr}.
 
@@ -84,14 +92,15 @@ new_resource_type({App, Mod, #{name := Name,
                    create = {Mod, Create}, description = Descr}.
 
 find_resource_params(Prefix, Mappings) ->
-    lists:foldr(fun(M, Acc) ->
-                        Var = cuttlefish_mapping:variable(M),
-                        case string:prefix(string:join(Var, "."), Prefix ++ ".") of
-                            nomatch -> Acc;
-                            Param ->
-                                [{list_to_atom(Param), cuttlefish_mapping:datatype(M)}|Acc]
-                        end
-                end, [], Mappings).
+    lists:foldr(
+      fun(M, Acc) ->
+              Var = cuttlefish_mapping:variable(M),
+              case string:prefix(string:join(Var, "."), Prefix ++ ".") of
+                  nomatch -> Acc;
+                  Param ->
+                      [{list_to_atom(Param), cuttlefish_mapping:datatype(M)}|Acc]
+              end
+      end, [], Mappings).
 
 find_attrs(App, Def) ->
     [{App, Mod, Attr} || {ok, Modules} <- [application:get_key(App, modules)],
@@ -106,9 +115,41 @@ module_attributes(Module) ->
         error:Reason -> error(Reason)
     end.
 
+%%------------------------------------------------------------------------------
+%% Register a provider
+%%------------------------------------------------------------------------------
+
 %% Unregister a provider.
 -spec(unregister_provider(App :: atom()) -> ok).
 unregister_provider(App) ->
     ok = emqx_rule_registry:remove_actions_of(App),
     ok = emqx_rule_registry:unregister_resource_types_of(App).
+
+%%------------------------------------------------------------------------------
+%% Create a rule or resource
+%%------------------------------------------------------------------------------
+
+-spec(create_rule(#{}) -> {ok, rule()} | {error, Reason :: term()}).
+create_rule(_Params = #{}) ->
+    {ok, #rule{}}.
+
+-spec(create_resource(#{}) -> {ok, resource()} | {error, Reason :: term()}).
+create_resource(#{name := Name,
+                  type := Type,
+                  config := Config,
+                  description := Description}) ->
+    case emqx_rule_registry:find_resource_type(Type) of
+        {ok, #resource_type{create = Create}} ->
+            ReqFun = Create(Config),
+            ResId = iolist_to_binary([atom_to_list(Type), ":", Name]),
+            Resource = #resource{id = ResId,
+                                 type = Type,
+                                 config = Config,
+                                 request = ReqFun,
+                                 description = Description},
+            ok = emqx_rule_registry:add_resource(Resource),
+            {ok, Resource};
+        not_found ->
+            {error, resource_type_not_found}
+    end.
 

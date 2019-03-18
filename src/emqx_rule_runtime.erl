@@ -18,7 +18,9 @@
 -include_lib("emqx/include/emqx.hrl").
 -include_lib("emqx/include/logger.hrl").
 
--export([load/1, unload/1]).
+-export([start/1,
+         stop/1
+        ]).
 
 -export([on_client_connected/4,
          on_client_disconnected/3
@@ -33,17 +35,6 @@
          on_message_acked/3
         ]).
 
--export([start_link/0]).
-
-%% gen_server callbacks
--export([init/1,
-         handle_call/3,
-         handle_cast/2,
-         handle_info/2,
-         terminate/2,
-         code_change/3
-        ]).
-
 -define(RUNTIME, ?MODULE).
 
 %%------------------------------------------------------------------------------
@@ -51,7 +42,7 @@
 %%------------------------------------------------------------------------------
 
 %% Called when the plugin application start
-load(Env) ->
+start(Env) ->
     emqx:hook('client.connected', fun ?MODULE:on_client_connected/4, [Env]),
     emqx:hook('client.disconnected', fun ?MODULE:on_client_disconnected/3, [Env]),
     emqx:hook('client.subscribe', fun ?MODULE:on_client_subscribe/3, [Env]),
@@ -126,7 +117,7 @@ match(_Conditions, _Input) ->
 %%------------------------------------------------------------------------------
 
 %% Called when the rule engine application stop
-unload(_Env) ->
+stop(_Env) ->
     emqx:unhook('client.connected', fun ?MODULE:on_client_connected/4),
     emqx:unhook('client.disconnected', fun ?MODULE:on_client_disconnected/3),
     emqx:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/3),
@@ -134,35 +125,4 @@ unload(_Env) ->
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
     emqx:unhook('message.delivered', fun ?MODULE:on_message_delivered/3),
     emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3).
-
-%%------------------------------------------------------------------------------
-%% Start the runtime server
-%%------------------------------------------------------------------------------
-
-start_link() ->
-    gen_server:start_link({local, ?RUNTIME}, ?MODULE, [], []).
-
-%%------------------------------------------------------------------------------
-%% gen_server callbacks
-%%------------------------------------------------------------------------------
-
-init([]) ->
-    {ok, #{}}.
-
-handle_call(_Request, _From, State) ->
-    Reply = ok,
-    {reply, Reply, State}.
-
-handle_cast(_Msg, State) ->
-    {noreply, State}.
-
-handle_info(_Info, State) ->
-    {noreply, State}.
-
-terminate(_Reason, _State) ->
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
 

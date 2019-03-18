@@ -12,45 +12,49 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--record(rule, {
-          id :: binary(),
-          name :: binary(),
-          hook :: atom(),
-          topic :: binary(),
-          conditions :: list(),
-          actions :: list({atom(), Args :: list()}),
-          enabled :: boolean(),
-          description :: string()
-         }).
+-record(rule,
+        { id :: binary()
+        , name :: binary()
+        , hook :: atom()
+        , topic :: binary()
+        , conditions :: list()
+        , actions :: list({atom(), list()})
+        , enabled :: boolean()
+        , description :: binary()
+        }).
 
--record(action, {
-          id :: atom(),
-          name :: atom(),
-          for :: atom(),
-          app :: atom(),
-          module :: module(),
-          func :: atom(),
-          params :: #{atom() := term()},
-          description :: binary() | string()
-         }).
+-record(action,
+        { name :: atom()
+        , for :: atom()
+        , app :: atom()
+        , module :: module()
+        , func :: atom()
+        , params :: #{atom() => term()}
+        , description :: binary()
+        }).
 
--record(resource, {
-          name :: {string(), node()},
-          type :: atom(), %% Resource Type
-          config :: #{},
-          request :: fun(),
-          conns :: list(pid()) | undefined,
-          attrs :: #{},
-          description :: binary()
-         }).
+-record(resource,
+        { id :: binary()
+        , type :: atom()
+        , config :: #{}
+        , request :: fun()
+        , attrs :: #{}
+        , description :: binary()
+        }).
 
--record(resource_type, {
-          name :: atom(),
-          provider :: atom(),
-          params :: #{},
-          create :: fun(),
-          connect :: fun() | undefined,
-          disconnect :: fun() | undefined,
-          description :: binary()
+-record(resource_instance,
+        { id :: {binary(), node()}
+        , conns :: list(pid()) | undefined
+        , created_at :: erlang:timestamp()
+        }).
+
+-record(resource_type,
+        { name :: atom()
+        , provider :: atom()
+        , params :: #{}
+        , create :: fun()
+        , connect :: fun() | undefined
+        , disconnect :: fun() | undefined
+        , description :: binary()
         }).
 
