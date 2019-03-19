@@ -24,6 +24,8 @@
         , create_resource/1
         ]).
 
+-export([compile_conditions/1]).
+
 -type(rule() :: #rule{}).
 -type(action() :: #action{}).
 -type(resource() :: #resource{}).
@@ -130,8 +132,44 @@ unregister_provider(App) ->
 %%------------------------------------------------------------------------------
 
 -spec(create_rule(#{}) -> {ok, rule()} | {error, Reason :: term()}).
-create_rule(_Params = #{}) ->
-    {ok, #rule{}}.
+create_rule(Params = #{name := Name,
+                       hook := Hook,
+                       conditions := Conditions,
+                       actions := Actions,
+                       enabled := Enabled,
+                       description := Descr}) ->
+    case init_actions(Actions, []) of
+        {ok, Actions1} ->
+            Rule = #rule{id = rule_id(Name),
+                         name = Name,
+                         hook = Hook,
+                         topic = maps:get(topic, Params, undefined),
+                         conditions = compile_conditions(Conditions),
+                         actions = Actions1,
+                         enabled = Enabled,
+                         description = Descr},
+            ok = emqx_rule_registry:add_rule(Rule),
+            {ok, Rule};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+rule_id(Name) ->
+    iolist_to_binary([Name, ":", integer_to_list(erlang:system_time())]).
+
+init_actions([], Acc) ->
+    lists:reverse(Acc);
+
+init_actions([{Name, Args}|Actions], Acc) ->
+    case emqx_rule_registry:find_action(Name) of
+        {ok, #action{module = M, func = F}} ->
+            init_actions(Actions, [#{name => Name, args => Args, apply => M:F(Args)}|Acc]);
+        not_found ->
+            {error, action_not_found}
+    end.
+
+compile_conditions(Conditions) ->
+    Conditions.
 
 -spec(create_resource(#{}) -> {ok, resource()} | {error, Reason :: term()}).
 create_resource(#{name := Name,

@@ -17,8 +17,11 @@
         , name :: binary()
         , hook :: atom()
         , topic :: binary()
+        , selects :: list()
         , conditions :: list()
-        , actions :: list({atom(), list()})
+        , actions :: list(#{name => atom(),
+                            args => list(),
+                            apply => fun()})
         , enabled :: boolean()
         , description :: binary()
         }).

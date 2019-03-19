@@ -80,7 +80,7 @@ on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
 on_message_publish(Message, _Env) ->
     ?LOG(info, "[RuleEngine] Publish ~s", [emqx_message:format(Message)]),
     Rules = emqx_rule_registry:get_rules_for('message.publish'),
-    ok = execute(Rules, #{message => Message}),
+    ok = apply_rules(Rules, emqx_message:to_map(Message)),
     {ok, Message}.
 
 on_message_delivered(#{client_id := ClientId}, Message, _Env) ->
@@ -94,23 +94,62 @@ on_message_acked(#{client_id := ClientId}, Message, _Env) ->
     {ok, Message}.
 
 %%------------------------------------------------------------------------------
-%% Execute rules
+%% Apply rules
 %%------------------------------------------------------------------------------
 
--spec(execute(list(emqx_rule_engine:rule()), term()) -> ok).
-execute([], _Input) ->
+-spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
+apply_rules([], _Input) ->
     ok;
 
-execute([#rule{conditions = Conditions, actions = Actions}|Rules], Input) ->
-    case match(Conditions, Input) of
-        true ->
-            lists:foreach(fun(Action) -> Action(Input) end, Actions);
-        false -> ok
+apply_rules([Rule = #rule{name = Name}|Rules], Input) ->
+    try apply_rule(Rule, Input)
+    catch
+        _:Error:StkTrace ->
+            ?LOG(error, "Apply the rule ~s error: ~p. Statcktrace:~n~p",
+                 [Name, Error, StkTrace])
     end,
-    execute(Rules, Input).
+    apply_rules(Rules, Input).
 
-match(_Conditions, _Input) ->
+apply_rule(#rule{conditions = Conditions,
+                 topic = TopicFilter,
+                 selects = Selects,
+                 actions = Actions}, Input) ->
+    case match_topic(TopicFilter, Input) of
+        true ->
+            %%TODO: Transform ???
+            Selected = select_data(Selects, Input),
+            case match_conditions(Conditions, Selected) of
+                true ->
+                    take_actions(Actions, Selected);
+                false -> ok
+            end;
+        false -> ok
+    end.
+
+%% 0. Match a topic filter
+match_topic(undefined, _Input) ->
+    true;
+match_topic(Filter, #{topic := Topic}) ->
+    emqx_topic:match(Topic, Filter).
+
+%% TODO: 1. Select data from input
+select_data(_Selects, Input) ->
+    Input.
+
+%% TODO: 2. Match selected data with conditions
+match_conditions(_Conditions, _Data) ->
     true.
+
+%% 3. Take actions
+take_actions(Actions, Data) ->
+    lists:foreach(fun(Action) -> take_action(Action, Data) end, Actions).
+
+take_action(#{apply := Apply}, Data) ->
+    Apply(Data).
+
+%% TODO: 4. the resource?
+%% call_resource(_ResId) ->
+%%    ok.
 
 %%------------------------------------------------------------------------------
 %% Stop
