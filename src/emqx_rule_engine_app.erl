@@ -25,13 +25,13 @@
 start(_Type, _Args) ->
     {ok, Sup} = emqx_rule_engine_sup:start_link(),
     ok = emqx_rule_engine:register_provider(?APP),
-    ok = emqx_rule_runtime:load(env()),
+    ok = emqx_rule_runtime:start(env()),
     ok = emqx_rule_engine_cli:load(),
     {ok, Sup}.
 
 stop(_State) ->
     ok = emqx_rule_engine_cli:unload(),
-    ok = emqx_rule_runtime:unload(env()),
+    ok = emqx_rule_runtime:stop(env()),
     ok = emqx_rule_engine:unregister_provider(?APP).
 
 env() ->

@@ -17,12 +17,11 @@
 
 -include_lib("emqx/include/emqx.hrl").
 
--rule_action(#{name   => republish_message,
-               for    => 'message.publish',
-               func   => republish_action,
-               params => #{from => topic,
-                           to   => topic},
-               descr  => "Republish messages"
+-rule_action(#{name         => republish_message,
+               for          => 'message.publish',
+               func         => republish_action,
+               params       => #{from => topic, to => topic},
+               description  => "Republish messages"
               }).
 
 -type(action_fun() :: fun((Data :: map()) -> Result :: any())).
