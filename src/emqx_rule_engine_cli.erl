@@ -14,6 +14,8 @@
 
 -module(emqx_rule_engine_cli).
 
+-include("rule_engine.hrl").
+
 -export([ load/0
         , commands/0
         , unload/0
@@ -55,16 +57,36 @@ unload() ->
 %%-----------------------------------------------------------------------------
 
 rules(["list"]) ->
-    %% TODO:
-    emqx_cli:print("TODO: list rules...~n");
+    print_all(emqx_rule_registry:get_rules());
 
 rules(["show", RuleId]) ->
-    %% TODO:
-    emqx_cli:print("TODO: show rule - ~s~n", [RuleId]);
+    print_with(fun emqx_rule_registry:get_rule/1, RuleId);
+
+% rules(["create", Opts]) ->
+%     case parse_rule_opts(Opts) of
+%         {ok, Rule} ->
+%             case emqx_rule_engine:create_rule(Rule) of
+%                 {ok, _Rule} ->
+%                     emqx_cli:print("ok~n");
+%                 {error, Reason} ->
+%                     emqx_cli:print("~p~n", [Reason])
+%             end;
+%         {error, Reason} ->
+%             emqx_cli:print("Invalid options: ~p~n", [Reason])
+%     end;
+
+rules(["delete", RuleId]) ->
+    ok = emqx_rule_registry:remove_rule(RuleId),
+    emqx_cli:print("ok~n");
+
+rules(["create" | _Opts]) ->
+    emqx_cli:usage([{"rules create", "--help to see usage"}]);
 
 rules(_usage) ->
     emqx_cli:usage([{"rules list",          "List all rules"},
-                    {"rules show <RuleId>", "Show a rule"}
+                    {"rules show <RuleId>", "Show a rule"},
+                    {"rules create", "Create a rule"},
+                    {"rules delete <RuleId>", "delete a rule"}
                    ]).
 
 %%-----------------------------------------------------------------------------
@@ -72,10 +94,10 @@ rules(_usage) ->
 %%-----------------------------------------------------------------------------
 
 actions(["list"]) ->
-    emqx_cli:print("TODO: list rule-actions...~n");
+    print_all(emqx_rule_registry:get_actions());
 
 actions(["show", ActionId]) ->
-    emqx_cli:print("TODO: show rule-action - ~s~n", [ActionId]);
+    print_with(fun emqx_rule_registry:get_action/1, ActionId);
 
 actions(_usage) ->
     emqx_cli:usage([{"rule-actions list",            "List all actions"},
@@ -87,13 +109,59 @@ actions(_usage) ->
 %%------------------------------------------------------------------------------
 
 resources(["list"]) ->
-    emqx_cli:print("TODO: list resources...~n");
+    print_all(emqx_rule_registry:get_resources());
 
 resources(["show", ResourceId]) ->
-    emqx_cli:print("TODO: show resource - ~s~n", [ResourceId]);
+    print_with(fun emqx_rule_registry:find_resource/1, ResourceId);
 
 resources(_usage) ->
     emqx_cli:usage([{"resources list",             "List all resources"},
                     {"resources show <ResourceId>", "Show a resource"}
                    ]).
 
+%%------------------------------------------------------------------------------
+%% Internal functions
+%%------------------------------------------------------------------------------
+
+print(Data) ->
+    emqx_cli:print(format(Data)).
+
+print_all(DataList) ->
+    lists:foreach(fun(Data) ->
+            print(Data)
+        end, DataList).
+
+print_with(FindFun, Key) ->
+    case FindFun(Key) of
+        {ok, R} ->
+            print(R);
+        not_found ->
+            emqx_cli:print("Cannot found ~s~n", [Key])
+    end.
+
+format(#rule{id = Id,
+             name = Name,
+             hook = HookPoint,
+             topic = Topic,
+             conditions = Conditions,
+             actions = Actions,
+             enabled = Enabled,
+             description = Descr}) ->
+    io_lib:format("rule(~s, name=~s, hook=~s, topic=~s, conditions=~p,"
+                       "actions=~p, enabled=~s, description=~s)~n",
+                  [Id, Name, HookPoint, Topic, Conditions, Actions, Enabled, Descr]);
+
+format(#action{name = Name,
+               app = App,
+               params = Params,
+               description = Descr}) ->
+    io_lib:format("action(name=~s, app=~s, params=~p, description=~s)~n",
+                  [Name, App, Params, Descr]);
+
+format(#resource{id = Id,
+                 type = Type,
+                 config = Config,
+                 attrs = Attrs,
+                 description = Descr}) ->
+    io_lib:format("resource(~s, type=~s, config=~p, attrs=~p, description=~s)~n",
+                  [Id, Type, Config, Attrs, Descr]).
