@@ -19,9 +19,7 @@
         , topic :: binary()
         , selects :: list()
         , conditions :: list()
-        , actions :: list(#{name => atom(),
-                            args => list(),
-                            apply => fun()})
+        , actions :: list()
         , enabled :: boolean()
         , description :: binary()
         }).
@@ -40,7 +38,6 @@
         { id :: binary()
         , type :: atom()
         , config :: #{}
-        , request :: fun()
         , attrs :: #{}
         , description :: binary()
         }).
@@ -55,9 +52,7 @@
         { name :: atom()
         , provider :: atom()
         , params :: #{}
-        , create :: fun()
-        , connect :: fun() | undefined
-        , disconnect :: fun() | undefined
+        , on_create :: fun((map()) -> map())
         , description :: binary()
         }).
 

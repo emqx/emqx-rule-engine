@@ -91,7 +91,7 @@ new_resource_type({App, Mod, #{name := Name,
     Params = find_resource_params(Prefix, Mappings),
     #resource_type{name = Name, provider = App,
                    params = maps:from_list(Params),
-                   create = {Mod, Create},
+                   on_create = {Mod, Create},
                    description = iolist_to_binary(Descr)}.
 
 find_resource_params(Prefix, Mappings) ->
@@ -119,10 +119,10 @@ module_attributes(Module) ->
     end.
 
 %%------------------------------------------------------------------------------
-%% Register a provider
+%% Unregister a provider
 %%------------------------------------------------------------------------------
 
-%% Unregister a provider.
+%% @doc Unregister a provider.
 -spec(unregister_provider(App :: atom()) -> ok).
 unregister_provider(App) ->
     ok = emqx_rule_registry:remove_actions_of(App),
@@ -132,41 +132,42 @@ unregister_provider(App) ->
 %% Create a rule or resource
 %%------------------------------------------------------------------------------
 
--spec(create_rule(#{}) -> {ok, rule()} | {error, Reason :: term()}).
+-spec(create_rule(#{}) -> {ok, rule()} | no_return()).
 create_rule(Params = #{name := Name,
                        hook := Hook,
                        conditions := Conditions,
                        actions := Actions,
                        enabled := Enabled,
                        description := Descr}) ->
-    case init_actions(Actions, []) of
-        {ok, Actions1} ->
-            Rule = #rule{id = rule_id(Name),
-                         name = Name,
-                         hook = Hook,
-                         topic = maps:get(topic, Params, undefined),
-                         conditions = compile_conditions(Conditions),
-                         actions = Actions1,
-                         enabled = Enabled,
-                         description = iolist_to_binary(Descr)},
-            ok = emqx_rule_registry:add_rule(Rule),
-            {ok, Rule};
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    Rule = #rule{id = rule_id(Name),
+                 name = Name,
+                 hook = Hook,
+                 topic = maps:get(topic, Params, undefined),
+                 conditions = compile_conditions(Conditions),
+                 actions = [prepare_action(Action) || Action <- Actions],
+                 enabled = Enabled,
+                 description = iolist_to_binary(Descr)},
+    ok = emqx_rule_registry:add_rule(Rule),
+    {ok, Rule}.
 
 rule_id(Name) ->
     iolist_to_binary([Name, ":", integer_to_list(erlang:system_time())]).
 
-init_actions([], Acc) ->
-    lists:reverse(Acc);
-
-init_actions([{Name, Args}|Actions], Acc) ->
+prepare_action({Name, Args}) ->
     case emqx_rule_registry:find_action(Name) of
         {ok, #action{module = M, func = F}} ->
-            init_actions(Actions, [#{name => Name, args => Args, apply => M:F(Args)}|Acc]);
+            NewArgs = with_resource_config(Args),
+            #{name => Name, args => Args, apply => M:F(NewArgs)};
         not_found ->
-            {error, action_not_found}
+            throw(action_not_found)
+    end.
+
+with_resource_config(Args = #{'$resource_id' := ResId}) ->
+    case emqx_rule_registry:find_resource(ResId) of
+        {ok, #{config := Config}} ->
+            maps:merge(Args, Config);
+        not_found ->
+            throw(resource_not_found)
     end.
 
 compile_conditions(Conditions) ->
@@ -178,13 +179,12 @@ create_resource(#{name := Name,
                   config := Config,
                   description := Descr}) ->
     case emqx_rule_registry:find_resource_type(Type) of
-        {ok, #resource_type{create = Create}} ->
-            ReqFun = Create(Config),
+        {ok, #resource_type{on_create = OnCreate}} ->
+            NewConfig = OnCreate(Config),
             ResId = iolist_to_binary([atom_to_list(Type), ":", Name]),
             Resource = #resource{id = ResId,
                                  type = Type,
-                                 config = Config,
-                                 request = ReqFun,
+                                 config = NewConfig,
                                  description = iolist_to_binary(Descr)},
             ok = emqx_rule_registry:add_resource(Resource),
             {ok, Resource};
