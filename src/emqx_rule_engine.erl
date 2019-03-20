@@ -80,7 +80,7 @@ new_action({App, Mod, #{name := Name,
     Name1 = list_to_atom(lists:concat([Prefix, ":", Name])),
     #action{name = Name1, for = Hook, app = App,
             module = Mod, func = Func, params = Params,
-            description = Descr}.
+            description = iolist_to_binary(Descr)}.
 
 new_resource_type({App, Mod, #{name := Name,
                                schema := Prefix,
@@ -91,7 +91,8 @@ new_resource_type({App, Mod, #{name := Name,
     Params = find_resource_params(Prefix, Mappings),
     #resource_type{name = Name, provider = App,
                    params = maps:from_list(Params),
-                   create = {Mod, Create}, description = Descr}.
+                   create = {Mod, Create},
+                   description = iolist_to_binary(Descr)}.
 
 find_resource_params(Prefix, Mappings) ->
     lists:foldr(
@@ -147,7 +148,7 @@ create_rule(Params = #{name := Name,
                          conditions = compile_conditions(Conditions),
                          actions = Actions1,
                          enabled = Enabled,
-                         description = Descr},
+                         description = iolist_to_binary(Descr)},
             ok = emqx_rule_registry:add_rule(Rule),
             {ok, Rule};
         {error, Reason} ->
@@ -175,7 +176,7 @@ compile_conditions(Conditions) ->
 create_resource(#{name := Name,
                   type := Type,
                   config := Config,
-                  description := Description}) ->
+                  description := Descr}) ->
     case emqx_rule_registry:find_resource_type(Type) of
         {ok, #resource_type{create = Create}} ->
             ReqFun = Create(Config),
@@ -184,7 +185,7 @@ create_resource(#{name := Name,
                                  type = Type,
                                  config = Config,
                                  request = ReqFun,
-                                 description = Description},
+                                 description = iolist_to_binary(Descr)},
             ok = emqx_rule_registry:add_resource(Resource),
             {ok, Resource};
         not_found ->
