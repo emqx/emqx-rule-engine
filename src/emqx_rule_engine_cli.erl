@@ -62,18 +62,30 @@ rules(["list"]) ->
 rules(["show", RuleId]) ->
     print_with(fun emqx_rule_registry:get_rule/1, RuleId);
 
-rules(["create"]) ->
-    %% TODO:
-    emqx_cli:print("TODO: create rule...~n", []);
+% rules(["create", Opts]) ->
+%     case parse_rule_opts(Opts) of
+%         {ok, Rule} ->
+%             case emqx_rule_engine:create_rule(Rule) of
+%                 {ok, _Rule} ->
+%                     emqx_cli:print("ok~n");
+%                 {error, Reason} ->
+%                     emqx_cli:print("~p~n", [Reason])
+%             end;
+%         {error, Reason} ->
+%             emqx_cli:print("Invalid options: ~p~n", [Reason])
+%     end;
 
 rules(["delete", RuleId]) ->
     ok = emqx_rule_registry:remove_rule(RuleId),
-    emqx_cli:print("ok");
+    emqx_cli:print("ok~n");
+
+rules(["create" | _Opts]) ->
+    emqx_cli:usage([{"rules create", "--help to see usage"}]);
 
 rules(_usage) ->
     emqx_cli:usage([{"rules list",          "List all rules"},
                     {"rules show <RuleId>", "Show a rule"},
-                    {"rules create <RuleId>, ...", "TODO... create a rule"},
+                    {"rules create", "Create a rule"},
                     {"rules delete <RuleId>", "delete a rule"}
                    ]).
 
@@ -124,7 +136,7 @@ print_with(FindFun, Key) ->
         {ok, R} ->
             print(R);
         not_found ->
-            emqx_cli:print("Cannot found ~s", [Key])
+            emqx_cli:print("Cannot found ~s~n", [Key])
     end.
 
 format(#rule{id = Id,
