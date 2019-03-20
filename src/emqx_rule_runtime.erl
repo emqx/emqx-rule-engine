@@ -18,84 +18,88 @@
 -include_lib("emqx/include/emqx.hrl").
 -include_lib("emqx/include/logger.hrl").
 
--export([start/1,
-         stop/1
-        ]).
+-export([start/1, stop/1]).
 
--export([on_client_connected/4,
-         on_client_disconnected/3
+-export([ on_client_connected/4
+        , on_client_disconnected/3
+        , on_client_subscribe/3
+        , on_client_unsubscribe/3
+        , on_message_publish/2
+        , on_message_deliver/3
+        , on_message_acked/3
         ]).
-
--export([on_client_subscribe/3,
-         on_client_unsubscribe/3
-        ]).
-
--export([on_message_publish/2,
-         on_message_delivered/3,
-         on_message_acked/3
-        ]).
-
--define(RUNTIME, ?MODULE).
 
 %%------------------------------------------------------------------------------
 %% Start
 %%------------------------------------------------------------------------------
 
-%% Called when the plugin application start
 start(Env) ->
-    emqx:hook('client.connected', fun ?MODULE:on_client_connected/4, [Env]),
-    emqx:hook('client.disconnected', fun ?MODULE:on_client_disconnected/3, [Env]),
-    emqx:hook('client.subscribe', fun ?MODULE:on_client_subscribe/3, [Env]),
-    emqx:hook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3, [Env]),
-    emqx:hook('message.publish', fun ?MODULE:on_message_publish/2, [Env]),
-    emqx:hook('message.delivered', fun ?MODULE:on_message_delivered/3, [Env]),
-    emqx:hook('message.acked', fun ?MODULE:on_message_acked/3, [Env]).
+    hook_rules('client.disconnected', fun ?MODULE:on_client_disconnected/3, Env),
+    hook_rules('client.subscribe', fun ?MODULE:on_client_subscribe/3, Env),
+    hook_rules('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3, Env),
+    hook_rules('message.publish', fun ?MODULE:on_message_publish/2, Env),
+    hook_rules('message.deliver', fun ?MODULE:on_message_deliver/3, Env),
+    hook_rules('message.acked', fun ?MODULE:on_message_acked/3, Env).
+
+hook_rules(Name, Fun, Env) ->
+    emqx:hook(Name, Fun, [Env#{apply_fun => apply_rules_fun(Name)}]).
 
 %%------------------------------------------------------------------------------
 %% Callbacks
 %%------------------------------------------------------------------------------
 
-on_client_connected(#{client_id := ClientId}, ConnAck, ConnAttrs, _Env) ->
+on_client_connected(Credentials = #{client_id := ClientId}, ConnAck, ConnAttrs, #{apply_fun := ApplyRules}) ->
     ?LOG(info, "[RuleEngine] Client(~s) connected, connack: ~w, conn_attrs:~p",
-         [ClientId, ConnAck, ConnAttrs]).
+         [ClientId, ConnAck, ConnAttrs]),
+    ApplyRules(maps:merge(Credentials, #{connack => ConnAck, connattrs => ConnAttrs})).
 
-on_client_disconnected(#{client_id := ClientId}, ReasonCode, _Env) ->
+on_client_disconnected(Credentials = #{client_id := ClientId}, ReasonCode, #{apply_fun := ApplyRules}) ->
     ?LOG(info, "[RuleEngine] Client(~s) disconnected, reason_code: ~w",
-         [ClientId, ReasonCode]).
+         [ClientId, ReasonCode]),
+    ApplyRules(maps:merge(Credentials, #{reason_code => ReasonCode})).
 
-on_client_subscribe(#{client_id := ClientId}, RawTopicFilters, _Env) ->
+on_client_subscribe(#{client_id := ClientId}, TopicFilters, #{apply_fun := ApplyRules}) ->
     ?LOG(info, "[RuleEngine] Client(~s) will subscribe: ~p",
-         [ClientId, RawTopicFilters]),
-    {ok, RawTopicFilters}.
+         [ClientId, TopicFilters]),
+    ApplyRules(#{client_id => ClientId, topic_filters => TopicFilters}),
+    {ok, TopicFilters}.
 
-on_client_unsubscribe(#{client_id := ClientId}, RawTopicFilters, _Env) ->
+on_client_unsubscribe(#{client_id := ClientId}, TopicFilters, #{apply_fun := ApplyRules}) ->
     ?LOG(info, "[RuleEngine] Client(~s) unsubscribe ~p",
-         [ClientId, RawTopicFilters]),
-    {ok, RawTopicFilters}.
+         [ClientId, TopicFilters]),
+    ApplyRules(#{client_id => ClientId, topic_filters => TopicFilters}),
+    {ok, TopicFilters}.
 
 on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
                    #{ignore_sys_message := true}) ->
     {ok, Message};
 
-on_message_publish(Message, _Env) ->
+on_message_publish(Message, #{apply_fun := ApplyRules}) ->
     ?LOG(info, "[RuleEngine] Publish ~s", [emqx_message:format(Message)]),
-    Rules = emqx_rule_registry:get_rules_for('message.publish'),
-    ok = apply_rules(Rules, emqx_message:to_map(Message)),
+    ApplyRules(emqx_message:to_map(Message)),
     {ok, Message}.
 
-on_message_delivered(#{client_id := ClientId}, Message, _Env) ->
+on_message_deliver(#{client_id := ClientId}, Message, #{apply_fun := ApplyRules}) ->
     ?LOG(info, "[RuleEngine] Delivered message to client(~s): ~s",
          [ClientId, emqx_message:format(Message)]),
+    ApplyRules(maps:merge(emqx_message:to_map(Message), #{client_id => ClientId})),
     {ok, Message}.
 
-on_message_acked(#{client_id := ClientId}, Message, _Env) ->
+on_message_acked(#{client_id := ClientId}, Message, #{apply_fun := ApplyRules}) ->
     ?LOG(info, "[RuleEngine] Session(~s) acked message: ~s",
          [ClientId, emqx_message:format(Message)]),
+    ApplyRules(maps:merge(emqx_message:to_map(Message), #{client_id => ClientId})),
     {ok, Message}.
 
 %%------------------------------------------------------------------------------
 %% Apply rules
 %%------------------------------------------------------------------------------
+
+apply_rules_fun(Hook) ->
+    fun(Input) -> apply_rules(rules_for(Hook), Input) end.
+
+rules_for(Hook) ->
+    emqx_rule_registry:get_rules_for(Hook).
 
 -spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
 apply_rules([], _Input) ->
@@ -162,6 +166,6 @@ stop(_Env) ->
     emqx:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/3),
     emqx:unhook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3),
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
-    emqx:unhook('message.delivered', fun ?MODULE:on_message_delivered/3),
+    emqx:unhook('message.deliver', fun ?MODULE:on_message_deliver/3),
     emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3).
 
