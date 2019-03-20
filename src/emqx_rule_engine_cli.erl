@@ -24,6 +24,7 @@
 -export([ rules/1
         , actions/1
         , resources/1
+        , resource_types/1
         ]).
 
 %%-----------------------------------------------------------------------------
@@ -41,7 +42,7 @@ load() ->
 
 -spec(commands() -> list(atom())).
 commands() ->
-    [rules, {'rule-actions', actions}, resources].
+    [rules, {'rule-actions', actions}, resources, {'resource-types', resource_types}].
 
 -spec(unload() -> ok).
 unload() ->
@@ -62,25 +63,26 @@ rules(["list"]) ->
 rules(["show", RuleId]) ->
     print_with(fun emqx_rule_registry:get_rule/1, RuleId);
 
-% rules(["create", Opts]) ->
-%     case parse_rule_opts(Opts) of
-%         {ok, Rule} ->
-%             case emqx_rule_engine:create_rule(Rule) of
-%                 {ok, _Rule} ->
-%                     emqx_cli:print("ok~n");
-%                 {error, Reason} ->
-%                     emqx_cli:print("~p~n", [Reason])
-%             end;
-%         {error, Reason} ->
-%             emqx_cli:print("Invalid options: ~p~n", [Reason])
-%     end;
+rules(["create", Opts]) ->
+    case parse_rule_opts(Opts) of
+        {ok, Rule} ->
+            case emqx_rule_engine:create_rule(Rule) of
+                {ok, _Rule} ->
+                    emqx_cli:print("ok~n");
+                {error, Reason} ->
+                    emqx_cli:print("~p~n", [Reason])
+            end;
+        {error, Reason} ->
+            emqx_cli:print("Invalid options: ~p~n", [Reason])
+    end;
+
+rules(["create" | _Opts]) ->
+    emqx_cli:print("Usage:~n~n"
+                   "emqx_ctl rules create <Id> <Name> <Hook> <Topic> <Selects> <Conditions> <Actions>~n");
 
 rules(["delete", RuleId]) ->
     ok = emqx_rule_registry:remove_rule(RuleId),
     emqx_cli:print("ok~n");
-
-rules(["create" | _Opts]) ->
-    emqx_cli:usage([{"rules create", "--help to see usage"}]);
 
 rules(_usage) ->
     emqx_cli:usage([{"rules list",          "List all rules"},
@@ -117,6 +119,20 @@ resources(["show", ResourceId]) ->
 resources(_usage) ->
     emqx_cli:usage([{"resources list",             "List all resources"},
                     {"resources show <ResourceId>", "Show a resource"}
+                   ]).
+
+%%------------------------------------------------------------------------------
+%% 'resource-types' command
+%%------------------------------------------------------------------------------
+resource_types(["list"]) ->
+    print_all(emqx_rule_registry:get_resource_types());
+
+resource_types(["show", Name]) ->
+    print_with(fun emqx_rule_registry:find_resource_type/1, Name);
+
+resource_types(_usage) ->
+    emqx_cli:usage([{"resource-types list", "List all resource-types"},
+                    {"resource-types show <Type>", "Show a resource-type"}
                    ]).
 
 %%------------------------------------------------------------------------------
@@ -165,3 +181,6 @@ format(#resource{id = Id,
                  description = Descr}) ->
     io_lib:format("resource(~s, type=~s, config=~p, attrs=~p, description=~s)~n",
                   [Id, Type, Config, Attrs, Descr]).
+
+parse_rule_opts(_) ->
+    #rule{}.
