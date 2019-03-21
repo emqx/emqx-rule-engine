@@ -2,7 +2,10 @@ PROJECT = emqx_rule_engine
 PROJECT_DESCRIPTION = EMQ X Rule Engine
 PROJECT_VERSION = 0.1.0
 
-NO_AUTOPATCH = cuttlefish
+NO_AUTOPATCH = sqlparse cuttlefish
+
+DEPS = sqlparse
+dep_sqlparse = git-emqx https://github.com/K2InformaticsGmbH/sqlparse 4.6.0
 
 BUILD_DEPS = emqx cuttlefish
 dep_emqx = git-emqx https://github.com/emqx/emqx develop
