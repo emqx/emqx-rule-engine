@@ -120,16 +120,16 @@ on_message_publish(Message, #{apply_fun := ApplyRules}) ->
     ApplyRules(emqx_message:to_map(Message)),
     {ok, Message}.
 
-on_message_deliver(#{client_id := ClientId}, Message, #{apply_fun := ApplyRules}) ->
+on_message_deliver(Credentials = #{client_id := ClientId}, Message, #{apply_fun := ApplyRules}) ->
     ?LOG(info, "[RuleEngine] Delivered message to client(~s): ~s",
          [ClientId, emqx_message:format(Message)]),
-    ApplyRules(maps:merge(emqx_message:to_map(Message), #{client_id => ClientId})),
+    ApplyRules(maps:merge(Credentials, emqx_message:to_map(Message))),
     {ok, Message}.
 
-on_message_acked(#{client_id := ClientId}, Message, #{apply_fun := ApplyRules}) ->
+on_message_acked(#{client_id := ClientId, username := Username}, Message, #{apply_fun := ApplyRules}) ->
     ?LOG(info, "[RuleEngine] Session(~s) acked message: ~s",
          [ClientId, emqx_message:format(Message)]),
-    ApplyRules(maps:merge(emqx_message:to_map(Message), #{client_id => ClientId})),
+    ApplyRules(maps:merge(emqx_message:to_map(Message), #{client_id => ClientId, username => Username})),
     {ok, Message}.
 
 %%------------------------------------------------------------------------------
