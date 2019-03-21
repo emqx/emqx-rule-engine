@@ -12,3 +12,4 @@ erlang.mk
 emqx_rule_engine.d
 .erlang.mk/
 data/
+_build/
