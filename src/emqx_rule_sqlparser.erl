@@ -12,44 +12,38 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
-%% @doc A Simple SQL Parser for Rule Engine.
-%%
-%% For example:
-%%
-%% select topic(2) as deviceId, playload.temperature as temp
-%%   from "devices/mydeviceid/events" where temp > 10;
-%%
-%% Select functions:
-%%
-%% topic(N)
-%% payload(x)(y)
-%%
-%% Supported Operators in The WHERE Clause:
-%%
-%% =  Equal
-%% <> Not equal. Note: In some versions of SQL this operator may be written as !=
-%% >  Greater than
-%% <  Less than
-%% >= Greater than or equal
-%% <= Less than or equal
-%% IN To specify multiple possible values for a column
-%% AND
-%% OR
-%% NOT
-
 -module(emqx_rule_sqlparser).
 
--record(field, {alias, name, func}).
+-export([parse_select/1]).
 
--record(function, {name, params, alias}).
+-export([ select_fields/1
+        , select_from/1
+        , select_where/1
+        ]).
 
--record(condition, {op, var, val}).
+-record(select, {fields, from, where}).
 
--record(select, {fields, topic, conditions}).
+-opaque(select() :: #select{}).
 
--export([parse/1]).
+-export_type([select/0]).
 
--spec(parse(string() | binary()) -> #select{}).
-parse(Sql) ->
-    #select{}.
+-spec(parse_select(string()|binary())
+      -> {ok, select()} | {parse_error, term()} | {lex_error, term()}).
+parse_select(Sql) ->
+    case sqlparse:parsetree(Sql) of
+        {ok, ParseTree} ->
+            {ok, hd([#select{fields = Fields, from = From, where = Where}
+                     || {{select, [{fields, Fields}, {from, From}, {where, Where}|_]}, _Extra}
+                        <- ParseTree])};
+        Error -> Error
+    end.
+
+select_fields(#select{fields = Fields}) ->
+    Fields.
+
+select_from(#select{from = From}) ->
+    From.
+
+select_where(#select{where = Where}) ->
+    Where.
 
