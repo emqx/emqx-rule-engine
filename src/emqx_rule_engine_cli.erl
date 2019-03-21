@@ -157,15 +157,13 @@ print_with(FindFun, Key) ->
 
 format(#rule{id = Id,
              name = Name,
-             hook = HookPoint,
-             topic = Topic,
-             conditions = Conditions,
+             for = Hook,
+             rawsql = Sql,
              actions = Actions,
              enabled = Enabled,
              description = Descr}) ->
-    io_lib:format("rule(~s, name=~s, hook=~s, topic=~s, conditions=~p,"
-                       "actions=~p, enabled=~s, description=~s)~n",
-                  [Id, Name, HookPoint, Topic, Conditions, Actions, Enabled, Descr]);
+    io_lib:format("rule(~s, name=~s, for=~s, sql=~s, actions=~p, enabled=~s, description=~s)~n",
+                  [Id, Name, Hook, Sql, Actions, Enabled, Descr]);
 
 format(#action{name = Name,
                app = App,

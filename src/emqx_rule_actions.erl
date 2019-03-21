@@ -17,22 +17,38 @@
 
 -include_lib("emqx/include/emqx.hrl").
 
--rule_action(#{name         => republish_message,
-               for          => 'message.publish',
-               func         => republish_action,
-               params       => #{from => topic, to => topic},
-               description  => "Republish messages"
+-rule_action(#{name => debug_action,
+               for => any,
+               func => debug_action,
+               params => #{},
+               description => "Debug Action"
+              }).
+
+-rule_action(#{name => republish_message,
+               for => 'message.publish',
+               func => republish_action,
+               params => #{from => topic, to => topic},
+               description => "Republish a MQTT message"
               }).
 
 -type(action_fun() :: fun((Data :: map()) -> Result :: any())).
 
 -export_type([action_fun/0]).
 
--export([republish_action/1]).
+-export([ debug_action/1
+        , republish_action/1
+        ]).
 
 %%------------------------------------------------------------------------------
 %% Default actions for the Rule Engine
 %%------------------------------------------------------------------------------
+
+-spec(debug_action(Params :: map()) -> action_fun()).
+debug_action(Params) ->
+    fun(Data) ->
+            io:format("Action Params: ~p~n", [Params]),
+            io:format("Action Input: ~p~n", [Data])
+    end.
 
 %% A Demo Action.
 -spec(republish_action(#{from := emqx_topic:topic(),

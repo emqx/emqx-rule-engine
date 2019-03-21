@@ -99,7 +99,7 @@ mnesia(boot) ->
     ok = ekka_mnesia:create_table(?RULE_TAB, [
                 {disc_copies, [node()]},
                 {record_name, rule},
-                {index, [#rule.hook]},
+                {index, [#rule.for]},
                 {attributes, record_info(fields, rule)},
                 {storage_properties, StoreProps}]),
     %% Rule action table
@@ -160,7 +160,7 @@ get_rules() ->
 
 -spec(get_rules_for(Hook :: atom()) -> list(emqx_rule_engine:rule())).
 get_rules_for(Hook) ->
-    mnesia:dirty_index_read(?RULE_TAB, Hook, #rule.hook).
+    mnesia:dirty_index_read(?RULE_TAB, Hook, #rule.for).
 
 -spec(get_rule(Id :: binary()) -> {ok, emqx_rule_engine:rule()} | not_found).
 get_rule(Id) ->
