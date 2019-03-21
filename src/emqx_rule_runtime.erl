@@ -24,6 +24,11 @@
         , on_client_disconnected/3
         , on_client_subscribe/3
         , on_client_unsubscribe/3
+        , on_session_created/3
+        , on_session_terminated/3
+        , on_session_subscribed/4
+        , on_session_unsubscribed/4
+        , on_session_resumed/3
         , on_message_publish/2
         , on_message_deliver/3
         , on_message_acked/3
@@ -34,9 +39,15 @@
 %%------------------------------------------------------------------------------
 
 start(Env) ->
+    hook_rules('client.connected', fun ?MODULE:on_client_connected/4, Env),
     hook_rules('client.disconnected', fun ?MODULE:on_client_disconnected/3, Env),
     hook_rules('client.subscribe', fun ?MODULE:on_client_subscribe/3, Env),
     hook_rules('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3, Env),
+    hook_rules('session.created', fun ?MODULE:on_session_created/3, Env),
+    hook_rules('session.resumed', fun ?MODULE:on_session_resumed/3, Env),
+    hook_rules('session.terminated', fun ?MODULE:on_session_terminated/3, Env),
+    hook_rules('session.subscribed', fun ?MODULE:on_session_subscribed/4, Env),
+    hook_rules('session.unsubscribed', fun ?MODULE:on_session_unsubscribed/4, Env),
     hook_rules('message.publish', fun ?MODULE:on_message_publish/2, Env),
     hook_rules('message.deliver', fun ?MODULE:on_message_deliver/3, Env),
     hook_rules('message.acked', fun ?MODULE:on_message_acked/3, Env).
@@ -69,6 +80,36 @@ on_client_unsubscribe(#{client_id := ClientId}, TopicFilters, #{apply_fun := App
          [ClientId, TopicFilters]),
     ApplyRules(#{client_id => ClientId, topic_filters => TopicFilters}),
     {ok, TopicFilters}.
+
+on_session_created(#{client_id := ClientId}, Info, #{apply_fun := ApplyRules}) ->
+    ?LOG(info, "[RuleEngine] Session(~s) created ~p",
+         [ClientId, Info]),
+    ApplyRules(#{client_id => ClientId, info => Info}),
+    ok.
+
+on_session_resumed(#{client_id := ClientId}, Attrs, #{apply_fun := ApplyRules}) ->
+    ?LOG(info, "[RuleEngine] Session(~s) resumed ~p",
+         [ClientId, Attrs]),
+    ApplyRules(#{client_id => ClientId, attrs => Attrs}),
+    ok.
+
+on_session_terminated(#{client_id := ClientId, username := Username}, Reason, #{apply_fun := ApplyRules}) ->
+    ?LOG(info, "[RuleEngine] Session(~s) terminated for ~p",
+         [ClientId, Reason]),
+    ApplyRules(#{client_id => ClientId, username => Username, reason => Reason}),
+    ok.
+
+on_session_subscribed(#{client_id := ClientId, username := Username}, Topic, SubOpts, #{apply_fun := ApplyRules}) ->
+    ?LOG(info, "[RuleEngine] Session(~s) subscribed topic: ~p",
+         [ClientId, Topic]),
+    ApplyRules(#{client_id => ClientId, username => Username, topic => Topic, sub_opts => SubOpts}),
+    ok.
+
+on_session_unsubscribed(#{client_id := ClientId, username := Username}, Topic, SubOpts, #{apply_fun := ApplyRules}) ->
+    ?LOG(info, "[RuleEngine] Session(~s) unsubscribed topic: ~p",
+         [ClientId, Topic]),
+    ApplyRules(#{client_id => ClientId, username => Username, topic => Topic, sub_opts => SubOpts}),
+    ok.
 
 on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
                    #{ignore_sys_message := true}) ->
@@ -262,6 +303,11 @@ stop(_Env) ->
     emqx:unhook('client.disconnected', fun ?MODULE:on_client_disconnected/3),
     emqx:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/3),
     emqx:unhook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3),
+    emqx:unhook('session.created', fun ?MODULE:on_session_created/3),
+    emqx:unhook('session.resumed', fun ?MODULE:on_session_resumed/3),
+    emqx:unhook('session.terminated', fun ?MODULE:on_session_terminated/3),
+    emqx:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/4),
+    emqx:unhook('session.unsubscribed', fun ?MODULE:on_session_unsubscribed/4),
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
     emqx:unhook('message.deliver', fun ?MODULE:on_message_deliver/3),
     emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3).
