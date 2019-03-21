@@ -24,8 +24,6 @@
         , create_resource/1
         ]).
 
--export([compile_conditions/1]).
-
 -type(rule() :: #rule{}).
 -type(action() :: #action{}).
 -type(resource() :: #resource{}).
@@ -134,21 +132,25 @@ unregister_provider(App) ->
 
 -spec(create_rule(#{}) -> {ok, rule()} | no_return()).
 create_rule(Params = #{name := Name,
-                       hook := Hook,
-                       conditions := Conditions,
+                       for := Hook,
+                       rawsql := Sql,
                        actions := Actions,
-                       enabled := Enabled,
                        description := Descr}) ->
-    Rule = #rule{id = rule_id(Name),
-                 name = Name,
-                 hook = Hook,
-                 topic = maps:get(topic, Params, undefined),
-                 conditions = compile_conditions(Conditions),
-                 actions = [prepare_action(Action) || Action <- Actions],
-                 enabled = Enabled,
-                 description = iolist_to_binary(Descr)},
-    ok = emqx_rule_registry:add_rule(Rule),
-    {ok, Rule}.
+    case emqx_rule_sqlparser:parse_select(Sql) of
+        {ok, Select} ->
+            Rule = #rule{id = rule_id(Name),
+                         name = Name,
+                         for = Hook,
+                         topics = emqx_rule_sqlparser:select_from(Select),
+                         selects = emqx_rule_sqlparser:select_fields(Select),
+                         conditions = emqx_rule_sqlparser:select_where(Select),
+                         actions = [prepare_action(Action) || Action <- Actions],
+                         enabled = maps:get(enabled, Params, true),
+                         description = iolist_to_binary(Descr)},
+            ok = emqx_rule_registry:add_rule(Rule),
+            {ok, Rule};
+        Error -> error(Error)
+    end.
 
 rule_id(Name) ->
     iolist_to_binary([Name, ":", integer_to_list(erlang:system_time())]).
@@ -169,9 +171,6 @@ with_resource_config(Args = #{'$resource_id' := ResId}) ->
         not_found ->
             throw(resource_not_found)
     end.
-
-compile_conditions(Conditions) ->
-    Conditions.
 
 -spec(create_resource(#{}) -> {ok, resource()} | {error, Reason :: term()}).
 create_resource(#{name := Name,

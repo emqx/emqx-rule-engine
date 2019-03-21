@@ -104,45 +104,142 @@ rules_for(Hook) ->
 -spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
 apply_rules([], _Input) ->
     ok;
-
-apply_rules([Rule = #rule{name = Name}|Rules], Input) ->
+apply_rules([Rule = #rule{name = Name}|More], Input) ->
     try apply_rule(Rule, Input)
     catch
         _:Error:StkTrace ->
             ?LOG(error, "Apply the rule ~s error: ~p. Statcktrace:~n~p",
                  [Name, Error, StkTrace])
     end,
-    apply_rules(Rules, Input).
+    apply_rules(More, Input).
 
-apply_rule(#rule{conditions = Conditions,
-                 topic = TopicFilter,
+apply_rule(#rule{topics = Filters,
                  selects = Selects,
+                 conditions = Conditions,
                  actions = Actions}, Input) ->
-    case match_topic(TopicFilter, Input) of
+    Topic = maps:get(topic, Input, undefined),
+    case match_topic_filters(Topic, Filters) of
         true ->
-            %%TODO: Transform ???
-            Selected = select_data(Selects, Input),
-            case match_conditions(Conditions, Selected) of
+            Data = select_data(Selects, Input),
+            case match_conditions(Conditions, Data) of
                 true ->
-                    take_actions(Actions, Selected);
+                    take_actions(Actions, Data);
                 false -> ok
             end;
         false -> ok
     end.
 
-%% 0. Match a topic filter
-match_topic(undefined, _Input) ->
+%% 0. Match topic filters
+match_topic_filters(_Topic, []) ->
     true;
-match_topic(Filter, #{topic := Topic}) ->
-    emqx_topic:match(Topic, Filter).
+match_topic_filters(Topic, [Filter]) ->
+    emqx_topic:match(Topic, Filter);
+match_topic_filters(Topic, [Filter|More]) ->
+    emqx_topic:match(Topic, Filter)
+        orelse match_topic_filters(Topic, More).
 
-%% TODO: 1. Select data from input
-select_data(_Selects, Input) ->
-    Input.
+%% 1. Select data from input
+select_data(Fields, Input) ->
+    select_data(Fields, Input, #{}).
 
-%% TODO: 2. Match selected data with conditions
-match_conditions(_Conditions, _Data) ->
+select_data([], _Input, Acc) ->
+    Acc;
+select_data([<<"*">>|More], Input, Acc) ->
+    select_data(More, Input, maps:merge(Acc, Input));
+select_data([<<"headers.", Name/binary>>|More], Input, Acc) ->
+    Headers = maps:get(headers, Input, #{}),
+    Val = maps:get(Name, Headers, null),
+    select_data(More, Input, maps:put(Name, Val, Acc));
+select_data([<<"payload.", Attr/binary>>|More], Input, Acc) ->
+    {Json, Input1} = parse_payload(Input),
+    Val = maps:get(Attr, Json, null),
+    select_data(More, Input1, maps:put(Attr, Val, Acc));
+select_data([Var|More], Input, Acc) when is_binary(Var) ->
+    Val = maps:get(Var, Input, null),
+    select_data(More, Input, maps:put(Var, Val, Acc));
+select_data([{'fun', Name, Args}|More], Input, Acc) ->
+    Var = select_fun_var(Name, Args),
+    Val = erlang:apply(select_fun(Name, Args), Input),
+    select_data(More, Input, maps:put(Var, Val, Acc));
+select_data([{as, <<"headers.", Name/binary>>, Alias}|More], Input, Acc) ->
+    Headers = maps:get(headers, Input, #{}),
+    Val = maps:get(Name, Headers, null),
+    select_data(More, Input, maps:put(Alias, Val, Acc));
+select_data([{as, <<"payload.", Attr/binary>>, Alias}|More], Input, Acc) ->
+    {Json, Input1} = parse_payload(Input),
+    Val = maps:get(Attr, Json, null),
+    select_data(More, Input1, maps:put(Alias, Val, Acc));
+select_data([{as, Var, Alias}|More], Input, Acc) when is_binary(Var) ->
+    Val = maps:get(Var, Input, null),
+    select_data(More, Input, maps:put(Alias, Val, Acc));
+select_data([{as, {'fun', Name, Args}, Alias}|More], Input, Acc) ->
+    Val = erlang:apply(select_fun(Name, Args), Input),
+    select_data(More, Input, maps:put(Alias, Val, Acc)).
+
+select_fun(Name, Args) ->
+    Fun = list_to_existing_atom(binary_to_list(Name)),
+    erlang:apply(emqx_rule_funcs, Fun, Args).
+
+select_fun_var(Name, Args) ->
+    iolist_to_binary([Name, "(", binary_join(Args, <<",">>), ")"]).
+
+parse_payload(Input) ->
+    case maps:find(payload_json, Input) of
+        {ok, Json} ->
+            {Json, Input};
+        error ->
+            Payload = maps:get(<<"payload">>, Input),
+            Json = emqx_json:decode(Payload, [return_maps]),
+            {Json, maps:put(payload_json, Json, Input)}
+    end.
+
+binary_join([], _Sep) ->
+    <<>>;
+binary_join([Bin], _Sep) ->
+    Bin;
+binary_join([H|T], Sep) ->
+    lists:foldl(fun(Bin, Acc) -> <<Acc/binary, Sep/binary, Bin/binary>> end, H, T).
+
+%% 2. Match selected data with conditions
+match_conditions({'and', L, R}, Data) ->
+    match_conditions(L, Data) andalso match_conditions(R, Data);
+match_conditions({'or', L, R}, Data) ->
+    match_conditions(L, Data) orelse match_conditions(R, Data);
+match_conditions({'=', L, R}, Data) ->
+    eval(L, Data) == eval(R, Data);
+match_conditions({'>', L, R}, Data) ->
+    eval(L, Data) > eval(R, Data);
+match_conditions({'<', L, R}, Data) ->
+    eval(L, Data) < eval(R, Data);
+match_conditions({'<=', L, R}, Data) ->
+    eval(L, Data) =< eval(R, Data);
+match_conditions({'>=', L, R}, Data) ->
+    eval(L, Data) >= eval(R, Data);
+match_conditions({NotEq, L, R}, Data)
+  when NotEq =:= '<>'; NotEq =:= '!=' ->
+    eval(L, Data) =/= eval(R, Data);
+match_conditions({'not', Var}, Data) ->
+    not maps:get(Var, Data, false);
+match_conditions({in, Var, {list, Vals}}, Data) ->
+    match_with_key(Var, fun(Val) ->
+                                lists:member(Val, [eval(V, Data) || V <- Vals])
+                        end, Data);
+match_conditions({}, _Data) ->
     true.
+
+match_with_key(Key, Fun, Data) ->
+    maps:is_key(Key, Data) andalso Fun(maps:get(Key, Data)).
+
+%% quote string
+eval(<<$', S/binary>>, _) ->
+    binary:part(S, {0, byte_size(S) - 1});
+%% integer | variable
+eval(V, Data) ->
+    try binary_to_integer(V)
+    catch
+        error:badarg ->
+            maps:get(V, Data, V)
+    end.
 
 %% 3. Take actions
 take_actions(Actions, Data) ->
@@ -151,7 +248,7 @@ take_actions(Actions, Data) ->
 take_action(#{apply := Apply}, Data) ->
     Apply(Data).
 
-%% TODO: 4. the resource?
+%% TODO: 4. is the resource available?
 %% call_resource(_ResId) ->
 %%    ok.
 

@@ -16,6 +16,10 @@
 
 -export([topic/1]).
 
+topic(N) when is_binary(N) ->
+    topic(binary_to_integer(N));
+
 topic(N) when is_integer(N) ->
-    fun(Topic) -> lists:nth(N, emqx_topic:tokens(Topic)) end.
+    fun(#{topic := Topic}) -> lists:nth(N, emqx_topic:tokens(Topic)) end.
+
 
