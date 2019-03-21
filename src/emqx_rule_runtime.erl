@@ -20,7 +20,10 @@
 
 -export([start/1, stop/1]).
 
--export([ on_client_connected/4
+-export([ on_psk_lookup/3
+        , on_authenticate/2
+        , on_check_acl/5
+        , on_client_connected/4
         , on_client_disconnected/3
         , on_client_subscribe/3
         , on_client_unsubscribe/3
@@ -30,6 +33,7 @@
         , on_session_unsubscribed/4
         , on_session_resumed/3
         , on_message_publish/2
+        , on_message_dropped/3
         , on_message_deliver/3
         , on_message_acked/3
         ]).
@@ -39,6 +43,9 @@
 %%------------------------------------------------------------------------------
 
 start(Env) ->
+    hook_rules('tls_handshake.psk_lookup', fun ?MODULE:on_psk_lookup/3, Env),
+    hook_rules('client.authenticate', fun ?MODULE:on_authenticate/2, Env),
+    hook_rules('client.check_acl', fun ?MODULE:on_check_acl/5, Env),
     hook_rules('client.connected', fun ?MODULE:on_client_connected/4, Env),
     hook_rules('client.disconnected', fun ?MODULE:on_client_disconnected/3, Env),
     hook_rules('client.subscribe', fun ?MODULE:on_client_subscribe/3, Env),
@@ -49,6 +56,7 @@ start(Env) ->
     hook_rules('session.subscribed', fun ?MODULE:on_session_subscribed/4, Env),
     hook_rules('session.unsubscribed', fun ?MODULE:on_session_unsubscribed/4, Env),
     hook_rules('message.publish', fun ?MODULE:on_message_publish/2, Env),
+    hook_rules('message.dropped', fun ?MODULE:on_message_dropped/3, Env),
     hook_rules('message.deliver', fun ?MODULE:on_message_deliver/3, Env),
     hook_rules('message.acked', fun ?MODULE:on_message_acked/3, Env).
 
@@ -58,6 +66,19 @@ hook_rules(Name, Fun, Env) ->
 %%------------------------------------------------------------------------------
 %% Callbacks
 %%------------------------------------------------------------------------------
+
+on_psk_lookup(ClientPSKID, _, #{apply_fun := ApplyRules}) ->
+    ?LOG(info, "[RuleEngine] TLS-Handshake lookup PSK, PSK-ID: ~p", [ClientPSKID]),
+    ApplyRules(#{psk_id => ClientPSKID}).
+
+on_authenticate(Credentials = #{client_id := ClientId}, #{apply_fun := ApplyRules}) ->
+    ?LOG(info, "[RuleEngine] Client(~s) requires authentication", [ClientId]),
+    ApplyRules(Credentials).
+
+on_check_acl(Credentials = #{client_id := ClientId}, PubSub, Topic, _AclResult, #{apply_fun := ApplyRules}) ->
+    ?LOG(info, "[RuleEngine] Client(~s) ~s to topic ~s requires ACL check",
+         [ClientId, PubSub, Topic]),
+    ApplyRules(maps:merge(Credentials, #{access => PubSub, topic => Topic})).
 
 on_client_connected(Credentials = #{client_id := ClientId}, ConnAck, ConnAttrs, #{apply_fun := ApplyRules}) ->
     ?LOG(info, "[RuleEngine] Client(~s) connected, connack: ~w, conn_attrs:~p",
@@ -118,6 +139,11 @@ on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
 on_message_publish(Message, #{apply_fun := ApplyRules}) ->
     ?LOG(info, "[RuleEngine] Publish ~s", [emqx_message:format(Message)]),
     ApplyRules(emqx_message:to_map(Message)),
+    {ok, Message}.
+
+on_message_dropped(#{node := Node}, Message, #{apply_fun := ApplyRules}) ->
+    ?LOG(info, "[RuleEngine] Message ~s dropped for no subscription", [emqx_message:format(Message)]),
+    ApplyRules(emqx_message:to_map(Message), #{node => Node}),
     {ok, Message}.
 
 on_message_deliver(Credentials = #{client_id := ClientId}, Message, #{apply_fun := ApplyRules}) ->
@@ -202,6 +228,9 @@ take_action(#{apply := Apply}, Data) ->
 
 %% Called when the rule engine application stop
 stop(_Env) ->
+    emqx:unhook('tls_handshake.psk_lookup', fun ?MODULE:on_psk_lookup/3),
+    emqx:unhook('client.authenticate', fun ?MODULE:on_authenticate/2),
+    emqx:unhook('client.check_acl', fun ?MODULE:on_check_acl/5),
     emqx:unhook('client.connected', fun ?MODULE:on_client_connected/4),
     emqx:unhook('client.disconnected', fun ?MODULE:on_client_disconnected/3),
     emqx:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/3),
@@ -212,6 +241,7 @@ stop(_Env) ->
     emqx:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/4),
     emqx:unhook('session.unsubscribed', fun ?MODULE:on_session_unsubscribed/4),
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
+    emqx:unhook('message.dropped', fun ?MODULE:on_message_dropped/3),
     emqx:unhook('message.deliver', fun ?MODULE:on_message_deliver/3),
     emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3).
 
