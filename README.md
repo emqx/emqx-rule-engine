@@ -34,7 +34,7 @@ iot rule "Rule Name"
 ## SQL for Rule query statement
 
 ```
-select id, time, temperature as t FROM "topic/a" WHERE t > 50;
+select id, time, temperature as t from "topic/a" where t > 50;
 ```
 
 ## License
