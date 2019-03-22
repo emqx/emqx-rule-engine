@@ -155,6 +155,8 @@ create_rule(Params = #{name := Name,
 rule_id(Name) ->
     iolist_to_binary([Name, ":", integer_to_list(erlang:system_time())]).
 
+prepare_action(Name) when is_atom(Name) ->
+    prepare_action({Name, #{}});
 prepare_action({Name, Args}) ->
     case emqx_rule_registry:find_action(Name) of
         {ok, #action{module = M, func = F}} ->
@@ -170,7 +172,9 @@ with_resource_config(Args = #{'$resource' := ResId}) ->
             maps:merge(Args, Config);
         not_found ->
             throw(resource_not_found)
-    end.
+    end;
+
+with_resource_config(Args) -> Args.
 
 -spec(create_resource(#{}) -> {ok, resource()} | {error, Reason :: term()}).
 create_resource(#{name := Name,
