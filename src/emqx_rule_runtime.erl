@@ -88,7 +88,7 @@ on_message_dropped(_, Message = #message{topic = <<"$SYS/", _/binary>>},
 
 on_message_dropped(#{node := Node}, Message, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Message ~s dropped for no subscription", [emqx_message:format(Message)]),
-    ApplyRules(emqx_message:to_map(Message), #{node => Node}),
+    ApplyRules(maps:merge(emqx_message:to_map(Message), #{node => Node})),
     {ok, Message}.
 
 on_message_deliver(Credentials = #{client_id := ClientId}, Message, #{apply_fun := ApplyRules}) ->
