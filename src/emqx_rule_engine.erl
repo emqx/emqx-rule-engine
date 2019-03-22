@@ -155,6 +155,8 @@ create_rule(Params = #{name := Name,
 rule_id(Name) ->
     iolist_to_binary([Name, ":", integer_to_list(erlang:system_time())]).
 
+prepare_action(Name) when is_atom(Name) ->
+    prepare_action({Name, #{}});
 prepare_action({Name, Args}) ->
     case emqx_rule_registry:find_action(Name) of
         {ok, #action{module = M, func = F}} ->
