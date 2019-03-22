@@ -125,7 +125,7 @@ apply_rule(#rule{topics = Filters,
                  selects = Selects,
                  conditions = Conditions,
                  actions = Actions}, Input) ->
-    Topic = maps:get(topic, Input, undefined),
+    Topic = get_value(<<"topic">>, Input),
     case match_topic_filters(Topic, Filters) of
         true ->
             Data = select_data(Selects, Input),
@@ -155,30 +155,30 @@ select_data([], _Input, Acc) ->
 select_data([<<"*">>|More], Input, Acc) ->
     select_data(More, Input, maps:merge(Acc, Input));
 select_data([<<"headers.", Name/binary>>|More], Input, Acc) ->
-    Headers = maps:get(headers, Input, #{}),
-    Val = maps:get(Name, Headers, null),
+    Headers = get_value(<<"headers">>, Input, #{}),
+    Val = get_value(Name, Headers, null),
     select_data(More, Input, maps:put(Name, Val, Acc));
 select_data([<<"payload.", Attr/binary>>|More], Input, Acc) ->
     {Json, Input1} = parse_payload(Input),
-    Val = maps:get(Attr, Json, null),
+    Val = get_value(Attr, Json, null),
     select_data(More, Input1, maps:put(Attr, Val, Acc));
 select_data([Var|More], Input, Acc) when is_binary(Var) ->
-    Val = maps:get(Var, Input, null),
+    Val = get_value(Var, Input, null),
     select_data(More, Input, maps:put(Var, Val, Acc));
 select_data([{'fun', Name, Args}|More], Input, Acc) ->
     Var = select_fun_var(Name, Args),
     Val = erlang:apply(select_fun(Name, Args), Input),
     select_data(More, Input, maps:put(Var, Val, Acc));
 select_data([{as, <<"headers.", Name/binary>>, Alias}|More], Input, Acc) ->
-    Headers = maps:get(headers, Input, #{}),
-    Val = maps:get(Name, Headers, null),
+    Headers = get_value(<<"headers">>, Input, #{}),
+    Val = get_value(Name, Headers, null),
     select_data(More, Input, maps:put(Alias, Val, Acc));
 select_data([{as, <<"payload.", Attr/binary>>, Alias}|More], Input, Acc) ->
     {Json, Input1} = parse_payload(Input),
-    Val = maps:get(Attr, Json, null),
+    Val = get_value(Attr, Json, null),
     select_data(More, Input1, maps:put(Alias, Val, Acc));
 select_data([{as, Var, Alias}|More], Input, Acc) when is_binary(Var) ->
-    Val = maps:get(Var, Input, null),
+    Val = get_value(Var, Input, null),
     select_data(More, Input, maps:put(Alias, Val, Acc));
 select_data([{as, {'fun', Name, Args}, Alias}|More], Input, Acc) ->
     Val = erlang:apply(select_fun(Name, Args), Input),
@@ -196,7 +196,8 @@ parse_payload(Input) ->
         {ok, Json} ->
             {Json, Input};
         error ->
-            Payload = maps:get(<<"payload">>, Input),
+            %% TODO: remove the default payload later
+            Payload = get_value(<<"payload">>, Input, <<"{}">>),
             Json = emqx_json:decode(Payload, [return_maps]),
             {Json, maps:put(payload_json, Json, Input)}
     end.
@@ -227,7 +228,7 @@ match_conditions({NotEq, L, R}, Data)
   when NotEq =:= '<>'; NotEq =:= '!=' ->
     eval(L, Data) =/= eval(R, Data);
 match_conditions({'not', Var}, Data) ->
-    not maps:get(Var, Data, false);
+    not get_value(Var, Data, false);
 match_conditions({in, Var, {list, Vals}}, Data) ->
     match_with_key(Var, fun(Val) ->
                                 lists:member(Val, [eval(V, Data) || V <- Vals])
@@ -236,7 +237,7 @@ match_conditions({}, _Data) ->
     true.
 
 match_with_key(Key, Fun, Data) ->
-    maps:is_key(Key, Data) andalso Fun(maps:get(Key, Data)).
+    maps:is_key(Key, Data) andalso Fun(get_value(Key, Data)).
 
 %% quote string
 eval(<<$', S/binary>>, _) ->
@@ -246,7 +247,7 @@ eval(V, Data) ->
     try binary_to_integer(V)
     catch
         error:badarg ->
-            maps:get(V, Data, V)
+            get_value(V, Data, V)
     end.
 
 %% 3. Take actions
@@ -259,6 +260,21 @@ take_action(#{apply := Apply}, Data) ->
 %% TODO: 4. is the resource available?
 %% call_resource(_ResId) ->
 %%    ok.
+
+get_value(Key, Data) ->
+    get_value(Key, Data, undefined).
+
+%% TODO: Workaround, maybe atom leaks...
+get_value(Key, Data, Default) when is_binary(Key) ->
+    case maps:is_key(Key, Data) of
+        true -> maps:get(Key, Data);
+        false ->
+            maps:get(list_to_atom(binary_to_list(Key)), Data, Default)
+    end;
+
+get_value(Key, Data, Default) when is_atom(Key) ->
+    maps:get(Key, Data, Default).
+
 
 %%------------------------------------------------------------------------------
 %% Stop
