@@ -170,7 +170,9 @@ with_resource_config(Args = #{'$resource' := ResId}) ->
             maps:merge(Args, Config);
         not_found ->
             throw(resource_not_found)
-    end.
+    end;
+
+with_resource_config(Args) -> Args.
 
 -spec(create_resource(#{}) -> {ok, resource()} | {error, Reason :: term()}).
 create_resource(#{name := Name,
