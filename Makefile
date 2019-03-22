@@ -2,7 +2,7 @@ PROJECT = emqx_rule_engine
 PROJECT_DESCRIPTION = EMQ X Rule Engine
 PROJECT_VERSION = 0.1.0
 
-NO_AUTOPATCH = sqlparse cuttlefish
+NO_AUTOPATCH = cuttlefish
 
 CUR_BRANCH := $(shell git branch | grep -e "^*" | cut -d' ' -f 2)
 BRANCH := $(if $(filter $(CUR_BRANCH), master develop), $(CUR_BRANCH), develop)
