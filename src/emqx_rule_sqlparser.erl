@@ -27,14 +27,16 @@
 
 -export_type([select/0]).
 
--spec(parse_select(string()|binary())
+-define(SELECT(Fields, From, Where),
+        {select, [{fields, Fields}, {from, From}, {where, Where}|_]}).
+
+%% Parse one select statement.
+-spec(parse_select(string() | binary())
       -> {ok, select()} | {parse_error, term()} | {lex_error, term()}).
 parse_select(Sql) ->
     case sqlparse:parsetree(Sql) of
-        {ok, ParseTree} ->
-            {ok, hd([#select{fields = Fields, from = From, where = Where}
-                     || {{select, [{fields, Fields}, {from, From}, {where, Where}|_]}, _Extra}
-                        <- ParseTree])};
+        {ok, [{?SELECT(Fields, From, Where), _Extra}]} ->
+            {ok, #select{fields = Fields, from = From, where = Where}};
         Error -> Error
     end.
 

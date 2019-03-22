@@ -468,6 +468,9 @@ t_on_message_acked(_Config) ->
 %%------------------------------------------------------------------------------
 
 t_sqlparse(_Config) ->
-    %%TODO:
-    ok.
+    {ok, Select} = emqx_rule_sqlparser:parse_select("select * from topic where x > 10 and y <= 20"),
+    [<<"*">>] = emqx_rule_sqlparser:select_fields(Select),
+    [<<"topic">>], emqx_rule_sqlparser:select_from(Select),
+    {'and',{'>',<<"x">>,<<"10">>},{'<=',<<"y">>,<<"20">>}}
+        = emqx_rule_sqlparser:select_where(Select).
 
