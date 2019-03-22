@@ -35,7 +35,7 @@
         , add_actions/1
         , get_actions/0
         , get_actions_for/1
-        , get_action/1
+        , find_action/1
         , remove_action/1
         , remove_actions/1
         , remove_actions_of/1
@@ -209,9 +209,9 @@ get_actions() ->
 get_actions_for(Hook) ->
     mnesia:dirty_index_read(?ACTION_TAB, Hook, #action.for).
 
-%% @doc Get an action by Id.
--spec(get_action(Name :: atom()) -> {ok, emqx_rule_engine:action()} | not_found).
-get_action(Name) ->
+%% @doc Find an action by name.
+-spec(find_action(Name :: atom()) -> {ok, emqx_rule_engine:action()} | not_found).
+find_action(Name) ->
     case mnesia:dirty_read(?ACTION_TAB, Name) of
         [Action] -> {ok, Action};
         [] -> not_found
