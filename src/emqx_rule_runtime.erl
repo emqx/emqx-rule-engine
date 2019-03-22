@@ -20,18 +20,10 @@
 
 -export([start/1, stop/1]).
 
--export([ on_psk_lookup/3
-        , on_authenticate/2
-        , on_check_acl/5
-        , on_client_connected/4
+-export([ on_client_connected/4
         , on_client_disconnected/3
         , on_client_subscribe/3
         , on_client_unsubscribe/3
-        , on_session_created/3
-        , on_session_terminated/3
-        , on_session_subscribed/4
-        , on_session_unsubscribed/4
-        , on_session_resumed/3
         , on_message_publish/2
         , on_message_dropped/3
         , on_message_deliver/3
@@ -43,18 +35,10 @@
 %%------------------------------------------------------------------------------
 
 start(Env) ->
-    hook_rules('tls_handshake.psk_lookup', fun ?MODULE:on_psk_lookup/3, Env),
-    hook_rules('client.authenticate', fun ?MODULE:on_authenticate/2, Env),
-    hook_rules('client.check_acl', fun ?MODULE:on_check_acl/5, Env),
     hook_rules('client.connected', fun ?MODULE:on_client_connected/4, Env),
     hook_rules('client.disconnected', fun ?MODULE:on_client_disconnected/3, Env),
     hook_rules('client.subscribe', fun ?MODULE:on_client_subscribe/3, Env),
     hook_rules('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3, Env),
-    hook_rules('session.created', fun ?MODULE:on_session_created/3, Env),
-    hook_rules('session.resumed', fun ?MODULE:on_session_resumed/3, Env),
-    hook_rules('session.terminated', fun ?MODULE:on_session_terminated/3, Env),
-    hook_rules('session.subscribed', fun ?MODULE:on_session_subscribed/4, Env),
-    hook_rules('session.unsubscribed', fun ?MODULE:on_session_unsubscribed/4, Env),
     hook_rules('message.publish', fun ?MODULE:on_message_publish/2, Env),
     hook_rules('message.dropped', fun ?MODULE:on_message_dropped/3, Env),
     hook_rules('message.deliver', fun ?MODULE:on_message_deliver/3, Env),
@@ -66,19 +50,6 @@ hook_rules(Name, Fun, Env) ->
 %%------------------------------------------------------------------------------
 %% Callbacks
 %%------------------------------------------------------------------------------
-
-on_psk_lookup(ClientPSKID, _, #{apply_fun := ApplyRules}) ->
-    ?LOG(info, "[RuleEngine] TLS-Handshake lookup PSK, PSK-ID: ~p", [ClientPSKID]),
-    ApplyRules(#{psk_id => ClientPSKID}).
-
-on_authenticate(Credentials = #{client_id := ClientId}, #{apply_fun := ApplyRules}) ->
-    ?LOG(info, "[RuleEngine] Client(~s) requires authentication", [ClientId]),
-    ApplyRules(Credentials).
-
-on_check_acl(Credentials = #{client_id := ClientId}, PubSub, Topic, _AclResult, #{apply_fun := ApplyRules}) ->
-    ?LOG(info, "[RuleEngine] Client(~s) ~s to topic ~s requires ACL check",
-         [ClientId, PubSub, Topic]),
-    ApplyRules(maps:merge(Credentials, #{access => PubSub, topic => Topic})).
 
 on_client_connected(Credentials = #{client_id := ClientId}, ConnAck, ConnAttrs, #{apply_fun := ApplyRules}) ->
     ?LOG(info, "[RuleEngine] Client(~s) connected, connack: ~w, conn_attrs:~p",
@@ -101,36 +72,6 @@ on_client_unsubscribe(#{client_id := ClientId}, TopicFilters, #{apply_fun := App
          [ClientId, TopicFilters]),
     ApplyRules(#{client_id => ClientId, topic_filters => TopicFilters}),
     {ok, TopicFilters}.
-
-on_session_created(#{client_id := ClientId}, Info, #{apply_fun := ApplyRules}) ->
-    ?LOG(info, "[RuleEngine] Session(~s) created ~p",
-         [ClientId, Info]),
-    ApplyRules(#{client_id => ClientId, info => Info}),
-    ok.
-
-on_session_resumed(#{client_id := ClientId}, Attrs, #{apply_fun := ApplyRules}) ->
-    ?LOG(info, "[RuleEngine] Session(~s) resumed ~p",
-         [ClientId, Attrs]),
-    ApplyRules(#{client_id => ClientId, attrs => Attrs}),
-    ok.
-
-on_session_terminated(#{client_id := ClientId, username := Username}, Reason, #{apply_fun := ApplyRules}) ->
-    ?LOG(info, "[RuleEngine] Session(~s) terminated for ~p",
-         [ClientId, Reason]),
-    ApplyRules(#{client_id => ClientId, username => Username, reason => Reason}),
-    ok.
-
-on_session_subscribed(#{client_id := ClientId, username := Username}, Topic, SubOpts, #{apply_fun := ApplyRules}) ->
-    ?LOG(info, "[RuleEngine] Session(~s) subscribed topic: ~p",
-         [ClientId, Topic]),
-    ApplyRules(#{client_id => ClientId, username => Username, topic => Topic, sub_opts => SubOpts}),
-    ok.
-
-on_session_unsubscribed(#{client_id := ClientId, username := Username}, Topic, SubOpts, #{apply_fun := ApplyRules}) ->
-    ?LOG(info, "[RuleEngine] Session(~s) unsubscribed topic: ~p",
-         [ClientId, Topic]),
-    ApplyRules(#{client_id => ClientId, username => Username, topic => Topic, sub_opts => SubOpts}),
-    ok.
 
 on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
                    #{ignore_sys_message := true}) ->
@@ -325,18 +266,10 @@ take_action(#{apply := Apply}, Data) ->
 
 %% Called when the rule engine application stop
 stop(_Env) ->
-    emqx:unhook('tls_handshake.psk_lookup', fun ?MODULE:on_psk_lookup/3),
-    emqx:unhook('client.authenticate', fun ?MODULE:on_authenticate/2),
-    emqx:unhook('client.check_acl', fun ?MODULE:on_check_acl/5),
     emqx:unhook('client.connected', fun ?MODULE:on_client_connected/4),
     emqx:unhook('client.disconnected', fun ?MODULE:on_client_disconnected/3),
     emqx:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/3),
     emqx:unhook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3),
-    emqx:unhook('session.created', fun ?MODULE:on_session_created/3),
-    emqx:unhook('session.resumed', fun ?MODULE:on_session_resumed/3),
-    emqx:unhook('session.terminated', fun ?MODULE:on_session_terminated/3),
-    emqx:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/4),
-    emqx:unhook('session.unsubscribed', fun ?MODULE:on_session_unsubscribed/4),
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
     emqx:unhook('message.dropped', fun ?MODULE:on_message_dropped/3),
     emqx:unhook('message.deliver', fun ?MODULE:on_message_deliver/3),
