@@ -13,3 +13,7 @@ emqx_rule_engine.d
 .erlang.mk/
 data/
 _build/
+TODO
+ct.coverdata
+logs/
+test/ct.cover.spec
