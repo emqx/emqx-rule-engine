@@ -12,6 +12,8 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
+-define(APP, emqx_rule_engine).
+
 -record(rule,
         { id :: binary()
         , name :: binary()
@@ -19,7 +21,7 @@
         , rawsql :: binary()
         , topics :: [binary()] | undefined
         , selects :: list()
-        , conditions :: list()
+        , conditions :: tuple()
         , actions :: list()
         , enabled :: boolean()
         , description :: binary()
@@ -56,4 +58,3 @@
         , on_create :: fun((map()) -> map())
         , description :: binary()
         }).
-

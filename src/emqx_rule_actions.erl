@@ -17,11 +17,17 @@
 
 -include_lib("emqx/include/emqx.hrl").
 
--rule_action(#{name => debug_action,
+-resource_type(#{name => default_resource,
+                 schema => "emqx_rule_engine",
+                 create => on_default_resource_create,
+                 description => "Default resource"
+                }).
+
+-rule_action(#{name => inspect_action,
                for => any,
-               func => debug_action,
+               func => inspect_action,
                params => #{},
-               description => "Debug Action"
+               description => "Inspect the action for debug purpose"
               }).
 
 -rule_action(#{name => republish_message,
@@ -35,19 +41,24 @@
 
 -export_type([action_fun/0]).
 
--export([ debug_action/1
+-export([on_default_resource_create/1]).
+
+-export([ inspect_action/1
         , republish_action/1
         ]).
+
+-spec(on_default_resource_create(map()) -> map()).
+on_default_resource_create(Conf) ->
+    Conf.
 
 %%------------------------------------------------------------------------------
 %% Default actions for the Rule Engine
 %%------------------------------------------------------------------------------
 
--spec(debug_action(Params :: map()) -> action_fun()).
-debug_action(Params) ->
+-spec(inspect_action(Params :: map()) -> action_fun()).
+inspect_action(Params) ->
     fun(Data) ->
-            io:format("Action Params: ~p~n", [Params]),
-            io:format("Action Input: ~p~n", [Data])
+        io:format("Action input data: ~p, init params: ~p~n", [Data, Params])
     end.
 
 %% A Demo Action.
@@ -55,11 +66,14 @@ debug_action(Params) ->
                          to := emqx_topic:topic()})
       -> action_fun()).
 republish_action(#{from := From, to := To}) ->
-    fun(#{message := Msg = #message{topic = Origin}}) ->
-            case emqx_topic:match(Origin, From) of
+    fun(Msg = #{<<"topic">> := OrgTopic, <<"payload">> := Payload, <<"qos">> := QoS}) ->
+            case emqx_topic:match(OrgTopic, From) of
                 true ->
-                    emqx_broker:safe_publish(Msg#message{topic = To});
+                    emqx_broker:safe_publish(
+                        emqx_message:make(maps:get(<<"from">>, Msg, 'default:republish_action'), QoS, To, Payload));
                 false -> ok
-            end
+            end;
+        (Args) ->
+            logger:warning("No sufficent args: ~p, republish cancelled", [Args])
     end.
 

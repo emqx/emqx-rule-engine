@@ -71,12 +71,8 @@ new_action({App, Mod, #{name := Name,
         true -> ok;
         false -> error({action_func_not_found, Func})
     end,
-    Prefix = case App =:= ?MODULE of
-                 true -> default;
-                 false -> App
-             end,
-    Name1 = list_to_atom(lists:concat([Prefix, ":", Name])),
-    #action{name = Name1, for = Hook, app = App,
+    Namespace = if App =:= ?APP -> default; true -> App end,
+    #action{name = action_name(Namespace, Name), for = Hook, app = App,
             module = Mod, func = Func, params = Params,
             description = iolist_to_binary(Descr)}.
 
@@ -141,6 +137,7 @@ create_rule(Params = #{name := Name,
             Rule = #rule{id = rule_id(Name),
                          name = Name,
                          for = Hook,
+                         rawsql = Sql,
                          topics = emqx_rule_sqlparser:select_from(Select),
                          selects = emqx_rule_sqlparser:select_fields(Select),
                          conditions = emqx_rule_sqlparser:select_where(Select),
@@ -158,7 +155,7 @@ rule_id(Name) ->
 prepare_action(Name) when is_atom(Name) ->
     prepare_action({Name, #{}});
 prepare_action({Name, Args}) ->
-    case emqx_rule_registry:find_action(Name) of
+    case emqx_rule_registry:get_action(Name) of
         {ok, #action{module = M, func = F}} ->
             NewArgs = with_resource_config(Args),
             #{name => Name, args => Args, apply => M:F(NewArgs)};
@@ -167,7 +164,7 @@ prepare_action({Name, Args}) ->
     end.
 
 with_resource_config(Args = #{'$resource' := ResId}) ->
-    case emqx_rule_registry:find_resource(ResId) of
+    case emqx_rule_registry:get_resource(ResId) of
         {ok, #{config := Config}} ->
             maps:merge(Args, Config);
         not_found ->
@@ -181,9 +178,9 @@ create_resource(#{name := Name,
                   type := Type,
                   config := Config,
                   description := Descr}) ->
-    case emqx_rule_registry:find_resource_type(Type) of
-        {ok, #resource_type{on_create = OnCreate}} ->
-            NewConfig = OnCreate(Config),
+    case emqx_rule_registry:get_resource_type(Type) of
+        {ok, #resource_type{on_create = {Mod, OnCreate}}} ->
+            NewConfig = Mod:OnCreate(Config),
             ResId = iolist_to_binary([atom_to_list(Type), ":", Name]),
             Resource = #resource{id = ResId,
                                  type = Type,
@@ -195,3 +192,5 @@ create_resource(#{name := Name,
             {error, resource_type_not_found}
     end.
 
+action_name(Namespace, Name) ->
+    list_to_atom(lists:concat([Namespace, ":", Name])).

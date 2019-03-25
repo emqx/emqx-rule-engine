@@ -54,23 +54,23 @@ hook_rules(Name, Fun, Env) ->
 on_client_connected(Credentials = #{client_id := ClientId}, ConnAck, ConnAttrs, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Client(~s) connected, connack: ~w, conn_attrs:~p",
          [ClientId, ConnAck, ConnAttrs]),
-    ApplyRules(maps:merge(Credentials, #{connack => ConnAck, connattrs => ConnAttrs})).
+    ApplyRules(maps:merge(bin_key_map(Credentials), #{<<"connack">> => ConnAck, <<"connattrs">> => ConnAttrs})).
 
 on_client_disconnected(Credentials = #{client_id := ClientId}, ReasonCode, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Client(~s) disconnected, reason_code: ~w",
          [ClientId, ReasonCode]),
-    ApplyRules(maps:merge(Credentials, #{reason_code => ReasonCode})).
+    ApplyRules(maps:merge(bin_key_map(Credentials), #{<<"reason_code">> => ReasonCode})).
 
 on_client_subscribe(#{client_id := ClientId}, TopicFilters, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Client(~s) will subscribe: ~p",
          [ClientId, TopicFilters]),
-    ApplyRules(#{client_id => ClientId, topic_filters => TopicFilters}),
+    ApplyRules(#{<<"client_id">> => ClientId, <<"topic_filters">> => TopicFilters}),
     {ok, TopicFilters}.
 
 on_client_unsubscribe(#{client_id := ClientId}, TopicFilters, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Client(~s) unsubscribe ~p",
          [ClientId, TopicFilters]),
-    ApplyRules(#{client_id => ClientId, topic_filters => TopicFilters}),
+    ApplyRules(#{<<"client_id">> => ClientId, <<"topic_filters">> => TopicFilters}),
     {ok, TopicFilters}.
 
 on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
@@ -79,7 +79,7 @@ on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
 
 on_message_publish(Message, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Publish ~s", [emqx_message:format(Message)]),
-    ApplyRules(emqx_message:to_map(Message)),
+    ApplyRules(emqx_message:to_bin_key_map(Message)),
     {ok, Message}.
 
 on_message_dropped(_, Message = #message{topic = <<"$SYS/", _/binary>>},
@@ -88,19 +88,19 @@ on_message_dropped(_, Message = #message{topic = <<"$SYS/", _/binary>>},
 
 on_message_dropped(#{node := Node}, Message, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Message ~s dropped for no subscription", [emqx_message:format(Message)]),
-    ApplyRules(maps:merge(emqx_message:to_map(Message), #{node => Node})),
+    ApplyRules(maps:merge(emqx_message:to_bin_key_map(Message), #{<<"node">> => Node})),
     {ok, Message}.
 
 on_message_deliver(Credentials = #{client_id := ClientId}, Message, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Delivered message to client(~s): ~s",
          [ClientId, emqx_message:format(Message)]),
-    ApplyRules(maps:merge(Credentials, emqx_message:to_map(Message))),
+    ApplyRules(maps:merge(bin_key_map(Credentials), emqx_message:to_bin_key_map(Message))),
     {ok, Message}.
 
 on_message_acked(#{client_id := ClientId, username := Username}, Message, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Session(~s) acked message: ~s",
          [ClientId, emqx_message:format(Message)]),
-    ApplyRules(maps:merge(emqx_message:to_map(Message), #{client_id => ClientId, username => Username})),
+    ApplyRules(maps:merge(emqx_message:to_bin_key_map(Message), #{<<"client_id">> => ClientId, <<"username">> => Username})),
     {ok, Message}.
 
 %%------------------------------------------------------------------------------
@@ -268,16 +268,15 @@ take_action(#{apply := Apply}, Data) ->
 get_value(Key, Data) ->
     get_value(Key, Data, undefined).
 
-%% TODO: Workaround, maybe atom leaks...
 get_value(Key, Data, Default) when is_binary(Key) ->
+    maps:get(Key, Data, Default);
+
+get_value(Key, Data, Default) when is_atom(Key) ->
     case maps:is_key(Key, Data) of
         true -> maps:get(Key, Data);
         false ->
-            maps:get(list_to_atom(binary_to_list(Key)), Data, Default)
-    end;
-
-get_value(Key, Data, Default) when is_atom(Key) ->
-    maps:get(Key, Data, Default).
+            maps:get((atom_to_binary(Key, utf8)), Data, Default)
+    end.
 
 
 %%------------------------------------------------------------------------------
@@ -295,3 +294,13 @@ stop(_Env) ->
     emqx:unhook('message.deliver', fun ?MODULE:on_message_deliver/3),
     emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3).
 
+bin_key_map(Map) ->
+    lists:foldl(
+        fun(Key, Acc) ->
+            Val = maps:get(Key, Map),
+            Acc#{bin(Key) => Val}
+        end, #{}, maps:keys(Map)).
+
+bin(Bin) when is_binary(Bin) -> Bin;
+bin(Atom) when is_atom(Atom) -> list_to_binary(atom_to_list(Atom));
+bin(Str) when is_list(Str) -> list_to_binary(Str).
