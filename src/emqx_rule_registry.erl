@@ -34,7 +34,6 @@
 -export([ add_action/1
         , add_actions/1
         , get_actions/0
-        , get_actions_for/1
         , get_action/1
         , remove_action/1
         , remove_actions/1
@@ -106,7 +105,7 @@ mnesia(boot) ->
     ok = ekka_mnesia:create_table(?ACTION_TAB, [
                 {ram_copies, [node()]},
                 {record_name, action},
-                {index, [#action.for, #action.app]},
+                {index, [#action.app]},
                 {attributes, record_info(fields, action)},
                 {storage_properties, StoreProps}]),
     %% Resource table
@@ -203,11 +202,6 @@ delete_rule(RuleId) when is_binary(RuleId) ->
 -spec(get_actions() -> list(emqx_rule_engine:action())).
 get_actions() ->
     get_all_records(?ACTION_TAB).
-
-%% @doc Get actions for a hook.
--spec(get_actions_for(Hook :: atom()) -> list(emqx_rule_engine:action())).
-get_actions_for(Hook) ->
-    mnesia:dirty_index_read(?ACTION_TAB, Hook, #action.for).
 
 %% @doc Find an action by name.
 -spec(get_action(Name :: atom()) -> {ok, emqx_rule_engine:action()} | not_found).

@@ -76,7 +76,6 @@ groups() ->
        t_get_rules_for,
        t_add_get_remove_action,
        t_add_get_remove_actions,
-       t_get_actions_for,
        t_remove_actions_of,
        t_get_resources,
        t_add_get_remove_resource,
@@ -155,13 +154,13 @@ t_unregister_provider(_Config) ->
 
 t_create_rule(_Config) ->
     ok = emqx_rule_engine:register_provider(?APP),
-    {ok, #rule{id = Id}} = emqx_rule_engine:create_rule(
+    {ok, [#rule{id = Id}]} = emqx_rule_engine:create_rules(
             #{name => <<"debug-rule">>,
-              for => 'message.publish',
-              rawsql => <<"select * from \"t/a\"">>,
+              rawsql => <<"select * from message.publish where topic = 't/a'">>,
               actions => [{'default:inspect_action', #{arg1 => 1}}],
               description => <<"debug rule">>}),
-    ?assertMatch({ok,#rule{id = Id}}, emqx_rule_registry:get_rule(Id)),
+    ct:pal("======== emqx_rule_registry:get_rules :~p", [emqx_rule_registry:get_rules()]),
+    ?assertMatch({ok,#rule{id = Id, for = <<"message.publish">>}}, emqx_rule_registry:get_rule(Id)),
     ok = emqx_rule_engine:unregister_provider(?APP),
     emqx_rule_registry:remove_rule(Id),
     ok.
@@ -184,10 +183,9 @@ t_create_resource(_Config) ->
 
 t_inspect_action(_Config) ->
     ok = emqx_rule_engine:register_provider(?APP),
-    {ok, #rule{id = Id}} = emqx_rule_engine:create_rule(
+    {ok, [#rule{id = Id, for = <<"message.publish">>}]} = emqx_rule_engine:create_rules(
                 #{name => <<"inspect_rule">>,
-                  for => 'message.publish',
-                  rawsql => "select * from t1",
+                  rawsql => "select * from message.publish where topic = t1",
                   actions => [{'default:inspect_action', #{a=>1, b=>2}}],
                   description => <<"Inspect rule">>
                   }),
@@ -200,10 +198,9 @@ t_inspect_action(_Config) ->
 
 t_republish_action(_Config) ->
     ok = emqx_rule_engine:register_provider(?APP),
-    {ok, #rule{id = Id}} = emqx_rule_engine:create_rule(
+    {ok, [#rule{id = Id, for = <<"message.publish">>}]} = emqx_rule_engine:create_rules(
                 #{name => <<"inspect_rule">>,
-                  for => 'message.publish',
-                  rawsql => "select topic, payload, qos from t1",
+                  rawsql => "select topic, payload, qos from message.publish where topic = t1",
                   actions => [{'default:republish_message',
                               #{from => <<"t1">>, to => <<"t2">>}}],
                   description => <<"Republish rule">>
@@ -330,11 +327,11 @@ t_add_get_remove_rules(_Config) ->
     ok.
 
 t_get_rules_for(_Config) ->
-    ?assertEqual(0, length(emqx_rule_registry:get_rules_for('message.publish'))),
+    ?assertEqual(0, length(emqx_rule_registry:get_rules_for(<<"message.publish">>))),
     ok = emqx_rule_registry:add_rules(
             [make_simple_rule(<<"rule-debug-1">>),
              make_simple_rule(<<"rule-debug-2">>)]),
-    ?assertEqual(2, length(emqx_rule_registry:get_rules_for('message.publish'))),
+    ?assertEqual(2, length(emqx_rule_registry:get_rules_for(<<"message.publish">>))),
     ok = emqx_rule_registry:remove_rules([<<"rule-debug-1">>, <<"rule-debug-2">>]),
     ok.
 
@@ -367,14 +364,6 @@ t_add_get_remove_actions(_Config) ->
     ?assertMatch(2, length(emqx_rule_registry:get_actions()) - InitActionLen),
     ok = emqx_rule_registry:remove_actions([Action1, Action2]),
     ?assertMatch(InitActionLen, length(emqx_rule_registry:get_actions())),
-    ok.
-
-t_get_actions_for(_Config) ->
-    InitActionLen = length(emqx_rule_registry:get_actions_for('message.publish')),
-    ok = emqx_rule_registry:add_actions([make_simple_action(<<"action-debug-1">>),
-                                         make_simple_action(<<"action-debug-2">>)]),
-    ?assertMatch(2, length(emqx_rule_registry:get_actions_for('message.publish')) - InitActionLen),
-    ok = emqx_rule_registry:remove_actions([<<"action-debug-1">>, <<"action-debug-2">>]),
     ok.
 
 t_remove_actions_of(_Config) ->
@@ -433,7 +422,11 @@ t_unregister_resource_types_of(_Config) ->
 
 
 t_on_client_connected(_Config) ->
-    %%TODO:
+    % emqx_rule_engine:create_rules(#{name => <<"publish-events">>,
+    %                                rawsql => "select * from client.connected",
+    %                                actions => [{'default:debug_action', #{}}],
+    %                                description => <<"First debug rule">>
+    %                               }),
     ok.
 
 t_on_client_disconnected(_Config) ->
@@ -482,16 +475,15 @@ t_sqlparse(_Config) ->
 make_simple_rule(RuleName) when is_binary(RuleName) ->
     #rule{id = RuleName,
           name = RuleName,
-          for = 'message.publish',
-          rawsql = <<"select * from 'simple/topic'">>,
-          topics = [<<"simple/topic">>],
+          rawsql = <<"select * from message.publish where topic = 'simple/topic'">>,
+          for = <<"message.publish">>,
           selects = [<<"*">>],
           conditions = {},
           actions = [{'default:inspect_action', #{}}],
           description = <<"simple rule">>}.
 
 make_simple_action(ActionName) when is_binary(ActionName) ->
-    #action{name = ActionName, for = 'message.publish', app = emqx_rule_engine,
+    #action{name = ActionName, app = emqx_rule_engine,
             module = ?MODULE, func = fun simple_action_inspect/1, params = #{},
             description = <<"Simple inspect action">>}.
 

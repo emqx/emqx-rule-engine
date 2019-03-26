@@ -17,9 +17,8 @@
 -record(rule,
         { id :: binary()
         , name :: binary()
-        , for :: atom()
         , rawsql :: binary()
-        , topics :: [binary()] | undefined
+        , for :: atom()
         , selects :: list()
         , conditions :: tuple()
         , actions :: list()
@@ -29,7 +28,6 @@
 
 -record(action,
         { name :: atom()
-        , for :: atom()
         , app :: atom()
         , module :: module()
         , func :: atom()

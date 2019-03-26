@@ -24,14 +24,12 @@
                 }).
 
 -rule_action(#{name => inspect_action,
-               for => any,
                func => inspect_action,
                params => #{},
                description => "Inspect the action for debug purpose"
               }).
 
 -rule_action(#{name => republish_message,
-               for => 'message.publish',
                func => republish_action,
                params => #{from => topic, to => topic},
                description => "Republish a MQTT message"

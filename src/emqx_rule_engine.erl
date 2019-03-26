@@ -20,7 +20,7 @@
         , unregister_provider/1
         ]).
 
--export([ create_rule/1
+-export([ create_rules/1
         , create_resource/1
         ]).
 
@@ -62,7 +62,6 @@ find_resource_types(App) ->
     lists:map(fun new_resource_type/1, find_attrs(App, resource_type)).
 
 new_action({App, Mod, #{name := Name,
-                        for := Hook,
                         func := Func,
                         params := Params,
                         description := Descr}}) ->
@@ -72,7 +71,7 @@ new_action({App, Mod, #{name := Name,
         false -> error({action_func_not_found, Func})
     end,
     Namespace = if App =:= ?APP -> default; true -> App end,
-    #action{name = action_name(Namespace, Name), for = Hook, app = App,
+    #action{name = action_name(Namespace, Name), app = App,
             module = Mod, func = Func, params = Params,
             description = iolist_to_binary(Descr)}.
 
@@ -126,26 +125,25 @@ unregister_provider(App) ->
 %% Create a rule or resource
 %%------------------------------------------------------------------------------
 
--spec(create_rule(#{}) -> {ok, rule()} | no_return()).
-create_rule(Params = #{name := Name,
-                       for := Hook,
-                       rawsql := Sql,
-                       actions := Actions,
-                       description := Descr}) ->
+-spec(create_rules(#{}) -> {ok, [rule()]} | no_return()).
+create_rules(Params = #{name := Name,
+                        rawsql := Sql,
+                        actions := Actions,
+                        description := Descr}) ->
     case emqx_rule_sqlparser:parse_select(Sql) of
         {ok, Select} ->
-            Rule = #rule{id = rule_id(Name),
-                         name = Name,
-                         for = Hook,
-                         rawsql = Sql,
-                         topics = emqx_rule_sqlparser:select_from(Select),
-                         selects = emqx_rule_sqlparser:select_fields(Select),
-                         conditions = emqx_rule_sqlparser:select_where(Select),
-                         actions = [prepare_action(Action) || Action <- Actions],
-                         enabled = maps:get(enabled, Params, true),
-                         description = iolist_to_binary(Descr)},
-            ok = emqx_rule_registry:add_rule(Rule),
-            {ok, Rule};
+            Rules = [#rule{id = rule_id(Name),
+                           name = Name,
+                           rawsql = Sql,
+                           for = Hook,
+                           selects = emqx_rule_sqlparser:select_fields(Select),
+                           conditions = emqx_rule_sqlparser:select_where(Select),
+                           actions = [prepare_action(Action) || Action <- Actions],
+                           enabled = maps:get(enabled, Params, true),
+                           description = iolist_to_binary(Descr)}
+                    || Hook <- emqx_rule_sqlparser:select_from(Select)],
+            ok = emqx_rule_registry:add_rules(Rules),
+            {ok, Rules};
         Error -> error(Error)
     end.
 
