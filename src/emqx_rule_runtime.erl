@@ -230,7 +230,9 @@ match_conditions({}, _Data) ->
 
 %% Match topic filter
 match_topic_filter(Topic, Filter) when is_binary(Topic), is_binary(Filter)->
-    emqx_topic:match(Topic, Filter).
+    emqx_topic:match(Topic, Filter);
+match_topic_filter(_Topic, _Filter) ->
+    false.
 
 match_with_key(Key, Fun, Data) ->
     maps:is_key(Key, Data) andalso Fun(get_value(Key, Data)).

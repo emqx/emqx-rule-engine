@@ -85,7 +85,8 @@ groups() ->
        t_get_resource_types,
        t_unregister_resource_types_of]},
      {runtime, [sequence],
-      [t_hookpoints
+      [t_hookpoints,
+       t_sqlselect
       ]},
      {sqlparse, [],
       [t_sqlparse]}
@@ -218,20 +219,17 @@ t_inspect_action(_Config) ->
 
 t_republish_action(_Config) ->
     ok = emqx_rule_engine:register_provider(?APP),
-    {ok, [#rule{id = Id, for = <<"message.publish">>}]} = emqx_rule_engine:create_rules(
-                #{name => <<"inspect_rule">>,
-                  rawsql => "select topic, payload, qos from message.publish where topic = t1",
-                  actions => [{'default:republish_message',
-                              #{from => <<"t1">>, to => <<"t2">>}}],
-                  description => <<"Republish rule">>
-                  }),
+    [#rule{id = Id, for = <<"message.publish">>}] =
+        create_sql_republish_rules(<<"republish-rule">>, <<"t2">>,
+            "select topic, payload, qos from message.publish where topic = t1"),
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqx_client:connect(Client),
     {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
 
-    emqx_client:publish(Client, <<"t1">>, <<"{\"id\": 1, \"name\": \"ha\"}">>, 0),
-    receive Info ->
-        ct:pal("OK - received msg on topic t2: ~p~n", [Info])
+    Msg = <<"{\"id\": 1, \"name\": \"ha\"}">>,
+    emqx_client:publish(Client, <<"t1">>, Msg, 0),
+    receive {publish, #{topic := <<"t2">>, payload := Payload}} ->
+        ?assertEqual(Msg, Payload)
     after 1000 ->
         ct:fail(wait_for_t2)
     end,
@@ -490,6 +488,44 @@ client_disconnected(Client) ->
     verify_hookpoints_metric('client.disconnected'),
     ok.
 
+t_sqlselect(_Config) ->
+    ok = emqx_rule_engine:register_provider(?APP),
+    TopicRules = create_sql_republish_rules(
+                    <<"topic-rule">>, <<"t2">>,
+                    "SELECT topic, payload, payload.x as x "
+                    "FROM message.publish "
+                    "WHERE (topic = 't3/#' or topic = 't1/#') and x = 1"),
+
+    {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqx_client:connect(Client),
+    {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
+
+    emqx_client:publish(Client, <<"t1">>, <<"{\"x\": 1}">>, 0),
+    receive {publish, #{topic := T, payload := Payload}} ->
+        ?assertEqual(<<"t2">>, T),
+        ?assertEqual(<<"{\"x\": 1}">>, Payload)
+    after 1000 ->
+        ct:fail(wait_for_t2)
+    end,
+
+    emqx_client:publish(Client, <<"t1">>, <<"{\"x\": 2}">>, 0),
+    receive {publish, #{topic := <<"t2">>, payload := _}} ->
+        ct:fail(unexpected_t2)
+    after 1000 ->
+        ok
+    end,
+
+    emqx_client:publish(Client, <<"t3">>, <<"{\"x\": 1}">>, 0),
+    receive {publish, #{topic := T3, payload := Payload3}} ->
+        ?assertEqual(<<"t2">>, T3),
+        ?assertEqual(<<"{\"x\": 1}">>, Payload3)
+    after 1000 ->
+        ct:fail(wait_for_t2)
+    end,
+
+    emqx_client:stop(Client),
+    emqx_rule_registry:remove_rules(TopicRules).
+
 %%------------------------------------------------------------------------------
 %% Test cases for sqlparser
 %%------------------------------------------------------------------------------
@@ -514,6 +550,15 @@ make_simple_rule(RuleName) when is_binary(RuleName) ->
           conditions = {},
           actions = [{'default:inspect_action', #{}}],
           description = <<"simple rule">>}.
+
+create_sql_republish_rules(RuleName, TargetTopic, SQL) ->
+    {ok, Rules} = emqx_rule_engine:create_rules(
+                    #{name => RuleName,
+                      rawsql => SQL,
+                      actions => [{'default:republish_message',
+                                    #{target_topic => TargetTopic}}],
+                      description => RuleName}),
+    Rules.
 
 make_simple_action(ActionName) when is_binary(ActionName) ->
     #action{name = ActionName, app = ?APP,
@@ -547,5 +592,4 @@ hook_metrics_action(_Params) ->
 
 verify_hookpoints_metric(Hookpoint) ->
     ct:sleep(50),
-    ct:pal("--------- hook-metrics for ~p: ~p", [Hookpoint, ets:lookup_element(?HOOK_METRICS_TAB, Hookpoint, 2)]),
     ?assert(ets:lookup_element(?HOOK_METRICS_TAB, Hookpoint, 2) > 0).

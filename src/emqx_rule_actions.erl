@@ -31,7 +31,7 @@
 
 -rule_action(#{name => republish_message,
                func => republish_action,
-               params => #{from => topic, to => topic},
+               params => #{target_topic => topic},
                description => "Republish a MQTT message"
               }).
 
@@ -60,18 +60,22 @@ inspect_action(Params) ->
     end.
 
 %% A Demo Action.
--spec(republish_action(#{from := emqx_topic:topic(),
-                         to := emqx_topic:topic()})
+-spec(republish_action(#{target_topic := emqx_topic:topic()})
       -> action_fun()).
-republish_action(#{from := From, to := To}) ->
-    fun(Msg = #{<<"topic">> := OrgTopic, <<"payload">> := Payload, <<"qos">> := QoS}) ->
-            case emqx_topic:match(OrgTopic, From) of
-                true ->
-                    emqx_broker:safe_publish(
-                        emqx_message:make(maps:get(<<"from">>, Msg, 'default:republish_action'), QoS, To, Payload));
-                false -> ok
-            end;
+republish_action(#{target_topic := Topic}) ->
+    fun(Msg = #{<<"payload">> := Payload}) ->
+            emqx_broker:safe_publish(
+                #message{
+                    id = emqx_guid:gen(),
+                    qos = maps:get(<<"qos">>, Msg, 0),
+                    from = maps:get(<<"from">>, Msg, 'default:republish_action'),
+                    flags = maps:get(<<"flags">>, Msg, #{}),
+                    headers = maps:get(<<"headers">>, Msg, #{}),
+                    topic = Topic,
+                    payload = Payload,
+                    timestamp = erlang:timestamp()
+                });
         (Args) ->
-            logger:warning("No sufficent args: ~p, republish cancelled", [Args])
+            logger:error("No sufficent args: ~p. Mandatory fields: payload", [Args])
     end.
 
