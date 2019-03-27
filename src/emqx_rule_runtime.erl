@@ -116,6 +116,8 @@ rules_for(Hook) ->
 -spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
 apply_rules([], _Input) ->
     ok;
+apply_rules([#rule{enabled = false}|More], Input) ->
+    apply_rules(More, Input);
 apply_rules([Rule = #rule{name = Name}|More], Input) ->
     try apply_rule(Rule, Input)
     catch
