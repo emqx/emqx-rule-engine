@@ -17,8 +17,9 @@
 -record(rule,
         { id :: binary()
         , name :: binary()
+        , for :: binary()
         , rawsql :: binary()
-        , for :: atom()
+        , topics :: [binary()] | undefined
         , selects :: list()
         , conditions :: tuple()
         , actions :: list()

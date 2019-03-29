@@ -126,15 +126,29 @@ apply_rules([Rule = #rule{name = Name}|More], Input) ->
     end,
     apply_rules(More, Input).
 
-apply_rule(#rule{selects = Selects,
+apply_rule(#rule{topics = Filters,
+                 selects = Selects,
                  conditions = Conditions,
                  actions = Actions}, Input) ->
-    Data = select_data(Selects, Input),
-    case match_conditions(Conditions, Data) of
+    Topic = get_value(<<"topic">>, Input),
+    case match_topic_filters(Topic, Filters) of
         true ->
-            take_actions(Actions, Data);
+            Data = select_data(Selects, Input),
+            case match_conditions(Conditions, Data) of
+                true -> take_actions(Actions, Data);
+                false -> ok
+            end;
         false -> ok
     end.
+
+%% 0. Match topic filters
+match_topic_filters(_Topic, []) ->
+    true;
+match_topic_filters(Topic, [Filter]) ->
+    emqx_topic:match(Topic, Filter);
+match_topic_filters(Topic, [Filter|More]) ->
+    emqx_topic:match(Topic, Filter)
+        orelse match_topic_filters(Topic, More).
 
 %% 1. Select data from input
 select_data(Fields, Input) ->
@@ -204,8 +218,6 @@ match_conditions({'and', L, R}, Data) ->
     match_conditions(L, Data) andalso match_conditions(R, Data);
 match_conditions({'or', L, R}, Data) ->
     match_conditions(L, Data) orelse match_conditions(R, Data);
-match_conditions({'=', <<"topic">>, Topic}, Data) ->
-    match_topic_filter(get_value(<<"topic">>, Data), eval(Topic, Data));
 match_conditions({'=', L, R}, Data) ->
     eval(L, Data) == eval(R, Data);
 match_conditions({'>', L, R}, Data) ->
@@ -238,7 +250,7 @@ match_with_key(Key, Fun, Data) ->
     maps:is_key(Key, Data) andalso Fun(get_value(Key, Data)).
 
 %% quoted string
-eval(<<Quote:1/binary, S/binary>>, _) when Quote =:= <<$'>>; Quote =:= <<$">>->
+eval(<<Quote:1/binary, S/binary>>, _) when Quote =:= <<$'>>; Quote =:= <<$">> ->
     binary:part(S, {0, byte_size(S) - 1});
 %% integer | variable
 eval(V, Data) ->
