@@ -35,7 +35,9 @@ t_sqlparse(_Config) ->
     ?assertEqual([<<"topic/#">>], emqx_rule_sqlparser:select_from(Select)),
     ?assertEqual({'and', {'>', {var, [<<"x">>]}, {const, 10}},
                          {'<=',{var, [<<"y">>]}, {const, 20}}},
-                 emqx_rule_sqlparser:select_where(Select)).
+                 emqx_rule_sqlparser:select_where(Select)),
+    {ok, Select1} = emqx_rule_sqlparser:parse_select("select * from topic"),
+    ?assertEqual({}, emqx_rule_sqlparser:select_where(Select1)).
 
 all() ->
     IsTestCase = fun("t_" ++ _) -> true; (_) -> false end,

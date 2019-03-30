@@ -69,6 +69,8 @@ preprocess_condition({in, Field, {list, Vals}}) ->
     {in, transform_field(Field), {list, [transform_field(Val) || Val <- Vals]}};
 preprocess_condition({'not', X}) ->
     {'not', preprocess_condition(X)};
+preprocess_condition({}) ->
+    {};
 preprocess_condition(Field) ->
     transform_field(Field).
 
