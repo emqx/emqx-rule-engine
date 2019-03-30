@@ -79,7 +79,7 @@ transform_field({const, Val}) when is_number(Val); is_binary(Val) ->
 transform_field(<<"payload.", Attr/binary>>) ->
     {payload, parse_nested(Attr)};
 transform_field(Var) when is_binary(Var) ->
-    {var, parse_nested(Var)};
+    {var, parse_nested(unquote(Var))};
 transform_field({Op, Arg1, Arg2}) when ?is_arith(Op) ->
     {Op, transform_field(Arg1), transform_field(Arg2)};
 transform_field({'fun', Name, Args}) when is_binary(Name) ->
@@ -87,11 +87,11 @@ transform_field({'fun', Name, Args}) when is_binary(Name) ->
     {'fun', Fun, [transform_field(Arg) || Arg <- Args]}.
 
 transform_alias(Alias) ->
-    parse_nested(Alias).
+    parse_nested(unquote(Alias)).
 
 parse_nested(Attr) ->
     string:split(Attr, <<".">>, all).
 
 unquote(Topic) ->
-    string:trim(Topic, both, "\"'").
+    string:trim(Topic, both, "\"").
 

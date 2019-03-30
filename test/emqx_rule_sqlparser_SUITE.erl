@@ -36,8 +36,13 @@ t_sqlparse(_Config) ->
     ?assertEqual({'and', {'>', {var, [<<"x">>]}, {const, 10}},
                          {'<=',{var, [<<"y">>]}, {const, 20}}},
                  emqx_rule_sqlparser:select_where(Select)),
+    %% test null where
     {ok, Select1} = emqx_rule_sqlparser:parse_select("select * from topic"),
-    ?assertEqual({}, emqx_rule_sqlparser:select_where(Select1)).
+    ?assertEqual({}, emqx_rule_sqlparser:select_where(Select1)),
+    %% test trim alias
+    {ok, Select2} = emqx_rule_sqlparser:parse_select("select payload.x as \"payload.y\" from topic"),
+    ?assertEqual([{'as', {payload, [<<"x">>]}, [<<"payload">>, <<"y">>]}],
+                  emqx_rule_sqlparser:select_fields(Select2)).
 
 all() ->
     IsTestCase = fun("t_" ++ _) -> true; (_) -> false end,
