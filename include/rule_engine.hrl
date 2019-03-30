@@ -57,3 +57,21 @@
         , description :: binary()
         }).
 
+%% Arithmetic operators
+-define(is_arith(Op), (Op =:= '+' orelse
+                       Op =:= '-' orelse
+                       Op =:= '*' orelse
+                       Op =:= '/')).
+
+%% Compare operators
+-define(is_comp(Op), (Op =:= '=' orelse
+                      Op =:= '>' orelse
+                      Op =:= '<' orelse
+                      Op =:= '<=' orelse
+                      Op =:= '>=' orelse
+                      Op =:= '<>' orelse
+                      Op =:= '!=')).
+
+%% Logical operators
+-define(is_logical(Op), (Op =:= 'and' orelse Op =:= 'or')).
+

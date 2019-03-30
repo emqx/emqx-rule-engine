@@ -8,7 +8,7 @@ CUR_BRANCH := $(shell git branch | grep -e "^*" | cut -d' ' -f 2)
 BRANCH := $(if $(filter $(CUR_BRANCH), master develop), $(CUR_BRANCH), develop)
 
 DEPS = sqlparse
-dep_sqlparse = git-emqx https://github.com/emqx/sqlparse 4.6.1
+dep_sqlparse = git-emqx https://github.com/emqx/sqlparse master
 
 BUILD_DEPS = emqx cuttlefish
 dep_emqx = git-emqx https://github.com/emqx/emqx $(BRANCH)
@@ -22,7 +22,7 @@ ERLC_OPTS += +warnings_as_errors +warn_export_all +warn_unused_import
 
 EUNIT_OPTS = verbose
 
-CT_SUITES = emqx_rule_engine emqx_rule_funcs
+CT_SUITES = emqx_rule_engine emqx_rule_funcs emqx_rule_maps emqx_rule_sqlparser
 COVER = true
 
 $(shell [ -f erlang.mk ] || curl -s -o erlang.mk https://raw.githubusercontent.com/emqx/erlmk/master/erlang.mk)

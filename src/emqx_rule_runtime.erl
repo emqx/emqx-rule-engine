@@ -18,7 +18,7 @@
 -include_lib("emqx/include/emqx.hrl").
 -include_lib("emqx/include/logger.hrl").
 
--export([start/1, stop/1]).
+-export([ start/1, stop/1 ]).
 
 -export([ on_client_connected/4
         , on_client_disconnected/3
@@ -28,6 +28,13 @@
         , on_message_dropped/3
         , on_message_deliver/3
         , on_message_acked/3
+        ]).
+
+-import(emqx_rule_maps,
+        [ get_value/2
+        , get_value/3
+        , nested_get/2
+        , nested_put/3
         ]).
 
 %%------------------------------------------------------------------------------
@@ -87,12 +94,13 @@ on_message_dropped(_, Message = #message{topic = <<"$SYS/", _/binary>>},
     {ok, Message};
 
 on_message_dropped(#{node := Node}, Message, #{apply_fun := ApplyRules}) ->
-    ?LOG(debug, "[RuleEngine] Message ~s dropped for no subscription", [emqx_message:format(Message)]),
+    ?LOG(debug, "[RuleEngine] Message s dropped for no subscription:~s",
+         [emqx_message:format(Message)]),
     ApplyRules(maps:merge(emqx_message:to_map(Message), #{node => Node})),
     {ok, Message}.
 
 on_message_deliver(Credentials = #{client_id := ClientId}, Message, #{apply_fun := ApplyRules}) ->
-    ?LOG(debug, "[RuleEngine] Delivered message to client(~s): ~s",
+    ?LOG(debug, "[RuleEngine] Deliver message to client(~s): ~s",
          [ClientId, emqx_message:format(Message)]),
     ApplyRules(maps:merge(Credentials, emqx_message:to_map(Message))),
     {ok, Message}.
@@ -116,8 +124,10 @@ rules_for(Hook) ->
 -spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
 apply_rules([], _Input) ->
     ok;
-apply_rules([Rule = #rule{name = Name}|More], Input) ->
-    try apply_rule(Rule, Input)
+apply_rules([Rule = #rule{name = Name, topics = Filters}|More], Input) ->
+    Topic = get_value(<<"topic">>, Input),
+    try match_topic(Topic, Filters)
+        andalso apply_rule(Rule, Input)
     catch
         _:Error:StkTrace ->
             ?LOG(error, "Apply the rule ~s error: ~p. Statcktrace:~n~p",
@@ -125,95 +135,39 @@ apply_rules([Rule = #rule{name = Name}|More], Input) ->
     end,
     apply_rules(More, Input).
 
-apply_rule(#rule{topics = Filters,
-                 selects = Selects,
+apply_rule(#rule{selects = Selects,
                  conditions = Conditions,
                  actions = Actions}, Input) ->
-    Topic = get_value(<<"topic">>, Input),
-    case match_topic_filters(Topic, Filters) of
-        true ->
-            Data = select_data(Selects, Input),
-            case match_conditions(Conditions, Data) of
-                true ->
-                    take_actions(Actions, Data);
-                false -> ok
-            end;
-        false -> ok
-    end.
+    Output = select_and_transform(Selects, Input),
+    match_conditions(Conditions, Output)
+        andalso take_actions(Actions, Output).
 
-%% 0. Match topic filters
-match_topic_filters(_Topic, []) ->
+%% Step1 -> Match topic with filters
+match_topic(_Topic, []) ->
     true;
-match_topic_filters(Topic, [Filter]) ->
+match_topic(Topic, [Filter]) ->
     emqx_topic:match(Topic, Filter);
-match_topic_filters(Topic, [Filter|More]) ->
+match_topic(Topic, [Filter|More]) ->
     emqx_topic:match(Topic, Filter)
-        orelse match_topic_filters(Topic, More).
+        orelse match_topic(Topic, More).
 
-%% 1. Select data from input
-select_data(Fields, Input) ->
-    select_data(Fields, Input, #{}).
+%% Step2 -> Select and transform data
+select_and_transform(Fields, Input) ->
+    select_and_transform(Fields, Input, #{}).
 
-select_data([], _Input, Acc) ->
-    Acc;
-select_data([<<"*">>|More], Input, Acc) ->
-    select_data(More, Input, maps:merge(Acc, Input));
-select_data([<<"headers.", Name/binary>>|More], Input, Acc) ->
-    Headers = get_value(<<"headers">>, Input, #{}),
-    Val = get_value(Name, Headers, null),
-    select_data(More, Input, maps:put(Name, Val, Acc));
-select_data([<<"payload.", Attr/binary>>|More], Input, Acc) ->
-    {Json, Input1} = parse_payload(Input),
-    Val = get_value(Attr, Json, null),
-    select_data(More, Input1, maps:put(Attr, Val, Acc));
-select_data([Var|More], Input, Acc) when is_binary(Var) ->
-    Val = get_value(Var, Input, null),
-    select_data(More, Input, maps:put(Var, Val, Acc));
-select_data([{'fun', Name, Args}|More], Input, Acc) ->
-    Var = select_fun_var(Name, Args),
-    Val = erlang:apply(select_fun(Name, Args), Input),
-    select_data(More, Input, maps:put(Var, Val, Acc));
-select_data([{as, <<"headers.", Name/binary>>, Alias}|More], Input, Acc) ->
-    Headers = get_value(<<"headers">>, Input, #{}),
-    Val = get_value(Name, Headers, null),
-    select_data(More, Input, maps:put(Alias, Val, Acc));
-select_data([{as, <<"payload.", Attr/binary>>, Alias}|More], Input, Acc) ->
-    {Json, Input1} = parse_payload(Input),
-    Val = get_value(Attr, Json, null),
-    select_data(More, Input1, maps:put(Alias, Val, Acc));
-select_data([{as, Var, Alias}|More], Input, Acc) when is_binary(Var) ->
-    Val = get_value(Var, Input, null),
-    select_data(More, Input, maps:put(Alias, Val, Acc));
-select_data([{as, {'fun', Name, Args}, Alias}|More], Input, Acc) ->
-    Val = erlang:apply(select_fun(Name, Args), Input),
-    select_data(More, Input, maps:put(Alias, Val, Acc)).
+select_and_transform([], _Input, Output) ->
+    erase_payload(), Output;
+select_and_transform(['*'|More], Input, Output) ->
+    select_and_transform(More, Input, maps:merge(Output, Input));
+select_and_transform([{as, Field, Alias}|More], Input, Output) ->
+    Val = eval(Field, Input),
+    select_and_transform(More, Input, nested_put(Alias, Val, Output));
+select_and_transform([Field|More], Input, Output) ->
+    Val = eval(Field, Input),
+    Alias = alias(Field, Val),
+    select_and_transform(More, nested_put(Alias, Val, Output)).
 
-select_fun(Name, Args) ->
-    Fun = list_to_existing_atom(binary_to_list(Name)),
-    erlang:apply(emqx_rule_funcs, Fun, Args).
-
-select_fun_var(Name, Args) ->
-    iolist_to_binary([Name, "(", binary_join(Args, <<",">>), ")"]).
-
-parse_payload(Input) ->
-    case maps:find(payload_json, Input) of
-        {ok, Json} ->
-            {Json, Input};
-        error ->
-            %% TODO: remove the default payload later
-            Payload = get_value(<<"payload">>, Input, <<"{}">>),
-            Json = emqx_json:decode(Payload, [return_maps]),
-            {Json, maps:put(payload_json, Json, Input)}
-    end.
-
-binary_join([], _Sep) ->
-    <<>>;
-binary_join([Bin], _Sep) ->
-    Bin;
-binary_join([H|T], Sep) ->
-    lists:foldl(fun(Bin, Acc) -> <<Acc/binary, Sep/binary, Bin/binary>> end, H, T).
-
-%% 2. Match selected data with conditions
+%% Step3 -> Match selected data with conditions
 match_conditions({'and', L, R}, Data) ->
     match_conditions(L, Data) andalso match_conditions(R, Data);
 match_conditions({'or', L, R}, Data) ->
@@ -232,53 +186,69 @@ match_conditions({NotEq, L, R}, Data)
   when NotEq =:= '<>'; NotEq =:= '!=' ->
     eval(L, Data) =/= eval(R, Data);
 match_conditions({'not', Var}, Data) ->
-    not get_value(Var, Data, false);
+    case eval(Var, Data) of
+        Bool when is_boolean(Bool) ->
+            not Bool;
+        _other -> false
+    end;
+%%match_conditions({'like', Var, Pattern}, Data) ->
+%%    match_like(eval(Var, Data), Pattern);
 match_conditions({in, Var, {list, Vals}}, Data) ->
-    match_with_key(Var, fun(Val) ->
-                                lists:member(Val, [eval(V, Data) || V <- Vals])
-                        end, Data);
+    lists:member(eval(Var, Data), [eval(V, Data) || V <- Vals]);
 match_conditions({}, _Data) ->
     true.
 
-match_with_key(Key, Fun, Data) ->
-    maps:is_key(Key, Data) andalso Fun(get_value(Key, Data)).
-
-%% quote string
-eval(<<$', S/binary>>, _) ->
-    binary:part(S, {0, byte_size(S) - 1});
-%% integer | variable
-eval(V, Data) ->
-    try binary_to_integer(V)
-    catch
-        error:badarg ->
-            get_value(V, Data, V)
-    end.
-
-%% 3. Take actions
+%% Step4 -> Take actions
 take_actions(Actions, Data) ->
     lists:foreach(fun(Action) -> take_action(Action, Data) end, Actions).
 
 take_action(#{apply := Apply}, Data) ->
     Apply(Data).
 
-%% TODO: 4. is the resource available?
+eval({var, Var}, Input) ->
+    nested_get(Var, Input);
+eval({const, Val}, _Input) ->
+    Val;
+eval({payload, AttrPath}, Input) ->
+    nested_get(AttrPath, parse_payload(Input));
+eval({Op, L, R}, Input) when ?is_arith(Op) ->
+    erlang:apply(func(Op, [eval(L, Input), eval(R, Input)]), [Input]);
+eval({'fun', Name, Args}, Input) ->
+    erlang:apply(func(Name, [eval(Arg, Input) || Arg <- Args]), [Input]).
+
+alias(Field, Val) ->
+    case alias(Field) of
+        undefined -> Val;
+        Alias -> Alias
+    end.
+
+alias({var, Var}) ->
+    Var;
+alias({const, Val}) ->
+    Val;
+alias({payload, AttrPath}) ->
+    [<<"payload">>|AttrPath];
+alias(_) ->
+    undefined.
+
+func(Name, Args) when is_atom(Name) ->
+    erlang:apply(emqx_rule_funcs, Name, Args).
+
+%% TODO: move to schema registry later.
+erase_payload() ->
+    erase('$payload').
+
+parse_payload(Input) ->
+    case get('$payload') of
+        undefined ->
+            Payload = get_value(payload, Input, <<"{}">>),
+            emqx_json:decode(Payload, [return_maps]);
+        Json -> Json
+    end.
+
+%% TODO: is the resource available?
 %% call_resource(_ResId) ->
 %%    ok.
-
-get_value(Key, Data) ->
-    get_value(Key, Data, undefined).
-
-%% TODO: Workaround, maybe atom leaks...
-get_value(Key, Data, Default) when is_binary(Key) ->
-    case maps:is_key(Key, Data) of
-        true -> maps:get(Key, Data);
-        false ->
-            maps:get(list_to_atom(binary_to_list(Key)), Data, Default)
-    end;
-
-get_value(Key, Data, Default) when is_atom(Key) ->
-    maps:get(Key, Data, Default).
-
 
 %%------------------------------------------------------------------------------
 %% Stop

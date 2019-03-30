@@ -12,30 +12,30 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--module(emqx_rule_funcs_SUITE).
+-module(emqx_rule_sqlparser_SUITE).
 
-%% -include_lib("proper/include/proper.hrl").
+%%-include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
 
--export([ t_msgid/1
-        , t_qos/1
-        ]).
+%% test cases for emqx_rule_sqlparser
+-export([t_sqlparse/1]).
 
 -export([ all/0
         , suite/0
         ]).
 
-t_msgid(_) ->
-    ?assertEqual(undefined, apply(func(msgid), [#{}])),
-    ?assertEqual(<<"id">>, apply(func(msgid), [#{id => <<"id">>}])).
+%%------------------------------------------------------------------------------
+%% Test cases for sqlparser
+%%------------------------------------------------------------------------------
 
-t_qos(_) ->
-    ?assertEqual(1, apply(func(qos), [#{qos => 1}])),
-    ?assertEqual(undefined, apply(func(qos), [#{}])).
-
-func(Name) ->
-    erlang:apply(emqx_rule_funcs, Name, []).
+t_sqlparse(_Config) ->
+    {ok, Select} = emqx_rule_sqlparser:parse_select("select * from \"topic/#\" where x > 10 and y <= 20"),
+    ?assertEqual(['*'], emqx_rule_sqlparser:select_fields(Select)),
+    ?assertEqual([<<"topic/#">>], emqx_rule_sqlparser:select_from(Select)),
+    ?assertEqual({'and', {'>', {var, [<<"x">>]}, {const, 10}},
+                         {'<=',{var, [<<"y">>]}, {const, 20}}},
+                 emqx_rule_sqlparser:select_where(Select)).
 
 all() ->
     IsTestCase = fun("t_" ++ _) -> true; (_) -> false end,

@@ -14,7 +14,8 @@
 
 -module(emqx_rule_engine_SUITE).
 
--include_lib("proper/include/proper.hrl").
+-include_lib("eunit/include/eunit.hrl").
+%%-include_lib("proper/include/proper.hrl").
 -include_lib("common_test/include/ct.hrl").
 
 %% comman test API
@@ -102,10 +103,7 @@
         , t_on_message_acked/1
        ]).
 
-%% test cases for emqx_rule_sqlparser
--export([t_sqlparse/1]).
-
--define(PROPTEST(M,F), true = proper:quickcheck(M:F())).
+%%-define(PROPTEST(M,F), true = proper:quickcheck(M:F())).
 
 all() ->
     [ {group, engine}
@@ -115,7 +113,6 @@ all() ->
     , {group, funcs}
     , {group, registry}
     , {group, runtime}
-    , {group, sqlparse}
     ].
 
 suite() ->
@@ -186,9 +183,7 @@ groups() ->
        t_on_message_dropped,
        t_on_message_deliver,
        t_on_message_acked
-      ]},
-     {sqlparse, [],
-      [t_sqlparse]}
+      ]}
     ].
 
 %%------------------------------------------------------------------------------
@@ -463,14 +458,4 @@ t_on_message_acked(_Config) ->
     %%TODO:
     ok.
 
-%%------------------------------------------------------------------------------
-%% Test cases for sqlparser
-%%------------------------------------------------------------------------------
-
-t_sqlparse(_Config) ->
-    {ok, Select} = emqx_rule_sqlparser:parse_select("select * from topic where x > 10 and y <= 20"),
-    [<<"*">>] = emqx_rule_sqlparser:select_fields(Select),
-    [<<"topic">>], emqx_rule_sqlparser:select_from(Select),
-    {'and',{'>',<<"x">>,<<"10">>},{'<=',<<"y">>,<<"20">>}}
-        = emqx_rule_sqlparser:select_where(Select).
 
