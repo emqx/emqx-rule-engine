@@ -212,9 +212,9 @@ eval({const, Val}, _Input) ->
 eval({payload, AttrPath}, Input) ->
     nested_get(AttrPath, parse_payload(Input));
 eval({Op, L, R}, Input) when ?is_arith(Op) ->
-    erlang:apply(func(Op, [eval(L, Input), eval(R, Input)]), [Input]);
+    apply_func(Op, [eval(L, Input), eval(R, Input)], Input);
 eval({'fun', Name, Args}, Input) ->
-    erlang:apply(func(Name, [eval(Arg, Input) || Arg <- Args]), [Input]).
+    apply_func(Name, [eval(Arg, Input) || Arg <- Args], Input).
 
 alias(Field, Val) ->
     case alias(Field) of
@@ -231,8 +231,12 @@ alias({payload, AttrPath}) ->
 alias(_) ->
     undefined.
 
-func(Name, Args) when is_atom(Name) ->
-    erlang:apply(emqx_rule_funcs, Name, Args).
+apply_func(Name, Args, Input) when is_atom(Name) ->
+    case erlang:apply(emqx_rule_funcs, Name, Args) of
+        Func when is_function(Func) ->
+            erlang:apply(Func, [Input]);
+        Result -> Result
+    end.
 
 %% TODO: move to schema registry later.
 erase_payload() ->
@@ -242,7 +246,9 @@ parse_payload(Input) ->
     case get('$payload') of
         undefined ->
             Payload = get_value(payload, Input, <<"{}">>),
-            emqx_json:decode(Payload, [return_maps]);
+            Json = emqx_json:decode(Payload, [return_maps]),
+            put('$payload', Json),
+            Json;
         Json -> Json
     end.
 

@@ -61,7 +61,8 @@
 -define(is_arith(Op), (Op =:= '+' orelse
                        Op =:= '-' orelse
                        Op =:= '*' orelse
-                       Op =:= '/')).
+                       Op =:= '/' orelse
+                       Op =:= 'div')).
 
 %% Compare operators
 -define(is_comp(Op), (Op =:= '=' orelse
