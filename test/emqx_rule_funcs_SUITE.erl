@@ -34,16 +34,18 @@
         , t_timestamp/1
         ]).
 
-
-%% Arith op test cases
--export([ t_arith_op/1 ]).
+%% OP and math test cases
+-export([ t_arith_op/1
+        , t_math_fun/1
+        , t_bits_op/1
+        ]).
 
 -export([ all/0
         , suite/0
         ]).
 
 %%------------------------------------------------------------------------------
-%% Cases for IoT Funcs
+%% Test cases for IoT Funcs
 %%------------------------------------------------------------------------------
 
 t_msgid(_) ->
@@ -108,7 +110,7 @@ t_timestamp(_) ->
     ?assert(Now < apply_func(timestamp, [], message())).
 
 %%------------------------------------------------------------------------------
-%% Props
+%% Test cases for arith op
 %%------------------------------------------------------------------------------
 
 t_arith_op(_) ->
@@ -125,13 +127,69 @@ prop_arith_op() ->
                     true -> true
                  end) andalso
                 (case is_integer(X)
-                     andalso is_integer(Y)
-                        andalso Y > 0 of
+                     andalso is_pos_integer(Y) of
                      true ->
                          (X rem Y) == apply_func('mod', [X, Y]);
                      false -> true
                 end)
             end).
+
+is_pos_integer(X) ->
+    is_integer(X) andalso X > 0.
+
+%%------------------------------------------------------------------------------
+%% Test cases for math fun
+%%------------------------------------------------------------------------------
+
+t_math_fun(_) ->
+    ?assert(proper:quickcheck(prop_math_fun())).
+
+prop_math_fun() ->
+    Excluded = [module_info, atanh, asin, acos],
+    MathFuns = [{F, A} || {F, A} <- math:module_info(exports),
+                          not lists:member(F, Excluded),
+                          erlang:function_exported(emqx_rule_funcs, F, A)],
+    ?FORALL({X, Y}, {pos_integer(), pos_integer()},
+            begin
+                lists:foldl(fun({F, 1}, True) ->
+                                    True andalso comp_with_math(F, X);
+                               ({F = fmod, 2}, True) ->
+                                    True andalso (if Y =/= 0 ->
+                                                         comp_with_math(F, X, Y);
+                                                     true -> true
+                                                  end);
+                               ({F, 2}, True) ->
+                                    True andalso comp_with_math(F, X, Y)
+                            end, true, MathFuns)
+            end).
+
+comp_with_math(F, X) ->
+    math:F(X) == apply_func(F, [X]).
+
+comp_with_math(F, X, Y) ->
+    math:F(X, Y) == apply_func(F, [X, Y]).
+
+%%------------------------------------------------------------------------------
+%% Test cases for bits op
+%%------------------------------------------------------------------------------
+
+t_bits_op(_) ->
+    ?assert(proper:quickcheck(prop_bits_op())).
+
+prop_bits_op() ->
+    ?FORALL({X, Y}, {integer(), integer()},
+            begin
+                (bnot X) == apply_func(bitnot, [X]) andalso
+                (X band Y) == apply_func(bitand, [X, Y]) andalso
+                (X bor Y) == apply_func(bitor, [X, Y]) andalso
+                (X bxor Y) == apply_func(bitxor, [X, Y]) andalso
+                (X bsl Y) == apply_func(bitsl, [X, Y]) andalso
+                (X bsr Y) == apply_func(bitsr, [X, Y])
+            end).
+
+%%------------------------------------------------------------------------------
+%% Test cases for string
+%%------------------------------------------------------------------------------
 
 %%------------------------------------------------------------------------------
 %% Utility functions
