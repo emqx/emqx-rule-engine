@@ -25,6 +25,7 @@
         , topic/1
         , clientid/0
         , clientip/0
+        , peername/0
         , username/0
         , payload/0
         , payload/1
@@ -123,9 +124,9 @@ topic() ->
     fun(#{topic := Topic}) -> Topic; (_) -> undefined end.
 
 %% @doc "topic(N)" Func
-topic({const, I}) when is_integer(I) ->
+topic(I) when is_integer(I) ->
     fun(#{topic := Topic}) ->
-            lists:nth(I+1, emqx_topic:tokens(Topic));
+            lists:nth(I, emqx_topic:tokens(Topic));
        (_) -> undefined
     end.
 
@@ -139,11 +140,21 @@ flag(Name) ->
 
 %% @doc "clientid()" Func
 clientid() ->
-    fun(#{from := ClientId}) -> ClientId end.
+    fun(#{from := ClientId}) -> ClientId; (_) -> undefined end.
 
 %% @doc "clientip()" Func
 clientip() ->
-    header(clientip).
+    fun(#{headers := #{peername := {Addr, _Port}}}) ->
+        iolist_to_binary(inet_parse:ntoa(Addr));
+        (_) -> undefined
+    end.
+
+%% @doc "peername()" Func
+peername() ->
+    fun(#{headers := #{peername := {Addr, Port}}}) ->
+        iolist_to_binary(io_lib:format("~s:~w", [inet_parse:ntoa(Addr), Port]));
+        (_) -> undefined
+    end.
 
 %% @doc "username()" Func
 username() ->
@@ -155,7 +166,10 @@ headers() ->
 
 %% @doc "header(Name)" Func
 header(Name) ->
-    fun(#{headers := Headers}) -> get_value(Name, Headers); (_) -> undefined end.
+    fun(#{headers := Headers}) ->
+            get_value(Name, Headers);
+       (_) -> undefined
+    end.
 
 payload() ->
     fun(#{payload := Payload}) -> Payload; (_) -> undefined end.
