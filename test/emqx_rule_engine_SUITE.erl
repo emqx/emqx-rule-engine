@@ -288,19 +288,69 @@ t_show_resource_type_api(_Config) ->
 %%------------------------------------------------------------------------------
 
 t_rules_cli(_Config) ->
-    %%TODO:
+    RCreate = emqx_rule_engine_cli:rules(["create", "inspect", "message.publish",
+                                          "select * from t1", "default:debug_action",
+                                          "{\"arg1\": 1}", "Debug Rule"]),
+    ?assertMatch({match, _}, re:run(RCreate, "created")),
+    %ct:pal("Result : ~p", [RCreate]),
+
+    RuleId = re:replace(re:replace(RCreate, "Rule\s", "", [{return, list}]), "\screated\n", "", [{return, list}]),
+
+    RList = emqx_rule_engine_cli:rules(["list"]),
+    ?assertMatch({match, _}, re:run(RList, RuleId)),
+    %ct:pal("RList : ~p", [RList]),
+
+    RShow = emqx_rule_engine_cli:rules(["show", RuleId]),
+    ?assertMatch({match, _}, re:run(RShow, RuleId)),
+    %ct:pal("RShow : ~p", [RShow]),
+
+    RDelete = emqx_rule_engine_cli:rules(["delete", RuleId]),
+    ?assertEqual("\"ok~n\"", RDelete),
+    %ct:pal("RDelete : ~p", [RDelete]),
+
+    RShow2 = emqx_rule_engine_cli:rules(["show", RuleId]),
+    ?assertMatch({match, _}, re:run(RShow2, "Cannot found")),
+    %ct:pal("RShow2 : ~p", [RShow2]),
     ok.
 
 t_actions_cli(_Config) ->
-    %%TODO:
+    RList = emqx_rule_engine_cli:actions(["list"]),
+    ?assertMatch({match, _}, re:run(RList, "debug_action")),
+    %ct:pal("RList : ~p", [RList]),
+
+    RShow = emqx_rule_engine_cli:actions(["show", "default:debug_action"]),
+    ?assertMatch({match, _}, re:run(RShow, "debug_action")),
+    %ct:pal("RShow : ~p", [RShow]),
     ok.
 
 t_resources_cli(_Config) ->
-    %%TODO:
+    ResId = <<"resource-debug">>,
+    Res = make_simple_resource(ResId),
+    ok = emqx_rule_registry:add_resource(Res),
+
+    RList = emqx_rule_engine_cli:resources(["list"]),
+    ?assertMatch({match, _}, re:run(RList, "Simple Resource")),
+    %ct:pal("RList : ~p", [RList]),
+
+    RShow = emqx_rule_engine_cli:resources(["show", ResId]),
+    ?assertMatch({match, _}, re:run(RShow, "Simple Resource")),
+    %ct:pal("RShow : ~p", [RShow]),
+
+    ok = emqx_rule_registry:remove_resource(Res),
+
+    RShow2 = emqx_rule_engine_cli:resources(["show", ResId]),
+    ?assertMatch({match, _}, re:run(RShow2, "Cannot found")),
+    %ct:pal("RShow2 : ~p", [RShow2]),
     ok.
 
 t_resource_types_cli(_Config) ->
-    %%TODO:
+    RList = emqx_rule_engine_cli:resource_types(["list"]),
+    ?assertMatch({match, _}, re:run(RList, "default_resource")),
+    %ct:pal("RList : ~p", [RList]),
+
+    RShow = emqx_rule_engine_cli:resource_types(["show", "default:debug_action"]),
+    ?assertMatch({match, _}, re:run(RShow, "debug_action")),
+    %ct:pal("RShow : ~p", [RShow]),
     ok.
 
 %%------------------------------------------------------------------------------
@@ -489,13 +539,6 @@ t_sqlselect(_Config) ->
     {ok, _} = emqx_client:connect(Client),
     {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
     ct:sleep(100),
-    dbg:tracer(),
-dbg:p(all, c),
-dbg:tpl(emqx_rule_runtime, on_message_publish, '_', cx),
-dbg:tpl(emqx_rule_registry, get_rules_for, '_', cx),
-dbg:tpl(emqx_rule_runtime, simple_action_republish, '_', cx),
-dbg:tpl(emqx_rule_runtime, select_and_transform, '_', cx),
-dbg:tpl(emqx_rule_runtime, match_conditions, '_', cx),
     emqx_client:publish(Client, <<"t1">>, <<"{\"x\": 1}">>, 0),
     receive {publish, #{topic := T, payload := Payload}} ->
         ?assertEqual(<<"t2">>, T),
