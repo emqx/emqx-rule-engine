@@ -17,3 +17,4 @@ TODO
 ct.coverdata
 logs/
 test/ct.cover.spec
+rebar.lock

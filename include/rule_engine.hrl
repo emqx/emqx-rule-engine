@@ -12,14 +12,17 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
+-type(rule_id() :: binary()).
+-type(resource_id() :: binary()).
+
 -record(rule,
-        { id :: binary()
+        { id :: rule_id()
         , name :: binary()
         , for :: atom()
         , rawsql :: binary()
         , topics :: [binary()] | undefined
         , selects :: list()
-        , conditions :: list()
+        , conditions :: tuple()
         , actions :: list()
         , enabled :: boolean()
         , description :: binary()
@@ -36,7 +39,7 @@
         }).
 
 -record(resource,
-        { id :: binary()
+        { id :: resource_id()
         , type :: atom()
         , config :: #{}
         , attrs :: #{}
@@ -56,4 +59,23 @@
         , on_create :: fun((map()) -> map())
         , description :: binary()
         }).
+
+%% Arithmetic operators
+-define(is_arith(Op), (Op =:= '+' orelse
+                       Op =:= '-' orelse
+                       Op =:= '*' orelse
+                       Op =:= '/' orelse
+                       Op =:= 'div')).
+
+%% Compare operators
+-define(is_comp(Op), (Op =:= '=' orelse
+                      Op =:= '>' orelse
+                      Op =:= '<' orelse
+                      Op =:= '<=' orelse
+                      Op =:= '>=' orelse
+                      Op =:= '<>' orelse
+                      Op =:= '!=')).
+
+%% Logical operators
+-define(is_logical(Op), (Op =:= 'and' orelse Op =:= 'or')).
 

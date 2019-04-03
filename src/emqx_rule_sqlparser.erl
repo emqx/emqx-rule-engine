@@ -14,6 +14,8 @@
 
 -module(emqx_rule_sqlparser).
 
+-include("rule_engine.hrl").
+
 -export([parse_select/1]).
 
 -export([ select_fields/1
@@ -36,7 +38,7 @@
 parse_select(Sql) ->
     case sqlparse:parsetree(Sql) of
         {ok, [{?SELECT(Fields, From, Where), _Extra}]} ->
-            {ok, #select{fields = Fields, from = From, where = Where}};
+            {ok, preprocess(#select{fields = Fields, from = From, where = Where})};
         Error -> Error
     end.
 
@@ -48,4 +50,48 @@ select_from(#select{from = From}) ->
 
 select_where(#select{where = Where}) ->
     Where.
+
+preprocess(#select{fields = Fields, from = Topics, where = Conditions}) ->
+    #select{fields = [preprocess_field(Field) || Field <- Fields],
+            from   = [unquote(Topic) || Topic <- Topics],
+            where  = preprocess_condition(Conditions)}.
+
+preprocess_field(<<"*">>) ->
+    '*';
+preprocess_field({'as', Field, Alias}) when is_binary(Alias) ->
+    {'as', transform_field(Field), transform_alias(Alias)};
+preprocess_field(Field) ->
+    transform_field(Field).
+
+preprocess_condition({Op, L, R}) when ?is_logical(Op) orelse ?is_comp(Op) ->
+    {Op, preprocess_condition(L), preprocess_condition(R)};
+preprocess_condition({in, Field, {list, Vals}}) ->
+    {in, transform_field(Field), {list, [transform_field(Val) || Val <- Vals]}};
+preprocess_condition({'not', X}) ->
+    {'not', preprocess_condition(X)};
+preprocess_condition({}) ->
+    {};
+preprocess_condition(Field) ->
+    transform_field(Field).
+
+transform_field({const, Val}) when is_number(Val); is_binary(Val) ->
+    {const, Val};
+transform_field(<<"payload.", Attr/binary>>) ->
+    {payload, parse_nested(Attr)};
+transform_field(Var) when is_binary(Var) ->
+    {var, parse_nested(unquote(Var))};
+transform_field({Op, Arg1, Arg2}) when ?is_arith(Op) ->
+    {Op, transform_field(Arg1), transform_field(Arg2)};
+transform_field({'fun', Name, Args}) when is_binary(Name) ->
+    Fun = list_to_existing_atom(binary_to_list(Name)),
+    {'fun', Fun, [transform_field(Arg) || Arg <- Args]}.
+
+transform_alias(Alias) ->
+    parse_nested(unquote(Alias)).
+
+parse_nested(Attr) ->
+    string:split(Attr, <<".">>, all).
+
+unquote(Topic) ->
+    string:trim(Topic, both, "\"").
 
