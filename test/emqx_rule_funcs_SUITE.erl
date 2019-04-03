@@ -18,7 +18,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
 
-%% IoT funcs test cases
+%% Test IoT funcs
 -export([ t_msgid/1
         , t_qos/1
         , t_flags/1
@@ -34,15 +34,31 @@
         , t_timestamp/1
         ]).
 
-%% OP and math test cases
+%% Test OP and math
 -export([ t_arith_op/1
         , t_math_fun/1
         , t_bits_op/1
         ]).
 
+%% Test string op
+-export([ t_lower_upper/1
+        , t_reverse/1
+        , t_strlen/1
+        , t_substr/1
+        , t_trim/1
+        ]).
+
+%% Test list op
+-export([ t_nth/1 ]).
+
+%% Test hash fun
+-export([ t_hash_funcs/1 ]).
+
 -export([ all/0
         , suite/0
         ]).
+
+-define(PROPTEST(F), ?assert(proper:quickcheck(F()))).
 
 %%------------------------------------------------------------------------------
 %% Test cases for IoT Funcs
@@ -114,7 +130,7 @@ t_timestamp(_) ->
 %%------------------------------------------------------------------------------
 
 t_arith_op(_) ->
-    ?assert(proper:quickcheck(prop_arith_op())).
+    ?PROPTEST(prop_arith_op).
 
 prop_arith_op() ->
     ?FORALL({X, Y}, {number(), number()},
@@ -142,7 +158,7 @@ is_pos_integer(X) ->
 %%------------------------------------------------------------------------------
 
 t_math_fun(_) ->
-    ?assert(proper:quickcheck(prop_math_fun())).
+    ?PROPTEST(prop_math_fun).
 
 prop_math_fun() ->
     Excluded = [module_info, atanh, asin, acos],
@@ -174,7 +190,7 @@ comp_with_math(F, X, Y) ->
 %%------------------------------------------------------------------------------
 
 t_bits_op(_) ->
-    ?assert(proper:quickcheck(prop_bits_op())).
+    ?PROPTEST(prop_bits_op).
 
 prop_bits_op() ->
     ?FORALL({X, Y}, {integer(), integer()},
@@ -190,6 +206,57 @@ prop_bits_op() ->
 %%------------------------------------------------------------------------------
 %% Test cases for string
 %%------------------------------------------------------------------------------
+
+t_lower_upper(_) ->
+    ?assertEqual(<<"ABC4">>, apply_func(upper, [<<"abc4">>])),
+    ?assertEqual(<<"0abc">>, apply_func(lower, [<<"0ABC">>])).
+
+t_reverse(_) ->
+    ?assertEqual(<<"dcba">>, apply_func(reverse, [<<"abcd">>])),
+    ?assertEqual(<<"4321">>, apply_func(reverse, [<<"1234">>])).
+
+t_strlen(_) ->
+    ?assertEqual(4, apply_func(strlen, [<<"abcd">>])),
+    ?assertEqual(2, apply_func(strlen, [<<"你好">>])).
+
+t_substr(_) ->
+    ?assertEqual(<<"">>, apply_func(substr, [<<"">>, 1])),
+    ?assertEqual(<<"bc">>, apply_func(substr, [<<"abc">>, 1])),
+    ?assertEqual(<<"bc">>, apply_func(substr, [<<"abcd">>, 1, 2])).
+
+t_trim(_) ->
+    ?assertEqual(<<>>, apply_func(trim, [<<>>])),
+    ?assertEqual(<<>>, apply_func(ltrim, [<<>>])),
+    ?assertEqual(<<>>, apply_func(rtrim, [<<>>])),
+    ?assertEqual(<<"abc">>, apply_func(trim, [<<" abc ">>])),
+    ?assertEqual(<<"abc ">>, apply_func(ltrim, [<<" abc ">>])),
+    ?assertEqual(<<" abc">>, apply_func(rtrim, [<<" abc">>])).
+
+ascii_string() -> list(range(0,127)).
+
+bin(S) -> iolist_to_binary(S).
+
+%%------------------------------------------------------------------------------
+%% Test cases for array funcs
+%%------------------------------------------------------------------------------
+
+t_nth(_) ->
+    ?assertEqual(2, lists:nth(2, [1,2,3,4])).
+
+%%------------------------------------------------------------------------------
+%% Test cases for Hash funcs
+%%------------------------------------------------------------------------------
+
+t_hash_funcs(_) ->
+    ?PROPTEST(prop_hash_fun).
+
+prop_hash_fun() ->
+    ?FORALL(S, binary(),
+            begin
+                (32 == byte_size(apply_func(md5, [S]))) andalso
+                (40 == byte_size(apply_func(sha, [S]))) andalso
+                (64 == byte_size(apply_func(sha256, [S])))
+            end).
 
 %%------------------------------------------------------------------------------
 %% Utility functions
