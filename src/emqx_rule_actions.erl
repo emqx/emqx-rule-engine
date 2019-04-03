@@ -19,7 +19,7 @@
 
 -resource_type(#{name => default_resource,
                  schema => "emqx_rule_engine",
-                 create => on_default_resource_create,
+                 create => on_resource_create,
                  description => "Default resource"
                 }).
 
@@ -41,7 +41,7 @@
 
 -export_type([action_fun/0]).
 
--export([on_default_resource_create/2]).
+-export([on_resource_create/2]).
 
 -export([ debug_action/1
         , republish_action/1
@@ -51,14 +51,14 @@
 %% Default actions for the Rule Engine
 %%------------------------------------------------------------------------------
 
--spec(on_default_resource_create(binary(), map()) -> map()).
-on_default_resource_create(_ResourceName, Conf) ->
+-spec(on_resource_create(binary(), map()) -> map()).
+on_resource_create(_Name, Conf) ->
     Conf.
 
 -spec(debug_action(Params :: map()) -> action_fun()).
 debug_action(Params) ->
     fun(Data) ->
-        io:format("Action input data: ~p, init params: ~p~n", [Data, Params])
+        io:format("Action input data: ~p~nAction init params: ~p~n", [Data, Params])
     end.
 
 %% A Demo Action.

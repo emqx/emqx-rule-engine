@@ -12,8 +12,11 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
+-type(rule_id() :: binary()).
+-type(resource_id() :: binary()).
+
 -record(rule,
-        { id :: binary()
+        { id :: rule_id()
         , name :: binary()
         , for :: atom()
         , rawsql :: binary()
@@ -36,7 +39,7 @@
         }).
 
 -record(resource,
-        { id :: binary()
+        { id :: resource_id()
         , type :: atom()
         , config :: #{}
         , attrs :: #{}

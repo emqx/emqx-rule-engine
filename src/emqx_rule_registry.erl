@@ -177,11 +177,11 @@ add_rule(Rule) when is_record(Rule, rule) ->
 add_rules(Rules) ->
     trans(fun lists:foreach/2, [fun insert_rule/1, Rules]).
 
--spec(remove_rule(emqx_rule_engine:rule() | binary()) -> ok).
+-spec(remove_rule(emqx_rule_engine:rule() | rule_id()) -> ok).
 remove_rule(RuleOrId) ->
     trans(fun delete_rule/1, [RuleOrId]).
 
--spec(remove_rules(list(emqx_rule_engine:rule()) | list(binary())) -> ok).
+-spec(remove_rules(list(emqx_rule_engine:rule()) | list(rule_id())) -> ok).
 remove_rules(Rules) ->
     trans(fun lists:foreach/2, [fun delete_rule/1, Rules]).
 
@@ -243,9 +243,9 @@ remove_actions(Actions) ->
 %% @doc Remove actions of the App.
 -spec(remove_actions_of(App :: atom()) -> ok).
 remove_actions_of(App) ->
-    trans(fun lists:foreach/2,
-          [fun delete_action/1,
-           mnesia:dirty_index_read(?ACTION_TAB, App, #action.app)]).
+    trans(fun() ->
+            lists:foreach(fun delete_action/1, mnesia:dirty_index_read(?ACTION_TAB, App, #action.app))
+          end).
 
 %% @private
 insert_action(Action) ->
@@ -313,9 +313,9 @@ register_resource_types(Types) ->
 %% @doc Unregister resource types of the App.
 -spec(unregister_resource_types_of(App :: atom()) -> ok).
 unregister_resource_types_of(App) ->
-    trans(fun lists:foreach/2,
-          [fun delete_resource_type/1,
-           mnesia:dirty_index_read(?RES_TYPE_TAB, App, #resource_type.provider)]).
+    trans(fun() ->
+            lists:foreach(fun delete_resource_type/1, mnesia:dirty_index_read(?RES_TYPE_TAB, App, #resource_type.provider))
+          end).
 
 %% @private
 insert_resource_type(Type) ->
@@ -366,6 +366,7 @@ update_stats() ->
 get_all_records(Tab) ->
     mnesia:dirty_match_object(Tab, mnesia:table_info(Tab, wild_pattern)).
 
+trans(Fun) -> trans(Fun, []).
 trans(Fun, Args) ->
     case mnesia:transaction(Fun, Args) of
         {atomic, ok} -> ok;
