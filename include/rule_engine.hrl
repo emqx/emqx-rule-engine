@@ -19,7 +19,7 @@
         , rawsql :: binary()
         , topics :: [binary()] | undefined
         , selects :: list()
-        , conditions :: list()
+        , conditions :: tuple()
         , actions :: list()
         , enabled :: boolean()
         , description :: binary()

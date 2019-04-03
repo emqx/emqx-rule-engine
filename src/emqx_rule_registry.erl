@@ -178,12 +178,10 @@ add_rules(Rules) ->
     trans(fun lists:foreach/2, [fun insert_rule/1, Rules]).
 
 -spec(remove_rule(emqx_rule_engine:rule() | binary()) -> ok).
-remove_rule(Rule) when is_record(Rule, rule) ->
-    trans(fun delete_rule/1, [Rule]);
-remove_rule(RuleId) when is_binary(RuleId) ->
-    trans(fun mnesia:delete/1, [{?RULE_TAB, RuleId}]).
+remove_rule(RuleOrId) ->
+    trans(fun delete_rule/1, [RuleOrId]).
 
--spec(remove_rules(list(emqx_rule_engine:rule())) -> ok).
+-spec(remove_rules(list(emqx_rule_engine:rule()) | list(binary())) -> ok).
 remove_rules(Rules) ->
     trans(fun lists:foreach/2, [fun delete_rule/1, Rules]).
 
@@ -192,8 +190,10 @@ insert_rule(Rule) ->
     mnesia:write(?RULE_TAB, Rule, write).
 
 %% @private
-delete_rule(Rule) ->
-    mnesia:delete_object(?RULE_TAB, Rule, write).
+delete_rule(Rule) when is_record(Rule, rule) ->
+    mnesia:delete_object(?RULE_TAB, Rule, write);
+delete_rule(RuleId) when is_binary(RuleId) ->
+    mnesia:delete(?RULE_TAB, RuleId, write).
 
 %%------------------------------------------------------------------------------
 %% Action Management
@@ -243,17 +243,19 @@ remove_actions(Actions) ->
 %% @doc Remove actions of the App.
 -spec(remove_actions_of(App :: atom()) -> ok).
 remove_actions_of(App) ->
-    trans(fun lits:foreach/2,
+    trans(fun lists:foreach/2,
           [fun delete_action/1,
-           mnesia:index_read(?ACTION_TAB, App, #action.app)]).
+           mnesia:dirty_index_read(?ACTION_TAB, App, #action.app)]).
 
 %% @private
 insert_action(Action) ->
     mnesia:write(?ACTION_TAB, Action, write).
 
 %% @private
-delete_action(Action) ->
-    mnesia:delete_object(?ACTION_TAB, Action, write).
+delete_action(Action) when is_record(Action, action) ->
+    mnesia:delete_object(?ACTION_TAB, Action, write);
+delete_action(Name) when is_atom(Name) ->
+    mnesia:delete(?ACTION_TAB, Name, write).
 
 %%------------------------------------------------------------------------------
 %% Resource Management
@@ -313,7 +315,7 @@ register_resource_types(Types) ->
 unregister_resource_types_of(App) ->
     trans(fun lists:foreach/2,
           [fun delete_resource_type/1,
-           mnesia:index_read(?RES_TYPE_TAB, App, #resource_type.provider)]).
+           mnesia:dirty_index_read(?RES_TYPE_TAB, App, #resource_type.provider)]).
 
 %% @private
 insert_resource_type(Type) ->
