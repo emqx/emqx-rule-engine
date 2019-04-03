@@ -93,7 +93,7 @@
 
 %% Hash Funcs
 -export([ md5/1
-        , sha1/1
+        , sha/1
         , sha256/1
         ]).
 
@@ -351,8 +351,8 @@ nth(N, L) when is_integer(N), is_list(L) ->
 md5(S) when is_binary(S) ->
     hash(md5, S).
 
-sha1(S) when is_binary(S) ->
-    hash(sha1, S).
+sha(S) when is_binary(S) ->
+    hash(sha, S).
 
 sha256(S) when is_binary(S) ->
     hash(sha256, S).
