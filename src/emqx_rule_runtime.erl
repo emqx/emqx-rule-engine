@@ -124,8 +124,10 @@ rules_for(Hook) ->
 -spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
 apply_rules([], _Input) ->
     ok;
+apply_rules([#rule{enabled = false}|More], Input) ->
+    apply_rules(More, Input);
 apply_rules([Rule = #rule{name = Name, topics = Filters}|More], Input) ->
-    Topic = get_value(<<"topic">>, Input),
+    Topic = get_value(topic, Input),
     try match_topic(Topic, Filters)
         andalso apply_rule(Rule, Input)
     catch
