@@ -58,7 +58,8 @@
         , suite/0
         ]).
 
--define(PROPTEST(F), ?assert(proper:quickcheck(F(), [{on_output, fun ct:print/2}]))).
+-define(PROPTEST(F), ?assert(proper:quickcheck(F()))).
+%%-define(PROPTEST(F), ?assert(proper:quickcheck(F(), [{on_output, fun ct:print/2}]))).
 
 %%------------------------------------------------------------------------------
 %% Test cases for IoT Funcs
