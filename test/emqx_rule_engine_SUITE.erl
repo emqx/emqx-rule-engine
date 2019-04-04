@@ -212,6 +212,7 @@ t_inspect_action(_Config) ->
     emqx_client:publish(Client, <<"t1">>, <<"{\"id\": 1, \"name\": \"ha\"}">>, 0),
     emqx_client:stop(Client),
     emqx_rule_registry:remove_rule(Id),
+    emqx_rule_registry:remove_resource(ResId),
     ok.
 
 t_republish_action(_Config) ->
