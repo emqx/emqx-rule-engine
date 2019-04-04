@@ -167,7 +167,7 @@ select_and_transform([{as, Field, Alias}|More], Input, Output) ->
 select_and_transform([Field|More], Input, Output) ->
     Val = eval(Field, Input),
     Alias = alias(Field, Val),
-    select_and_transform(More, nested_put(Alias, Val, Output)).
+    select_and_transform(More, Input, nested_put(Alias, Val, Output)).
 
 %% Step3 -> Match selected data with conditions
 match_conditions({'and', L, R}, Data) ->
