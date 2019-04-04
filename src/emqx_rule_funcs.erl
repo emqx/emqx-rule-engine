@@ -97,6 +97,9 @@
         , sha256/1
         ]).
 
+%% Base64 encode
+-export([ base64_encode/1 ]).
+
 -import(emqx_rule_maps,
         [ get_value/2
         , nested_get/2
@@ -366,4 +369,11 @@ hexstring(<<X:160/big-unsigned-integer>>) ->
     iolist_to_binary(io_lib:format("~40.16.0b", [X]));
 hexstring(<<X:256/big-unsigned-integer>>) ->
     iolist_to_binary(io_lib:format("~64.16.0b", [X])).
+
+%%------------------------------------------------------------------------------
+%% Base64 Funcs
+%%------------------------------------------------------------------------------
+
+base64_encode(Data) when is_binary(Data) ->
+    base64:encode(Data).
 

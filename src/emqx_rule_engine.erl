@@ -169,7 +169,7 @@ prepare_action({Name, Args}) ->
 
 with_resource_config(Args = #{'$resource' := ResId}) ->
     case emqx_rule_registry:find_resource(ResId) of
-        {ok, #{config := Config}} ->
+        {ok, #resource{config = Config}} ->
             maps:merge(Args, Config);
         not_found ->
             throw(resource_not_found)

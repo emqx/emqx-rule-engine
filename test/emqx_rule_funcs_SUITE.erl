@@ -54,6 +54,9 @@
 %% Test hash fun
 -export([ t_hash_funcs/1 ]).
 
+%% Test base64
+-export([ t_base64_encode/1 ]).
+
 -export([ all/0
         , suite/0
         ]).
@@ -257,6 +260,20 @@ prop_hash_fun() ->
                 (32 == byte_size(apply_func(md5, [S]))) andalso
                 (40 == byte_size(apply_func(sha, [S]))) andalso
                 (64 == byte_size(apply_func(sha256, [S])))
+            end).
+
+%%------------------------------------------------------------------------------
+%% Test cases for base64
+%%------------------------------------------------------------------------------
+
+t_base64_encode(_) ->
+    ?PROPTEST(prop_base64_encode).
+
+prop_base64_encode() ->
+    ?FORALL(S, list(range(0, 255)),
+            begin
+                Bin = iolist_to_binary(S),
+                Bin == base64:decode(apply_func(base64_encode, [Bin]))
             end).
 
 %%------------------------------------------------------------------------------

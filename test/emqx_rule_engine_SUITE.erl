@@ -194,11 +194,17 @@ t_create_resource(_Config) ->
 
 t_inspect_action(_Config) ->
     ok = emqx_rule_engine:register_provider(?APP),
+    {ok, #resource{id = ResId}} = emqx_rule_engine:create_resource(
+            #{name => <<"debug-resource">>,
+              type => default_resource,
+              config => #{},
+              description => <<"debug resource">>}),
     {ok, #rule{id = Id, topics = [<<"t1">>]}} = emqx_rule_engine:create_rule(
                 #{name => <<"inspect_rule">>,
                   for => 'message.publish',
                   rawsql => "select * from \"t1\"",
-                  actions => [{'default:debug_action', #{a=>1, b=>2}}],
+                  actions => [{'default:debug_action',
+                              #{'$resource' => ResId, a=>1, b=>2}}],
                   description => <<"Inspect rule">>
                   }),
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
@@ -206,6 +212,7 @@ t_inspect_action(_Config) ->
     emqx_client:publish(Client, <<"t1">>, <<"{\"id\": 1, \"name\": \"ha\"}">>, 0),
     emqx_client:stop(Client),
     emqx_rule_registry:remove_rule(Id),
+    emqx_rule_registry:remove_resource(ResId),
     ok.
 
 t_republish_action(_Config) ->
