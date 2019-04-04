@@ -21,8 +21,10 @@
         , put_value/3
         ]).
 
+nested_get(Key, Map) when not is_list(Key) ->
+    get_value(Key, Map);
 nested_get([Key], Map) ->
-    get_value(Key, Map, undefined);
+    get_value(Key, Map);
 nested_get([Key|More], Map) ->
     case maps:find(Key, Map) of
         {ok, Val} ->
@@ -34,6 +36,8 @@ nested_get([], Val) ->
 
 nested_put(_, undefined, Map) ->
     Map;
+nested_put(Key, Val, Map) when not is_list(Key) ->
+    put_value(Key, Val, Map);
 nested_put([Key], Val, Map) ->
     put_value(Key, Val, Map);
 nested_put([Key|More], Val, Map) ->
@@ -62,9 +66,6 @@ get_value(Key, Map, Default) ->
 
 put_value(_Key, undefined, Map) ->
     Map;
-put_value(Key, Val, Map) when is_atom(Key) ->
-    put_value(list_to_binary(
-                atom_to_list(Key)), Val, Map);
 put_value(Key, Val, Map) ->
     maps:put(Key, Val, Map).
 

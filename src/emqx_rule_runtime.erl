@@ -124,8 +124,10 @@ rules_for(Hook) ->
 -spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
 apply_rules([], _Input) ->
     ok;
+apply_rules([#rule{enabled = false}|More], Input) ->
+    apply_rules(More, Input);
 apply_rules([Rule = #rule{name = Name, topics = Filters}|More], Input) ->
-    Topic = get_value(<<"topic">>, Input),
+    Topic = get_value(topic, Input),
     try match_topic(Topic, Filters)
         andalso apply_rule(Rule, Input)
     catch
@@ -205,16 +207,18 @@ take_actions(Actions, Data) ->
 take_action(#{apply := Apply}, Data) ->
     Apply(Data).
 
-eval({var, Var}, Input) ->
+eval({var, Var}, Input) -> %% nested
     nested_get(Var, Input);
 eval({const, Val}, _Input) ->
     Val;
-eval({payload, AttrPath}, Input) ->
+eval({payload, Attr}, Input) when is_binary(Attr) ->
+    get_value(Attr, parse_payload(Input));
+eval({payload, AttrPath}, Input) -> %% nested
     nested_get(AttrPath, parse_payload(Input));
 eval({Op, L, R}, Input) when ?is_arith(Op) ->
-    erlang:apply(func(Op, [eval(L, Input), eval(R, Input)]), [Input]);
+    apply_func(Op, [eval(L, Input), eval(R, Input)], Input);
 eval({'fun', Name, Args}, Input) ->
-    erlang:apply(func(Name, [eval(Arg, Input) || Arg <- Args]), [Input]).
+    apply_func(Name, [eval(Arg, Input) || Arg <- Args], Input).
 
 alias(Field, Val) ->
     case alias(Field) of
@@ -226,13 +230,18 @@ alias({var, Var}) ->
     Var;
 alias({const, Val}) ->
     Val;
-alias({payload, AttrPath}) ->
+alias({payload, Attr}) when is_binary(Attr) ->
+    [<<"payload">>, Attr];
+alias({payload, AttrPath}) when is_list(AttrPath) ->
     [<<"payload">>|AttrPath];
-alias(_) ->
-    undefined.
+alias(_) -> undefined.
 
-func(Name, Args) when is_atom(Name) ->
-    erlang:apply(emqx_rule_funcs, Name, Args).
+apply_func(Name, Args, Input) when is_atom(Name) ->
+    case erlang:apply(emqx_rule_funcs, Name, Args) of
+        Func when is_function(Func) ->
+            erlang:apply(Func, [Input]);
+        Result -> Result
+    end.
 
 %% TODO: move to schema registry later.
 erase_payload() ->
@@ -242,7 +251,9 @@ parse_payload(Input) ->
     case get('$payload') of
         undefined ->
             Payload = get_value(payload, Input, <<"{}">>),
-            emqx_json:decode(Payload, [return_maps]);
+            Json = emqx_json:decode(Payload, [return_maps]),
+            put('$payload', Json),
+            Json;
         Json -> Json
     end.
 

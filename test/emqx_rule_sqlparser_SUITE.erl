@@ -19,7 +19,12 @@
 -include_lib("common_test/include/ct.hrl").
 
 %% test cases for emqx_rule_sqlparser
--export([t_sqlparse/1]).
+-export([ t_sqlparse/1
+        , t_sqlparse_error/1
+        , t_sqlparse_op/1
+        , t_sqlparse_where_in/1
+        , t_sqlparse_where_not/1
+        ]).
 
 -export([ all/0
         , suite/0
@@ -33,16 +38,37 @@ t_sqlparse(_Config) ->
     {ok, Select} = emqx_rule_sqlparser:parse_select("select * from \"topic/#\" where x > 10 and y <= 20"),
     ?assertEqual(['*'], emqx_rule_sqlparser:select_fields(Select)),
     ?assertEqual([<<"topic/#">>], emqx_rule_sqlparser:select_from(Select)),
-    ?assertEqual({'and', {'>', {var, [<<"x">>]}, {const, 10}},
-                         {'<=',{var, [<<"y">>]}, {const, 20}}},
+    ?assertEqual({'and', {'>', {var, <<"x">>}, {const, 10}},
+                         {'<=',{var, <<"y">>}, {const, 20}}},
                  emqx_rule_sqlparser:select_where(Select)),
     %% test null where
     {ok, Select1} = emqx_rule_sqlparser:parse_select("select * from topic"),
     ?assertEqual({}, emqx_rule_sqlparser:select_where(Select1)),
     %% test trim alias
-    {ok, Select2} = emqx_rule_sqlparser:parse_select("select payload.x as \"payload.y\" from topic"),
-    ?assertEqual([{'as', {payload, [<<"x">>]}, [<<"payload">>, <<"y">>]}],
+    {ok, Select2} = emqx_rule_sqlparser:parse_select("select payload.x as payload.y from topic"),
+    ?assertEqual([{'as', {payload, <<"x">>}, [<<"payload">>, <<"y">>]}],
                   emqx_rule_sqlparser:select_fields(Select2)).
+
+t_sqlparse_error(_) ->
+    ?assertMatch({parse_error, _}, emqx_rule_sqlparser:parse_select("select *")).
+
+t_sqlparse_where_in(_) ->
+    {ok, Select} = emqx_rule_sqlparser:parse_select("select a, b,c from topic where c in (1, 2, 3)"),
+    ?assertEqual([{var, <<"a">>},{var, <<"b">>},{var, <<"c">>}],
+                 emqx_rule_sqlparser:select_fields(Select)),
+    ?assertEqual({'in', {var, <<"c">>}, {list, [{const, 1}, {const, 2}, {const, 3}]}},
+                 emqx_rule_sqlparser:select_where(Select)).
+
+t_sqlparse_where_not(_) ->
+    Sql = "select sqrt(payload.x) as a, payload.y as b from topic where (not b) and a > 0",
+    {ok, Select} = emqx_rule_sqlparser:parse_select(Sql),
+    ?assertMatch({'and', {'not',{var,<<"b">>}}, _}, emqx_rule_sqlparser:select_where(Select)).
+
+t_sqlparse_op(_) ->
+    Sql = "select payload.x + payload.y as c, payload.x div payload.y as a from topic",
+    {ok, Select} = emqx_rule_sqlparser:parse_select(Sql),
+    Ops = [Op || {as, Op, _} <- emqx_rule_sqlparser:select_fields(Select)],
+    ?assertMatch([{'+', _, _}, {'div', _, _}], Ops).
 
 all() ->
     IsTestCase = fun("t_" ++ _) -> true; (_) -> false end,

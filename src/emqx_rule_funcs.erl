@@ -25,6 +25,7 @@
         , topic/1
         , clientid/0
         , clientip/0
+        , peername/0
         , username/0
         , payload/0
         , payload/1
@@ -92,7 +93,7 @@
 
 %% Hash Funcs
 -export([ md5/1
-        , sha1/1
+        , sha/1
         , sha256/1
         ]).
 
@@ -123,9 +124,9 @@ topic() ->
     fun(#{topic := Topic}) -> Topic; (_) -> undefined end.
 
 %% @doc "topic(N)" Func
-topic({const, I}) when is_integer(I) ->
+topic(I) when is_integer(I) ->
     fun(#{topic := Topic}) ->
-            lists:nth(I+1, emqx_topic:tokens(Topic));
+            lists:nth(I, emqx_topic:tokens(Topic));
        (_) -> undefined
     end.
 
@@ -139,11 +140,21 @@ flag(Name) ->
 
 %% @doc "clientid()" Func
 clientid() ->
-    fun(#{from := ClientId}) -> ClientId end.
+    fun(#{from := ClientId}) -> ClientId; (_) -> undefined end.
 
 %% @doc "clientip()" Func
 clientip() ->
-    header(clientip).
+    fun(#{headers := #{peername := {Addr, _Port}}}) ->
+        iolist_to_binary(inet_parse:ntoa(Addr));
+        (_) -> undefined
+    end.
+
+%% @doc "peername()" Func
+peername() ->
+    fun(#{headers := #{peername := {Addr, Port}}}) ->
+        iolist_to_binary(io_lib:format("~s:~w", [inet_parse:ntoa(Addr), Port]));
+        (_) -> undefined
+    end.
 
 %% @doc "username()" Func
 username() ->
@@ -155,7 +166,10 @@ headers() ->
 
 %% @doc "header(Name)" Func
 header(Name) ->
-    fun(#{headers := Headers}) -> get_value(Name, Headers); (_) -> undefined end.
+    fun(#{headers := Headers}) ->
+            get_value(Name, Headers);
+       (_) -> undefined
+    end.
 
 payload() ->
     fun(#{payload := Payload}) -> Payload; (_) -> undefined end.
@@ -177,247 +191,171 @@ timestamp() ->
 %% Arithmetic Funcs
 %%------------------------------------------------------------------------------
 
-'+'(X, Y) ->
-    fun(M) -> num(X, M) + num(Y, M) end.
+'+'(X, Y) when is_number(X), is_number(Y) ->
+    X + Y.
 
-'-'(X, Y) ->
-    fun(M) -> num(X, M) - num(Y, M) end.
+'-'(X, Y) when is_number(X), is_number(Y) ->
+    X - Y.
 
-'*'(X, Y) ->
-    fun(M) -> num(X, M) * num(Y, M) end.
+'*'(X, Y) when is_number(X), is_number(Y) ->
+    X * Y.
 
-'/'(X, Y) ->
-    fun(M) -> num(X, M) / num(Y, M) end.
+'/'(X, Y) when is_number(X), is_number(Y) ->
+    X / Y.
 
-'div'(X, Y) ->
-    fun(M) -> int(X, M) div int(Y, M) end.
+'div'(X, Y) when is_integer(X), is_integer(Y) ->
+    X div Y.
 
-mod(X, Y) ->
-    fun(M) -> int(X, M) rem int(Y, M) end.
+mod(X, Y) when is_integer(X), is_integer(Y) ->
+    X rem Y.
 
 %%------------------------------------------------------------------------------
 %% Math Funcs
 %%------------------------------------------------------------------------------
 
-abs({const, N}) when is_integer(N) ->
-    fun(_) -> erlang:abs(N) end;
-abs(X) when ?is_var(X) ->
-    fun(#{X := V}) -> erlang:abs(V) end.
+abs(N) when is_integer(N) ->
+    erlang:abs(N).
 
-acos({const, N}) when is_number(N) ->
-    fun(_) -> math:acos(N) end;
-acos(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:acos(V) end.
+acos(N) when is_number(N) ->
+    math:acos(N).
 
-acosh({const, N}) when is_number(N) ->
-    fun(_) -> math:acosh(N) end;
-acosh(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:acosh(V) end.
+acosh(N) when is_number(N) ->
+    math:acosh(N).
 
-asin({const, N}) when is_number(N)->
-    fun(_) -> math:asin(N) end;
-asin(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:asin(V) end.
+asin(N) when is_number(N)->
+    math:asin(N).
 
-asinh({const, N}) when is_number(N) ->
-    fun(_) -> math:asinh(N) end;
-asinh(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:asinh(V) end.
+asinh(N) when is_number(N) ->
+    math:asinh(N).
 
-atan({const, N}) when is_number(N) ->
-    fun(_) -> math:atan(N) end;
-atan(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:atan(V) end.
+atan(N) when is_number(N) ->
+    math:atan(N).
 
-atanh({const, N}) when is_number(N)->
-    fun(_) -> math:atanh(N) end;
-atanh(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:atanh(V) end.
+atanh(N) when is_number(N)->
+    math:atanh(N).
 
-ceil({const, N}) when is_number(N) ->
-    fun(_) -> erlang:ceil(N) end;
-ceil(X) when ?is_var(X) ->
-    fun(#{X := V}) -> erlang:ceil(V) end.
+ceil(N) when is_number(N) ->
+    erlang:ceil(N).
 
-cos({const, N}) when is_number(N)->
-    fun(_) -> math:cos(N) end;
-cos(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:cos(V) end.
+cos(N) when is_number(N)->
+    math:cos(N).
 
-cosh({const, N}) when is_number(N) ->
-    fun(_) -> math:cosh(N) end;
-cosh(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:cosh(V) end.
+cosh(N) when is_number(N) ->
+    math:cosh(N).
 
-exp({const, N}) when is_number(N)->
-    fun(_) -> math:exp(N) end;
-exp(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:exp(V) end.
+exp(N) when is_number(N)->
+    math:exp(N).
 
-floor({const, N}) when is_number(N) ->
-    fun(_) -> erlang:floor(N) end;
-floor(X) when ?is_var(X) ->
-    fun(#{X := V}) -> erlang:floor(V) end.
+floor(N) when is_number(N) ->
+    erlang:floor(N).
 
-fmod(X, {const, N}) when is_number(N) ->
-    fun(M) -> math:fmod(num(X, M), N) end.
+fmod(X, Y) when is_number(X), is_number(Y) ->
+    math:fmod(X, Y).
 
-log({const, N}) when is_number(N) ->
-    fun(_) -> math:log(N) end;
-log(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:log(V) end.
+log(N) when is_number(N) ->
+    math:log(N).
 
-log10({const, N}) when is_number(N) ->
-    fun(_) -> math:log10(N) end;
-log10(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:log10(V) end.
+log10(N) when is_number(N) ->
+    math:log10(N).
 
-log2({const, N}) when is_number(N)->
-    fun(_) -> math:log2(N) end;
-log2(X) when ?is_var(X)->
-    fun(#{X := V}) -> math:log2(V) end.
+log2(N) when is_number(N)->
+    math:log2(N).
 
-power(X, {const, N}) when is_number(N) ->
-    fun(M) -> math:pow(num(X, M), N) end.
+power(X, Y) when is_number(X), is_number(Y) ->
+    math:pow(X, Y).
 
-round({const, N}) when is_number(N) ->
-    fun(_) -> erlang:round(N) end;
-round(X) when ?is_var(X) ->
-    fun(#{X := V}) -> erlang:round(V) end.
+round(N) when is_number(N) ->
+    erlang:round(N).
 
-sin({const, N}) when is_number(N) ->
-    fun(_) -> math:sin(N) end;
-sin(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:sin(V) end.
+sin(N) when is_number(N) ->
+    math:sin(N).
 
-sinh({const, N}) when is_number(N) ->
-    fun(_) -> math:sinh(N) end;
-sinh(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:sinh(V) end.
+sinh(N) when is_number(N) ->
+    math:sinh(N).
 
-sqrt({const, N}) when is_number(N) ->
-    fun(_) -> math:sqrt(N) end;
-sqrt(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:sqrt(V) end.
+sqrt(N) when is_number(N) ->
+    math:sqrt(N).
 
-tan({const, N}) when is_number(N) ->
-    fun(_) -> math:tan(N) end;
-tan(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:tan(V) end.
+tan(N) when is_number(N) ->
+    math:tan(N).
 
-tanh({const, N}) when is_number(N) ->
-    fun(_) -> math:tanh(N) end;
-tanh(X) when ?is_var(X) ->
-    fun(#{X := V}) -> math:tanh(V) end.
+tanh(N) when is_number(N) ->
+    math:tanh(N).
 
 %%------------------------------------------------------------------------------
 %% Bits Funcs
 %%------------------------------------------------------------------------------
 
-bitnot({const, I}) when is_integer(I) ->
-    fun(_) -> bnot I end;
-bitnot(X) when ?is_var(X) ->
-    fun(#{X := I}) -> bnot I end.
+bitnot(I) when is_integer(I) ->
+    bnot I.
 
-bitand(X, Y) ->
-    fun(M) -> int(X, M) band int(Y, M) end.
+bitand(X, Y) when is_integer(X), is_integer(Y) ->
+    X band Y.
 
-bitor(X, Y) ->
-    fun(M) -> int(X, M) bor int(Y, M) end.
+bitor(X, Y) when is_integer(X), is_integer(Y) ->
+    X bor Y.
 
-bitxor(X, Y) ->
-    fun(M) -> int(X, M) bxor int(Y, M) end.
+bitxor(X, Y) when is_integer(X), is_integer(Y) ->
+    X bxor Y.
 
-bitsl(X, {const, I}) when is_integer(I) ->
-    fun(M) -> int(X, M) bsl I end.
+bitsl(X, I) when is_integer(X), is_integer(I) ->
+    X bsl I.
 
-bitsr(X, {const, I}) when is_integer(I) ->
-    fun(M) -> int(X, M) bsr I end.
-
-int({const, I}, _M) when is_integer(I) ->
-    I;
-int(X, M) when ?is_var(X) ->
-    maps:get(X, M).
-
-num({const, N}, _M) when is_number(N) ->
-    N;
-num(X, M) when ?is_var(X) ->
-    maps:get(X, M).
+bitsr(X, I) when is_integer(X), is_integer(I) ->
+    X bsr I.
 
 %%------------------------------------------------------------------------------
 %% String Funcs
 %%------------------------------------------------------------------------------
 
-lower({const, S}) ->
-    fun(_) -> string:lowercase(S) end;
-lower(X) when ?is_var(X) ->
-    fun(#{X := S}) -> string:lowercase(S) end.
+lower(S) when is_binary(S) ->
+    string:lowercase(S).
 
-ltrim({const, S}) ->
-    fun(_) -> string:trim(S, leading) end;
-ltrim(X) when ?is_var(X) ->
-    fun(#{X := S}) -> string:trim(S, leading) end.
+ltrim(S) when is_binary(S) ->
+    string:trim(S, leading).
 
-reverse({const, S}) ->
-    fun(_) -> iolist_to_binary(string:reverse(S)) end;
-reverse(X) when ?is_var(X) ->
-    fun(#{X := S}) -> iolist_to_binary(string:reverse(S)) end.
+reverse(S) when is_binary(S) ->
+    iolist_to_binary(string:reverse(S)).
 
-rtrim({const, S}) ->
-    fun(_) -> string:trim(S, trailing) end;
-rtrim(X) when ?is_var(X) ->
-    fun(#{X := S}) -> string:trim(S, trailing) end.
+rtrim(S) when is_binary(S) ->
+    string:trim(S, trailing).
 
-strlen({const, S}) ->
-    fun(_) -> string:length(S) end;
-strlen(X) when ?is_var(X) ->
-    fun(#{X := S}) -> string:length(S) end.
+strlen(S) when is_binary(S) ->
+    string:length(S).
 
-substr({const, S}, {const, Start}) when is_integer(Start) ->
-    fun(_) -> string:slice(S, Start) end;
-substr(X, {const, Start}) when ?is_var(X) ->
-    fun(#{X := S}) -> string:slice(S, Start) end.
+substr(S, Start) when is_binary(S), is_integer(Start) ->
+    string:slice(S, Start).
 
-substr({const, S}, {const, Start}, {const, Length}) ->
-    fun(_) -> string:slice(S, Start, Length) end;
-substr(X, {const, Start}, {const, Length}) when ?is_var(X) ->
-    fun(#{X := S}) -> string:slice(S, Start, Length) end.
+substr(S, Start, Length) when is_binary(S),
+                              is_integer(Start),
+                              is_integer(Length) ->
+    string:slice(S, Start, Length).
 
-trim({const, S}) ->
-    fun(_) -> string:trim(S) end;
-trim(X) when ?is_var(X) ->
-    fun(#{X := S}) -> string:trim(S) end.
+trim(S) when is_binary(S) ->
+    string:trim(S).
 
-upper({const, S}) ->
-    fun(_) -> string:uppercase(S) end;
-upper(X) when ?is_var(X) ->
-    fun(#{X := S}) -> string:uppercase(S) end.
+upper(S) when is_binary(S) ->
+    string:uppercase(S).
 
 %%------------------------------------------------------------------------------
 %% Array Funcs
 %%------------------------------------------------------------------------------
 
-nth(X, {const, N}) when ?is_var(X) ->
-    fun(#{X := L}) -> lists:nth(N+1, L); (_) -> undefined end.
+nth(N, L) when is_integer(N), is_list(L) ->
+    lists:nth(N, L).
 
 %%------------------------------------------------------------------------------
 %% Hash Funcs
 %%------------------------------------------------------------------------------
 
-md5({const, S}) ->
-    fun(_) -> hash(md5, S) end;
-md5(X) when ?is_var(X) ->
-    fun(#{X := S}) -> hash(md5, S) end.
+md5(S) when is_binary(S) ->
+    hash(md5, S).
 
-sha1({const, S}) ->
-    fun(_) -> hash(sha1, S) end;
-sha1(X) when ?is_var(X) ->
-    fun(#{X := S}) -> hash(sha1, S) end.
+sha(S) when is_binary(S) ->
+    hash(sha, S).
 
-sha256({const, S}) ->
-    fun(_) -> hash(sha256, S) end;
-sha256(X) when ?is_var(X) ->
-    fun(#{X := S}) -> hash(sha256, S) end.
+sha256(S) when is_binary(S) ->
+    hash(sha256, S).
 
 hash(Type, Data) ->
     hexstring(crypto:hash(Type, Data)).

@@ -14,14 +14,13 @@
 
 -module(emqx_rule_maps_SUITE).
 
-%%-include_lib("proper/include/proper.hrl").
+-include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
 
--export([ t_get_value/1
-        , t_put_value/1
-        , t_nested_get/1
-        , t_nested_put/1
+-export([ t_get_put_value/1
+        , t_prop_get_put/1
+        , t_nested_get_put/1
         ]).
 
 -export([ all/0
@@ -36,18 +35,22 @@
         , put_value/3
         ]).
 
-t_nested_get(_) ->
+-define(PROPTEST(Prop), true = proper:quickcheck(Prop)).
+
+t_nested_get_put(_) ->
+    ?assertEqual(#{a => a}, nested_put([a], a, #{})),
+    ?assertEqual(#{a => #{b => b}}, nested_put([a,b], b, #{})),
+    ?assertEqual(#{a => #{b => #{c => c}}}, nested_put([a,b,c], c, #{})),
     ?assertEqual(undefined, nested_get([a,b,c], #{})),
     ?assertEqual(undefined, nested_get([a,b,c], #{a => #{}})),
     ?assertEqual(undefined, nested_get([a,b,c], #{a => #{b => #{}}})),
     ?assertEqual(c, nested_get([a,b,c], #{a => #{b => #{c => c}}})).
 
-t_nested_put(_) ->
-    ?assertEqual(#{<<"a">> => a}, nested_put([a], a, #{})),
-    ?assertEqual(#{<<"a">> => #{<<"b">> => b}}, nested_put([a,b], b, #{})),
-    ?assertEqual(#{<<"a">> => #{<<"b">> => #{<<"c">> => c}}}, nested_put([a,b,c], c, #{})).
-
-t_get_value(_) ->
+t_get_put_value(_) ->
+    ?assertEqual(#{}, put_value(k, undefined, #{})),
+    ?assertEqual(#{k => v}, put_value(k, v, #{})),
+    ?assertEqual(#{<<"k">> => v}, put_value(<<"k">>, v, #{})),
+    ?assertEqual(#{<<"k">> => v}, put_value(k, undefined, #{<<"k">> => v})),
     ?assertEqual(undefined, get_value(k, #{})),
     ?assertEqual(v, get_value(<<"k">>, #{k=> v})),
     ?assertEqual(v, get_value(k, #{k=> v})),
@@ -56,11 +59,14 @@ t_get_value(_) ->
     ?assertEqual(d, get_value(<<"k">>, #{}, d)),
     ?assertEqual(d, get_value(k, #{}, d)).
 
-t_put_value(_) ->
-    ?assertEqual(#{}, put_value(k, undefined, #{})),
-    ?assertEqual(#{<<"k">> => v}, put_value(k, v, #{})),
-    ?assertEqual(#{<<"k">> => v}, put_value(<<"k">>, v, #{})),
-    ?assertEqual(#{<<"k">> => v}, put_value(k, undefined, #{<<"k">> => v})).
+t_prop_get_put(_) ->
+    ?assert(proper:quickcheck(prop_get_put_value())).
+
+prop_get_put_value() ->
+    ?FORALL({Key, Val}, {term(), term()},
+            begin
+                Val =:= get_value(Key, put_value(Key, Val, #{}))
+            end).
 
 all() ->
     IsTestCase = fun("t_" ++ _) -> true; (_) -> false end,

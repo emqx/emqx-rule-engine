@@ -2,7 +2,7 @@
         {description, "EMQ X Rule Engine"},
         {vsn, "git"},
         {modules, []},
-        {registered, [emqx_rule_engine_sup]},
+        {registered, [emqx_rule_engine_sup, emqx_rule_registry]},
         {applications, [kernel,stdlib,sqlparse]},
         {mod, {emqx_rule_engine_app, []}}
 ]}.

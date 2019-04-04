@@ -16,6 +16,8 @@
 
 -include("rule_engine.hrl").
 
+-import(minirest,  [return/0, return/1]).
+
 -rest_api(#{name   => create_rule,
             method => 'POST',
             path   => "/rules/",
@@ -113,9 +115,9 @@
 create_rule(_Bindings, Params) ->
     case emqx_rule_engine:create_rule(Params) of
         {ok, Rule} ->
-            emqx_mgmt:return({ok, record_to_map(Rule)});
+            return({ok, record_to_map(Rule)});
         {error, action_not_found} ->
-            emqx_mgmt:return({error, 500, "Action Not Found"})
+            return({error, 500, "Action Not Found"})
     end.
 
 list_rules(_Bindings, _Params) ->
@@ -126,7 +128,7 @@ show_rule(#{id := Id}, _Params) ->
 
 delete_rule(#{id := Id}, _Params) ->
     ok = emqx_rule_registry:remove_rule(Id),
-    emqx_mgmt:return().
+    return().
 
 %%------------------------------------------------------------------------------
 %% Actions API
@@ -136,7 +138,7 @@ list_actions(#{}, _Params) ->
     return_all(emqx_rule_registry:get_actions()).
 
 show_action(#{name := Name}, _Params) ->
-    reply_with(fun emqx_rule_registry:get_action/1, Name).
+    reply_with(fun emqx_rule_registry:find_action/1, Name).
 
 %%------------------------------------------------------------------------------
 %% Resources API
@@ -145,9 +147,9 @@ show_action(#{name := Name}, _Params) ->
 create_resource(#{}, Params) ->
     case emqx_rule_engine:create_resource(Params) of
         {ok, Resource} ->
-            emqx_mgmt:return({ok, record_to_map(Resource)});
+            return({ok, record_to_map(Resource)});
         {error, resource_type_not_found} ->
-            emqx_mgmt:return({error, 500, "Resource Type Not Found"})
+            return({error, 500, "Resource Type Not Found"})
     end.
 
 list_resources(#{}, _Params) ->
@@ -158,7 +160,7 @@ show_resource(#{id := Id}, _Params) ->
 
 delete_resource(#{id := Id}, _Params) ->
     ok = emqx_rule_registry:remove_resource(Id),
-    emqx_mgmt:return().
+    return().
 
 %%------------------------------------------------------------------------------
 %% Resource Types API
@@ -176,14 +178,14 @@ show_resource_type(#{name := Name}, _Params) ->
 
 return_all(Records) ->
     Data = lists:map(fun record_to_map/1, Records),
-    emqx_mgmt:return({ok, Data}).
+    return({ok, Data}).
 
 reply_with(Find, Key) ->
     case Find(Key) of
         {ok, R} ->
-            emqx_mgmt:return({ok, record_to_map(R)});
+            return({ok, record_to_map(R)});
         not_found ->
-            emqx_mgmt:return({error, 404, "Not Found"})
+            return({error, 404, "Not Found"})
     end.
 
 record_to_map(#rule{id = Id,
