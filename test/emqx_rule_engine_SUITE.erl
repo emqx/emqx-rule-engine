@@ -99,13 +99,11 @@ groups() ->
 init_per_suite(Config) ->
     ok = ekka_mnesia:start(),
     ok = emqx_rule_registry:mnesia(boot),
-    emqx_ct_helpers:start_apps([emqx, emqx_rule_engine],
-                               [{plugins_etc_dir, emqx_rule_engine, "test/etc/"},
-                                {acl_file, emqx, "etc/acl.conf"}]),
+    start_apps(),
     Config.
 
 end_per_suite(_Config) ->
-    emqx_ct_helpers:stop_apps([emqx, emqx_rule_engine]),
+
     ok.
 
 
@@ -642,3 +640,48 @@ hook_metrics_action(_Params) ->
 verify_hookpoints_counter(Hookpoint) ->
     ct:sleep(50),
     ?assert(ets:lookup_element(?HOOK_METRICS_TAB, Hookpoint, 2) > 0).
+
+
+%%------------------------------------------------------------------------------
+%% Start Apps
+%%------------------------------------------------------------------------------
+
+stop_apps() ->
+    [application:stop(App) || App <- [emqx_rule_engine, emqx]].
+
+start_apps() ->
+    [start_apps(App, SchemaFile, ConfigFile) ||
+        {App, SchemaFile, ConfigFile}
+            <- [{emqx, deps_path(emqx, "priv/emqx.schema"),
+                       deps_path(emqx, "etc/emqx.conf")},
+                {emqx_rule_engine, local_path("priv/emqx_rule_engine.schema"),
+                                   local_path("etc/emqx_rule_engine.conf")}]].
+
+start_apps(App, SchemaFile, ConfigFile) ->
+    read_schema_configs(App, SchemaFile, ConfigFile),
+    set_special_configs(App),
+    application:ensure_all_started(App).
+
+read_schema_configs(App, SchemaFile, ConfigFile) ->
+    ct:pal("Read configs - SchemaFile: ~p, ConfigFile: ~p", [SchemaFile, ConfigFile]),
+    Schema = cuttlefish_schema:files([SchemaFile]),
+    Conf = conf_parse:file(ConfigFile),
+    NewConfig = cuttlefish_generator:map(Schema, Conf),
+    Vals = proplists:get_value(App, NewConfig, []),
+    [application:set_env(App, Par, Value) || {Par, Value} <- Vals].
+
+deps_path(App, RelativePath) ->
+    %% Note: not lib_dir because etc dir is not sym-link-ed to _build dir
+    %% but priv dir is
+    Path0 = code:priv_dir(App),
+    Path = case file:read_link(Path0) of
+               {ok, Resolved} -> Resolved;
+               {error, _} -> Path0
+           end,
+    filename:join([Path, "..", RelativePath]).
+
+local_path(RelativePath) ->
+    deps_path(emqx_rule_engine, RelativePath).
+
+set_special_configs(_App) ->
+    ok.
