@@ -138,7 +138,7 @@ list_actions(#{}, _Params) ->
     return_all(emqx_rule_registry:get_actions()).
 
 show_action(#{name := Name}, _Params) ->
-    reply_with(fun emqx_rule_registry:get_action/1, Name).
+    reply_with(fun emqx_rule_registry:find_action/1, Name).
 
 %%------------------------------------------------------------------------------
 %% Resources API

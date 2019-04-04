@@ -53,14 +53,10 @@ groups() ->
      %,t_republish_action
       ]},
      {api, [],
-      [t_create_rule_api,
-       t_list_rules_api,
-       t_show_rule_api,
-       t_delete_rule_api,
+      [t_crud_rule_api,
        t_list_actions_api,
        t_show_action_api,
-       t_list_resources_api,
-       t_show_resource_api,
+       t_crud_resources_api,
        t_list_resource_types_api,
        t_show_resource_type_api
        ]},
@@ -241,44 +237,70 @@ t_republish_action(_Config) ->
 %% Test cases for rule engine api
 %%------------------------------------------------------------------------------
 
-t_create_rule_api(_Config) ->
-    %%TODO:
-    ok.
+t_crud_rule_api(_Config) ->
+    {ok, [{code, 0}, {data, Rule = #{id := RuleID}}]} =
+        emqx_rule_engine_api:create_rule(#{},
+                #{name => <<"debug-rule">>,
+                  for => 'message.publish',
+                  rawsql => <<"select * from \"t/a\"">>,
+                  actions => [{'default:debug_action', #{arg1 => 1}}],
+                  description => <<"debug rule">>}),
+    %ct:pal("RCreated : ~p", [Rule]),
 
-t_list_rules_api(_Config) ->
-    %%TODO:
-    ok.
+    {ok, [{code, 0}, {data, Rules}]} = emqx_rule_engine_api:list_rules(#{},#{}),
+    %ct:pal("RList : ~p", [Rules]),
+    ?assert(length(Rules) > 0),
 
-t_show_rule_api(_Config) ->
-    %%TODO:
-    ok.
+    {ok, [{code, 0}, {data, Rule1}]} = emqx_rule_engine_api:show_rule(#{id => RuleID}, #{}),
+    %ct:pal("RShow : ~p", [Rule1]),
+    ?assertEqual(Rule, Rule1),
 
-t_delete_rule_api(_Config) ->
-    %%TODO:
+    ?assertMatch({ok, [{code, 0}]}, emqx_rule_engine_api:delete_rule(#{id => RuleID}, #{})),
+
+    NotFound = emqx_rule_engine_api:show_rule(#{id => RuleID}, #{}),
+    %ct:pal("Show After Deleted: ~p", [NotFound]),
+    ?assertMatch({ok, [{code, 404}, {message, _}]}, NotFound),
     ok.
 
 t_list_actions_api(_Config) ->
-    %%TODO:
+    {ok, [{code, 0}, {data, Actions}]} = emqx_rule_engine_api:list_actions(#{},#{}),
+    %ct:pal("RList : ~p", [Actions]),
+    ?assert(length(Actions) > 0),
     ok.
 
 t_show_action_api(_Config) ->
-    %%TODO:
+    ?assertMatch({ok, [{code, 0}, {data, #{name := 'default:debug_action'}}]},
+                 emqx_rule_engine_api:show_action(#{name => 'default:debug_action'},#{})),
     ok.
 
-t_list_resources_api(_Config) ->
-    %%TODO:
-    ok.
+t_crud_resources_api(_Config) ->
+    ResId = <<"resource-debug">>,
+    Res = make_simple_resource(ResId),
+    ok = emqx_rule_registry:add_resource(Res),
 
-t_show_resource_api(_Config) ->
-    %%TODO:
+    {ok, [{code, 0}, {data, Resources}]} = emqx_rule_engine_api:list_resources(#{},#{}),
+    %ct:pal("RList : ~p", [Resources]),
+    ?assert(length(Resources) > 0),
+
+    ?assertMatch({ok, [{code, 0}, {data, #{id := ResId}}]},
+                 emqx_rule_engine_api:show_resource(#{id => ResId},#{})),
+
+    ok = emqx_rule_registry:remove_resource(Res),
+
+    ?assertMatch({ok, [{code, 404}, _]},
+                 emqx_rule_engine_api:show_resource(#{id => ResId},#{})),
     ok.
 
 t_list_resource_types_api(_Config) ->
-    %%TODO:
+    {ok, [{code, 0}, {data, ResourceTypes}]} = emqx_rule_engine_api:list_resource_types(#{},#{}),
+    %ct:pal("RList : ~p", [ResourceTypes]),
+    ?assert(length(ResourceTypes) > 0),
     ok.
 
 t_show_resource_type_api(_Config) ->
-    %%TODO:
+    RShow = emqx_rule_engine_api:show_resource_type(#{name => 'default_resource'},#{}),
+    ct:pal("RShow : ~p", [RShow]),
+    ?assertMatch({ok, [{code, 0}, {data, #{name := default_resource}}]}, RShow),
     ok.
 
 %%------------------------------------------------------------------------------
