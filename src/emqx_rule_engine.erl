@@ -140,6 +140,7 @@ create_rule(Params = #{name := Name,
         {ok, Select} ->
             Rule = #rule{id = rule_id(Name),
                          name = Name,
+                         rawsql = Sql,
                          for = Hook,
                          topics = emqx_rule_sqlparser:select_from(Select),
                          selects = emqx_rule_sqlparser:select_fields(Select),
@@ -168,7 +169,7 @@ prepare_action({Name, Args}) ->
 
 with_resource_config(Args = #{'$resource' := ResId}) ->
     case emqx_rule_registry:find_resource(ResId) of
-        {ok, #{config := Config}} ->
+        {ok, #resource{config = Config}} ->
             maps:merge(Args, Config);
         not_found ->
             throw(resource_not_found)
@@ -182,8 +183,8 @@ create_resource(#{name := Name,
                   config := Config,
                   description := Descr}) ->
     case emqx_rule_registry:find_resource_type(Type) of
-        {ok, #resource_type{on_create = OnCreate}} ->
-            NewConfig = OnCreate(Config),
+        {ok, #resource_type{on_create = {Mod, OnCreate}}} ->
+            NewConfig = Mod:OnCreate(Name, Config),
             ResId = iolist_to_binary([atom_to_list(Type), ":", Name]),
             Resource = #resource{id = ResId,
                                  type = Type,

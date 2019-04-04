@@ -17,3 +17,6 @@ TODO
 ct.coverdata
 logs/
 test/ct.cover.spec
+rebar.lock
+cover/
+eunit.coverdata
