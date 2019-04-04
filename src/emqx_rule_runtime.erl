@@ -163,7 +163,7 @@ select_and_transform(['*'|More], Input, Output) ->
     select_and_transform(More, Input, maps:merge(Output, Input));
 select_and_transform([{as, Field, Alias}|More], Input, Output) ->
     Val = eval(Field, Input),
-    select_and_transform(More, Input, nested_put(alias(Alias), Val, Output));
+    select_and_transform(More, Input, nested_put(Alias, Val, Output));
 select_and_transform([Field|More], Input, Output) ->
     Val = eval(Field, Input),
     Alias = alias(Field, Val),
