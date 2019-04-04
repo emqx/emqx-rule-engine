@@ -27,6 +27,16 @@
 
 -opaque(select() :: #select{}).
 
+-type(const() :: {const, number()|binary()}).
+
+-type(variable() :: binary() | list(binary())).
+
+-type(alias() :: binary() | list(binary())).
+
+-type(field() :: const() | variable()
+               | {as, field(), alias()}
+               | {'fun', atom(), list(field())}).
+
 -export_type([select/0]).
 
 -define(SELECT(Fields, From, Where),
@@ -42,12 +52,15 @@ parse_select(Sql) ->
         Error -> Error
     end.
 
+-spec(select_fields(select()) -> list(field())).
 select_fields(#select{fields = Fields}) ->
     Fields.
 
+-spec(select_from(select()) -> list(binary())).
 select_from(#select{from = From}) ->
     From.
 
+-spec(select_where(select()) -> tuple()).
 select_where(#select{where = Where}) ->
     Where.
 
@@ -90,7 +103,10 @@ transform_alias(Alias) ->
     parse_nested(unquote(Alias)).
 
 parse_nested(Attr) ->
-    string:split(Attr, <<".">>, all).
+    case string:split(Attr, <<".">>, all) of
+        [Attr] -> Attr;
+        Nested -> Nested
+    end.
 
 unquote(Topic) ->
     string:trim(Topic, both, "\"").

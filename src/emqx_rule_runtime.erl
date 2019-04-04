@@ -163,7 +163,7 @@ select_and_transform(['*'|More], Input, Output) ->
     select_and_transform(More, Input, maps:merge(Output, Input));
 select_and_transform([{as, Field, Alias}|More], Input, Output) ->
     Val = eval(Field, Input),
-    select_and_transform(More, Input, nested_put(Alias, Val, Output));
+    select_and_transform(More, Input, nested_put(alias(Alias), Val, Output));
 select_and_transform([Field|More], Input, Output) ->
     Val = eval(Field, Input),
     Alias = alias(Field, Val),
@@ -207,11 +207,13 @@ take_actions(Actions, Data) ->
 take_action(#{apply := Apply}, Data) ->
     Apply(Data).
 
-eval({var, Var}, Input) ->
+eval({var, Var}, Input) -> %% nested
     nested_get(Var, Input);
 eval({const, Val}, _Input) ->
     Val;
-eval({payload, AttrPath}, Input) ->
+eval({payload, Attr}, Input) when is_binary(Attr) ->
+    get_value(Attr, parse_payload(Input));
+eval({payload, AttrPath}, Input) -> %% nested
     nested_get(AttrPath, parse_payload(Input));
 eval({Op, L, R}, Input) when ?is_arith(Op) ->
     apply_func(Op, [eval(L, Input), eval(R, Input)], Input);
@@ -228,10 +230,11 @@ alias({var, Var}) ->
     Var;
 alias({const, Val}) ->
     Val;
-alias({payload, AttrPath}) ->
+alias({payload, Attr}) when is_binary(Attr) ->
+    [<<"payload">>, Attr];
+alias({payload, AttrPath}) when is_list(AttrPath) ->
     [<<"payload">>|AttrPath];
-alias(_) ->
-    undefined.
+alias(_) -> undefined.
 
 apply_func(Name, Args, Input) when is_atom(Name) ->
     case erlang:apply(emqx_rule_funcs, Name, Args) of
