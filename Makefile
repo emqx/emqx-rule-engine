@@ -1,6 +1,6 @@
 PROJECT = emqx_rule_engine
 PROJECT_DESCRIPTION = EMQ X Rule Engine
-PROJECT_VERSION = 0.1.0
+PROJECT_VERSION = 0.2
 
 NO_AUTOPATCH = cuttlefish
 
@@ -8,7 +8,7 @@ CUR_BRANCH := $(shell git branch | grep -e "^*" | cut -d' ' -f 2)
 BRANCH := $(if $(filter $(CUR_BRANCH), master develop), $(CUR_BRANCH), develop)
 
 DEPS = sqlparse minirest
-dep_sqlparse = git-emqx https://github.com/emqx/sqlparse master
+dep_sqlparse = git-emqx https://github.com/emqx/sqlparse 4.6.2
 dep_minirest = git-emqx https://github.com/emqx/minirest v0.2.2
 
 BUILD_DEPS = emqx cuttlefish
