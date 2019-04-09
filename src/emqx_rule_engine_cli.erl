@@ -109,6 +109,22 @@ actions(_usage) ->
 %%------------------------------------------------------------------------------
 %% 'resources' command
 %%------------------------------------------------------------------------------
+resources(["create", Name, Type, Config, Descr]) ->
+    case parse_resource_opts(Name, Type, Config, Descr) of
+        {ok, Res} ->
+            case emqx_rule_engine:create_resource(Res) of
+                {ok, #resource{id = ResId}} ->
+                    emqx_cli:print("Resource ~s created~n", [ResId]);
+                {error, Reason} ->
+                    emqx_cli:print("~p~n", [Reason])
+            end;
+        {error, Reason} ->
+            emqx_cli:print("Invalid options: ~p~n", [Reason])
+    end;
+
+resources(["create" | _Opts]) ->
+    emqx_cli:print("Usage:~n~n"
+                   "emqx_ctl resources create <Name> <Type> <Config> <Description>~n");
 
 resources(["list"]) ->
     print_all(emqx_rule_registry:get_resources());
@@ -116,9 +132,15 @@ resources(["list"]) ->
 resources(["show", ResourceId]) ->
     print_with(fun emqx_rule_registry:find_resource/1, ResourceId);
 
+resources(["delete", ResourceId]) ->
+    ok = emqx_rule_registry:remove_resource(list_to_binary(ResourceId)),
+    emqx_cli:print("ok~n");
+
 resources(_usage) ->
-    emqx_cli:usage([{"resources list",             "List all resources"},
-                    {"resources show <ResourceId>", "Show a resource"}
+    emqx_cli:usage([{"resources create", "Create a resource"},
+                    {"resources list", "List all resources"},
+                    {"resources show <ResourceId>", "Show a resource"},
+                    {"resources delete <ResourceId>", "Delete a resource"}
                    ]).
 
 %%------------------------------------------------------------------------------
@@ -193,6 +215,17 @@ parse_rule_opts(Name, Hook, SQL, ActionName, ActionParams, Descr) ->
                rawsql => list_to_binary(SQL),
                actions => [{list_to_existing_atom(ActionName),
                            jsx:decode(list_to_binary(ActionParams), [return_maps])}],
+               description => Descr}}
+    catch
+        _Error:Reason ->
+            {error, Reason}
+    end.
+
+parse_resource_opts(Name, Type, Config, Descr) ->
+    try
+        {ok, #{name => Name,
+               type => list_to_existing_atom(Type),
+               config => jsx:decode(list_to_binary(Config)),
                description => Descr}}
     catch
         _Error:Reason ->

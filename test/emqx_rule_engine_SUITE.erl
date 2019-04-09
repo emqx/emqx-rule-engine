@@ -351,19 +351,23 @@ t_actions_cli(_Config) ->
     ok.
 
 t_resources_cli(_Config) ->
-    ResId = <<"resource-debug">>,
-    Res = make_simple_resource(ResId),
-    ok = emqx_rule_registry:add_resource(Res),
+    %ResId = <<"resource-debug">>,
+    %Res = make_simple_resource(ResId),
+    %ok = emqx_rule_registry:add_resource(Res),
+    RCreate = emqx_rule_engine_cli:resources(["create", "res-1", "default_resource", "{\"a\" : 1}", "test resource"]),
+    ResId = re:replace(re:replace(RCreate, "Resource\s", "", [{return, list}]), "\screated\n", "", [{return, list}]),
 
     RList = emqx_rule_engine_cli:resources(["list"]),
-    ?assertMatch({match, _}, re:run(RList, "Simple Resource")),
+    ?assertMatch({match, _}, re:run(RList, "res-1")),
     %ct:pal("RList : ~p", [RList]),
 
     RShow = emqx_rule_engine_cli:resources(["show", ResId]),
-    ?assertMatch({match, _}, re:run(RShow, "Simple Resource")),
+    ?assertMatch({match, _}, re:run(RShow, "res-1")),
     %ct:pal("RShow : ~p", [RShow]),
 
-    ok = emqx_rule_registry:remove_resource(Res),
+    %ok = emqx_rule_registry:remove_resource(ResId),
+    RDelete = emqx_rule_engine_cli:resources(["delete", ResId]),
+    ?assertEqual("\"ok~n\"", RDelete),
 
     RShow2 = emqx_rule_engine_cli:resources(["show", ResId]),
     ?assertMatch({match, _}, re:run(RShow2, "Cannot found")),
