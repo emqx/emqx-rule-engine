@@ -164,15 +164,15 @@ prepare_action({Name, Args}) ->
             NewArgs = with_resource_config(Args),
             #{name => Name, args => Args, apply => M:F(NewArgs)};
         not_found ->
-            throw(action_not_found)
+            throw({action_not_found, Name})
     end.
 
-with_resource_config(Args = #{'$resource' := ResId}) ->
+with_resource_config(Args = #{<<"$resource">> := ResId}) ->
     case emqx_rule_registry:find_resource(ResId) of
         {ok, #resource{config = Config}} ->
             maps:merge(Args, Config);
         not_found ->
-            throw(resource_not_found)
+            throw({resource_not_found, ResId})
     end;
 
 with_resource_config(Args) -> Args.
@@ -193,6 +193,6 @@ create_resource(#{name := Name,
             ok = emqx_rule_registry:add_resource(Resource),
             {ok, Resource};
         not_found ->
-            {error, resource_type_not_found}
+            {error, {resource_type_not_found, Name}}
     end.
 

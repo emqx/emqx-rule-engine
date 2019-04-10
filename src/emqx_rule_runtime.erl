@@ -59,8 +59,7 @@ hook_rules(Name, Fun, Env) ->
 %%------------------------------------------------------------------------------
 
 on_client_connected(Credentials = #{client_id := ClientId}, ConnAck, ConnAttrs, #{apply_fun := ApplyRules}) ->
-    ?LOG(debug, "[RuleEngine] Client(~s) connected, connack: ~w, conn_attrs:~p",
-         [ClientId, ConnAck, ConnAttrs]),
+    ?LOG(debug, "[RuleEngine] Client(~s) connected, connack: ~w", [ClientId, ConnAck]),
     ApplyRules(maps:merge(Credentials, #{connack => ConnAck, connattrs => ConnAttrs})).
 
 on_client_disconnected(Credentials = #{client_id := ClientId}, ReasonCode, #{apply_fun := ApplyRules}) ->
