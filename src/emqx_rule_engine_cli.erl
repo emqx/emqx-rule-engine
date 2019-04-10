@@ -130,7 +130,7 @@ resources(["list"]) ->
     print_all(emqx_rule_registry:get_resources());
 
 resources(["show", ResourceId]) ->
-    print_with(fun emqx_rule_registry:find_resource/1, ResourceId);
+    print_with(fun emqx_rule_registry:find_resource/1, list_to_binary(ResourceId));
 
 resources(["delete", ResourceId]) ->
     ok = emqx_rule_registry:remove_resource(list_to_binary(ResourceId)),
