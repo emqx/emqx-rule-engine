@@ -63,8 +63,8 @@ rules(["list"]) ->
 rules(["show", RuleId]) ->
     print_with(fun emqx_rule_registry:get_rule/1, list_to_binary(RuleId));
 
-rules(["create", Name, Hook, SQL, ActionName, ActionParams, Descr]) ->
-    case parse_rule_opts(Name, Hook, SQL, ActionName, ActionParams, Descr) of
+rules(["create", Name, Hook, SQL, Actions, Descr]) ->
+    case parse_rule_opts(Name, Hook, SQL, Actions, Descr) of
         {ok, Rule} ->
             case emqx_rule_engine:create_rule(Rule) of
                 {ok, #rule{id = RuleId}} ->
@@ -78,7 +78,7 @@ rules(["create", Name, Hook, SQL, ActionName, ActionParams, Descr]) ->
 
 rules(["create" | _Opts]) ->
     emqx_cli:print("Usage:~n~n"
-                   "emqx_ctl rules create <Name> <Hook> <SQL> <ActionName> <ActionParams> <Description>~n");
+                   "emqx_ctl rules create <Name> <Hook> <SQL> <Actions> <Description>~n");
 
 rules(["delete", RuleId]) ->
     ok = emqx_rule_registry:remove_rule(list_to_binary(RuleId)),
@@ -184,13 +184,13 @@ format(#rule{id = Id,
              actions = Actions,
              enabled = Enabled,
              description = Descr}) ->
-    lists:flatten(io_lib:format("rule(~s, name=~s, for=~s, rawsql=~s, actions=~p, enabled=~s, description=~s)~n", [Id, Name, Hook, Sql, action_names(Actions), Enabled, Descr]));
+    lists:flatten(io_lib:format("rule(~s, name=~s, for=~s, rawsql=~s, actions=~0p, enabled=~s, description=~s)~n", [Id, Name, Hook, Sql, action_names(Actions), Enabled, Descr]));
 
 format(#action{name = Name,
                app = App,
                params = Params,
                description = Descr}) ->
-    lists:flatten(io_lib:format("action(name=~s, app=~s, params=~w, description=~s)~n",
+    lists:flatten(io_lib:format("action(name=~s, app=~s, params=~0p, description=~s)~n",
                                 [Name, App, Params, Descr]));
 
 format(#resource{id = Id,
@@ -198,7 +198,7 @@ format(#resource{id = Id,
                  config = Config,
                  attrs = Attrs,
                  description = Descr}) ->
-    lists:flatten(io_lib:format("resource(~s, type=~s, config=~w, attrs=~w, description=~s)~n",
+    lists:flatten(io_lib:format("resource(~s, type=~s, config=~0p, attrs=~0p, description=~s)~n",
                                 [Id, Type, Config, Attrs, Descr]));
 
 format(#resource_type{name = Name,
@@ -206,15 +206,15 @@ format(#resource_type{name = Name,
                       params = Params,
                       on_create = OnCreate,
                       description = Descr}) ->
-    lists:flatten(io_lib:format("resource_type(name=~s, provider=~s, params=~w, on_create=~w, description=~s)~n", [Name, Provider, Params, OnCreate, Descr])).
+    lists:flatten(io_lib:format("resource_type(name=~s, provider=~s, params=~0p, on_create=~0p, description=~s)~n", [Name, Provider, Params, OnCreate, Descr])).
 
-parse_rule_opts(Name, Hook, SQL, ActionName, ActionParams, Descr) ->
+parse_rule_opts(Name, Hook, SQL, Actions, Descr) ->
     try
-        {ok, #{name => Name,
+        {ok, #{name => list_to_binary(Name),
                for => list_to_existing_atom(Hook),
                rawsql => list_to_binary(SQL),
-               actions => [{list_to_existing_atom(ActionName),
-                           jsx:decode(list_to_binary(ActionParams), [return_maps])}],
+               actions => [{binary_to_existing_atom(ActName, utf8), maps:from_list(ActParam)}
+                           || {ActName, ActParam} <- jsx:decode(list_to_binary(Actions))],
                description => Descr}}
     catch
         _Error:Reason ->
@@ -223,9 +223,9 @@ parse_rule_opts(Name, Hook, SQL, ActionName, ActionParams, Descr) ->
 
 parse_resource_opts(Name, Type, Config, Descr) ->
     try
-        {ok, #{name => Name,
+        {ok, #{name => list_to_binary(Name),
                type => list_to_existing_atom(Type),
-               config => jsx:decode(list_to_binary(Config)),
+               config => jsx:decode(list_to_binary(Config), [return_maps]),
                description => Descr}}
     catch
         _Error:Reason ->

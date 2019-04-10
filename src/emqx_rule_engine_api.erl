@@ -34,14 +34,14 @@
 
 -rest_api(#{name   => show_rule,
             method => 'GET',
-            path   => "/rules/:id",
+            path   => "/rules/:bin:id",
             func   => show_rule,
             descr  => "Show a rule"
            }).
 
 -rest_api(#{name   => delete_rule,
             method => 'DELETE',
-            path   => "/rules/:id",
+            path   => "/rules/:bin:id",
             func   => delete_rule,
             descr  => "Delete a rule"
            }).
@@ -67,11 +67,25 @@
             descr  => "A list of all resources"
            }).
 
+-rest_api(#{name   => create_resource,
+            method => 'POST',
+            path   => "/resources/",
+            func   => create_resource,
+            descr  => "Create a resource"
+           }).
+
 -rest_api(#{name   => show_resource,
             method => 'GET',
-            path   => "/resources/:id",
+            path   => "/resources/:bin:id",
             func   => show_resource,
             descr  => "Show a resource"
+           }).
+
+-rest_api(#{name   => delete_resource,
+            method => 'DELETE',
+            path   => "/resources/:bin:id",
+            func   => delete_resource,
+            descr  => "Delete a resource"
            }).
 
 -rest_api(#{name   => list_resource_types,
@@ -108,16 +122,26 @@
         , show_resource_type/2
         ]).
 
+-define(ERR_NO_ACTION(NAME), list_to_binary(io_lib:format("Action ~s Not Found", [(NAME)]))).
+-define(ERR_NO_RESOURCE(RESID), list_to_binary(io_lib:format("Resource ~s Not Found", [(RESID)]))).
+-define(ERR_NO_RESOURCE_TYPE(TYPE), list_to_binary(io_lib:format("Resource Type ~s Not Found", [(TYPE)]))).
+-define(ERR_BADARGS, <<"Bad Arguments">>).
+
 %%------------------------------------------------------------------------------
 %% Rules API
 %%------------------------------------------------------------------------------
 
 create_rule(_Bindings, Params) ->
-    case emqx_rule_engine:create_rule(Params) of
+    try emqx_rule_engine:create_rule(parse_rule_params(Params)) of
         {ok, Rule} ->
             return({ok, record_to_map(Rule)});
-        {error, action_not_found} ->
-            return({error, 500, "Action Not Found"})
+        {error, {action_not_found, ActionName}} ->
+            return({error, 400, ?ERR_NO_ACTION(ActionName)})
+    catch
+        throw:{resource_not_found, ResId} ->
+            return({error, 400, ?ERR_NO_RESOURCE(ResId)});
+        _Error:_Reason ->
+            return({error, 400, ?ERR_BADARGS})
     end.
 
 list_rules(_Bindings, _Params) ->
@@ -145,11 +169,16 @@ show_action(#{name := Name}, _Params) ->
 %%------------------------------------------------------------------------------
 
 create_resource(#{}, Params) ->
-    case emqx_rule_engine:create_resource(Params) of
+    try emqx_rule_engine:create_resource(parse_resource_params(Params)) of
         {ok, Resource} ->
             return({ok, record_to_map(Resource)});
-        {error, resource_type_not_found} ->
-            return({error, 500, "Resource Type Not Found"})
+        {error, {resource_type_not_found, Type}} ->
+            return({error, 400, ?ERR_NO_RESOURCE_TYPE(Type)})
+    catch
+        throw:{resource_type_not_found, Type} ->
+            return({error, 400, ?ERR_NO_RESOURCE_TYPE(Type)});
+        _Error:_Reason ->
+            return({error, 400, ?ERR_BADARGS})
     end.
 
 list_resources(#{}, _Params) ->
@@ -185,7 +214,7 @@ reply_with(Find, Key) ->
         {ok, R} ->
             return({ok, record_to_map(R)});
         not_found ->
-            return({error, 404, "Not Found"})
+            return({error, 404, <<"Not Found">>})
     end.
 
 record_to_map(#rule{id = Id,
@@ -197,7 +226,7 @@ record_to_map(#rule{id = Id,
     #{id => Id,
       name => Name,
       rawsql => RawSQL,
-      actions => Actions,
+      actions => [N || #{name := N} <- Actions],
       enabled => Enabled,
       description => Descr
      };
@@ -232,3 +261,46 @@ record_to_map(#resource_type{name = Name,
       description => Descr
      }.
 
+parse_rule_params(Params) ->
+    parse_rule_params(Params, #{}).
+parse_rule_params([], Rule) ->
+    Rule;
+parse_rule_params([{<<"name">>, Name} | Params], Rule) ->
+    parse_rule_params(Params, Rule#{name => Name});
+parse_rule_params([{<<"for">>, Hook} | Params], Rule) ->
+    parse_rule_params(Params, Rule#{for => Hook});
+parse_rule_params([{<<"rawsql">>, RawSQL} | Params], Rule) ->
+    parse_rule_params(Params, Rule#{rawsql => RawSQL});
+parse_rule_params([{<<"actions">>, Actions} | Params], Rule) ->
+    parse_rule_params(Params, Rule#{actions => [parse_action(A) || A <- Actions]});
+parse_rule_params([{<<"description">>, Descr} | Params], Rule) ->
+    parse_rule_params(Params, Rule#{description => Descr});
+parse_rule_params([_ | Params], Res) ->
+    parse_rule_params(Params, Res).
+
+parse_action(Actions) ->
+    case proplists:get_value(<<"params">>, Actions) of
+        undefined ->
+            binary_to_existing_atom(proplists:get_value(<<"name">>, Actions), utf8);
+        Params ->
+            {binary_to_existing_atom(proplists:get_value(<<"name">>, Actions), utf8),
+             maps:from_list(Params)}
+    end.
+
+parse_resource_params(Params) ->
+    parse_resource_params(Params, #{}).
+parse_resource_params([], Res) ->
+    Res;
+parse_resource_params([{<<"name">>, Name} | Params], Res) ->
+    parse_resource_params(Params, Res#{name => Name});
+parse_resource_params([{<<"type">>, Type} | Params], Res) ->
+    try parse_resource_params(Params, Res#{type => binary_to_existing_atom(Type, utf8)})
+    catch error:badarg ->
+        throw({resource_type_not_found, Type})
+    end;
+parse_resource_params([{<<"config">>, Config} | Params], Res) ->
+    parse_resource_params(Params, Res#{config => maps:from_list(Config)});
+parse_resource_params([{<<"description">>, Descr} | Params], Res) ->
+    parse_resource_params(Params, Res#{description => Descr});
+parse_resource_params([_ | Params], Res) ->
+    parse_resource_params(Params, Res).
