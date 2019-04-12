@@ -27,6 +27,8 @@
         , resource_types/1
         ]).
 
+-import(proplists, [get_value/2, get_value/3]).
+
 %%-----------------------------------------------------------------------------
 %% Load/Unload Commands
 %%-----------------------------------------------------------------------------
@@ -109,35 +111,33 @@ actions(_usage) ->
 %%------------------------------------------------------------------------------
 %% 'resources' command
 %%------------------------------------------------------------------------------
-resources(["create", Name, Type, Config, Descr]) ->
-    case parse_resource_opts(Name, Type, Config, Descr) of
-        {ok, Res} ->
-            case emqx_rule_engine:create_resource(Res) of
-                {ok, #resource{id = ResId}} ->
-                    emqx_cli:print("Resource ~s created~n", [ResId]);
-                {error, Reason} ->
-                    emqx_cli:print("~p~n", [Reason])
-            end;
-        {error, Reason} ->
-            emqx_cli:print("Invalid options: ~p~n", [Reason])
-    end;
-
-resources(["create" | _Opts]) ->
-    emqx_cli:print("Usage:~n~n"
-                   "emqx_ctl resources create <Name> <Type> <Config> <Description>~n");
+resources(["create" | Params]) ->
+    with_opts(fun({Opts, _}) ->
+                case make_resource(Opts) of
+                    {ok, Res} ->
+                        case emqx_rule_engine:create_resource(Res) of
+                            {ok, #resource{id = ResId}} ->
+                                emqx_cli:print("Resource ~s created~n", [ResId]);
+                            {error, Reason} ->
+                                emqx_cli:print("~p~n", [Reason])
+                        end;
+                    {error, Reason} ->
+                        emqx_cli:print("Invalid options: ~p~n", [Reason])
+                end
+              end, Params,[{name, $n, "name", binary, "Resource Name"}
+                          ,{type, $t, "type", atom, "Resource Type"}
+                          ,{config, $c, "config", binary, "Config"}
+                          ,{descr, $d, "descr", binary, "Description"}
+                          ], {?FUNCTION_NAME, create});
 
 resources(["list"]) ->
     print_all(emqx_rule_registry:get_resources());
 
-resources(["list" | OptStr]) ->
-    OptSpecList = [{type, $t, "type", atom, "Resource Type"}],
-    case getopt:parse(OptSpecList, OptStr) of
-        {ok, {Opts, []}} ->
-            Type = proplists:get_value(type, Opts),
-            print_all(emqx_rule_registry:get_resources_of_type(Type));
-        _ ->
-            getopt:usage(OptSpecList, "list")
-    end;
+resources(["list" | Params]) ->
+    with_opts(fun({Opts, _}) ->
+            print_all(emqx_rule_registry:get_resources_of_type(
+                get_value(type, Opts)))
+        end, Params, [{type, $t, "type", atom, "Resource Type"}], {?FUNCTION_NAME, list});
 
 resources(["show", ResourceId]) ->
     print_with(fun emqx_rule_registry:find_resource/1, list_to_binary(ResourceId));
@@ -148,8 +148,7 @@ resources(["delete", ResourceId]) ->
 
 resources(_usage) ->
     emqx_cli:usage([{"resources create", "Create a resource"},
-                    {"resources list", "List all resources"},
-                    {"resources list --type=<ResourceType>", "List all resources of a type"},
+                    {"resources list [-t <ResourceType>]", "List all resources"},
                     {"resources show <ResourceId>", "Show a resource"},
                     {"resources delete <ResourceId>", "Delete a resource"}
                    ]).
@@ -226,18 +225,21 @@ parse_rule_opts(Name, Hook, SQL, Actions, Descr) ->
                rawsql => list_to_binary(SQL),
                actions => [{binary_to_existing_atom(ActName, utf8), maps:from_list(atom_key_list(ActParam))}
                            || {ActName, ActParam} <- jsx:decode(list_to_binary(Actions))],
-               description => Descr}}
+               description => list_to_binary(Descr)}}
     catch
         _Error:Reason ->
             {error, Reason}
     end.
 
-parse_resource_opts(Name, Type, Config, Descr) ->
+make_resource(Opts) ->
     try
-        {ok, #{name => list_to_binary(Name),
-               type => list_to_existing_atom(Type),
-               config => maps:from_list(atom_key_list(jsx:decode(list_to_binary(Config)))),
-               description => Descr}}
+        {ok, #{name => get_value(name, Opts),
+               type => get_value(type, Opts),
+               config => maps:from_list(
+                            atom_key_list(
+                                jsx:decode(
+                                    get_value(config, Opts)))),
+               description => get_value(descr, Opts, "")}}
     catch
         _Error:Reason ->
             {error, Reason}
@@ -248,3 +250,12 @@ action_names(Actions) when is_list(Actions) ->
 
 atom_key_list(BinKeyList) ->
     [{binary_to_existing_atom(K, utf8), V} || {K, V} <- BinKeyList].
+
+with_opts(Action, RawParams, OptSpecList, {CmdObject, CmdName}) ->
+    case getopt:parse(OptSpecList, RawParams) of
+        {ok, Params} ->
+            Action(Params);
+        _ ->
+            getopt:usage(OptSpecList,
+                io_lib:format("emqx_ctl ~s ~s", [CmdObject, CmdName]), standard_io)
+    end.
