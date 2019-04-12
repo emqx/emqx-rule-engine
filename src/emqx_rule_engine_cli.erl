@@ -129,8 +129,15 @@ resources(["create" | _Opts]) ->
 resources(["list"]) ->
     print_all(emqx_rule_registry:get_resources());
 
-resources(["list", "of", Type]) ->
-    print_all(emqx_rule_registry:get_resources_of_type(list_to_existing_atom(Type)));
+resources(["list" | OptStr]) ->
+    OptSpecList = [{type, $t, "type", atom, "Resource Type"}],
+    case getopt:parse(OptSpecList, OptStr) of
+        {ok, {Opts, []}} ->
+            Type = proplists:get_value(type, Opts),
+            print_all(emqx_rule_registry:get_resources_of_type(Type));
+        _ ->
+            getopt:usage(OptSpecList, "list")
+    end;
 
 resources(["show", ResourceId]) ->
     print_with(fun emqx_rule_registry:find_resource/1, list_to_binary(ResourceId));
@@ -142,7 +149,7 @@ resources(["delete", ResourceId]) ->
 resources(_usage) ->
     emqx_cli:usage([{"resources create", "Create a resource"},
                     {"resources list", "List all resources"},
-                    {"resources list of <ResourceType>", "List all resources of a type"},
+                    {"resources list --type=<ResourceType>", "List all resources of a type"},
                     {"resources show <ResourceId>", "Show a resource"},
                     {"resources delete <ResourceId>", "Delete a resource"}
                    ]).

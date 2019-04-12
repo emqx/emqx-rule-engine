@@ -76,17 +76,23 @@ $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/actions/default
 ```shell
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resource_types'
 
-{"code":0,"data":[{"description":"Debug resource type","name":"debug_resource_type","provider":"emqx_rule_engine"}]}
+{"code":0,"data":[{"description":"Debug resource type","name":"debug_resource_type","params":{},"provider":"emqx_rule_engine"}]}
 ```
 
+### list all resources of a type
 
+```shell
+$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resource_types/debug_resource_type/resources'
+
+{"code":0,"data":[{"attrs":"undefined","config":{"a":1},"description":"test-rule","id":"debug_resource_type:test-resource","type":"debug_resource_type"}]}
+```
 
 ### show
 
 ```shell
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resource_types/debug_resource_type'
 
-{"code":0,"data":{"description":"Debug resource type","name":"debug_resource_type","provider":"emqx_rule_engine"}}
+{"code":0,"data":{"description":"Debug resource type","name":"debug_resource_type","params":{},"provider":"emqx_rule_engine"}}
 ```
 
 

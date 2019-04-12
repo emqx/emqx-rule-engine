@@ -266,9 +266,11 @@ record_to_map(#resource{id = Id,
 
 record_to_map(#resource_type{name = Name,
                              provider = Provider,
+                             params = Params,
                              description = Descr}) ->
     #{name => Name,
       provider => Provider,
+      params => Params,
       description => Descr
      }.
 

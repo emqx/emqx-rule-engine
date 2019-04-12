@@ -7,7 +7,8 @@ NO_AUTOPATCH = cuttlefish
 CUR_BRANCH := $(shell git branch | grep -e "^*" | cut -d' ' -f 2)
 BRANCH := $(if $(filter $(CUR_BRANCH), master develop), $(CUR_BRANCH), develop)
 
-DEPS = sqlparse minirest
+DEPS = sqlparse minirest getopts
+dep_getopts = git https://github.com/basho/getopt v0.8.2
 dep_sqlparse = git-emqx https://github.com/emqx/sqlparse 4.6.2
 dep_minirest = git-emqx https://github.com/emqx/minirest v0.2.2
 
