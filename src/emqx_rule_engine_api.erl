@@ -102,6 +102,13 @@
             descr  => "Show a resource type"
            }).
 
+-rest_api(#{name   => list_resources_of_type,
+            method => 'GET',
+            path   => "/resource_types/:atom:type/resources",
+            func   => list_resources_of_type,
+            descr  => "List all resources of a resource type"
+           }).
+
 -export([ create_rule/2
         , list_rules/2
         , show_rule/2
@@ -119,6 +126,7 @@
         ]).
 
 -export([ list_resource_types/2
+        , list_resources_of_type/2
         , show_resource_type/2
         ]).
 
@@ -183,6 +191,9 @@ create_resource(#{}, Params) ->
 
 list_resources(#{}, _Params) ->
     return_all(emqx_rule_registry:get_resources()).
+
+list_resources_of_type(#{type := Type}, _Params) ->
+    return_all(emqx_rule_registry:get_resources_of_type(Type)).
 
 show_resource(#{id := Id}, _Params) ->
     reply_with(fun emqx_rule_registry:find_resource/1, Id).
@@ -284,7 +295,7 @@ parse_action(Actions) ->
             binary_to_existing_atom(proplists:get_value(<<"name">>, Actions), utf8);
         Params ->
             {binary_to_existing_atom(proplists:get_value(<<"name">>, Actions), utf8),
-             maps:from_list(Params)}
+             maps:from_list(atom_key_list(Params))}
     end.
 
 parse_resource_params(Params) ->
@@ -299,8 +310,11 @@ parse_resource_params([{<<"type">>, Type} | Params], Res) ->
         throw({resource_type_not_found, Type})
     end;
 parse_resource_params([{<<"config">>, Config} | Params], Res) ->
-    parse_resource_params(Params, Res#{config => maps:from_list(Config)});
+    parse_resource_params(Params, Res#{config => maps:from_list(atom_key_list(Config))});
 parse_resource_params([{<<"description">>, Descr} | Params], Res) ->
     parse_resource_params(Params, Res#{description => Descr});
 parse_resource_params([_ | Params], Res) ->
     parse_resource_params(Params, Res).
+
+atom_key_list(BinKeyList) ->
+    [{binary_to_existing_atom(K, utf8), V} || {K, V} <- BinKeyList].

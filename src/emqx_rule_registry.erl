@@ -45,6 +45,7 @@
 -export([ get_resources/0
         , add_resource/1
         , find_resource/1
+        , get_resources_of_type/1
         , remove_resource/1
         ]).
 
@@ -244,7 +245,7 @@ remove_actions(Actions) ->
 -spec(remove_actions_of(App :: atom()) -> ok).
 remove_actions_of(App) ->
     trans(fun() ->
-            lists:foreach(fun delete_action/1, mnesia:dirty_index_read(?ACTION_TAB, App, #action.app))
+            lists:foreach(fun delete_action/1, mnesia:index_read(?ACTION_TAB, App, #action.app))
           end).
 
 %% @private
@@ -269,7 +270,7 @@ get_resources() ->
 add_resource(Resource) when is_record(Resource, resource) ->
     trans(fun insert_resource/1, [Resource]).
 
--spec(find_resource(Id :: binary()) -> {ok, emqx_rule_engine:resource()} | not_found).
+-spec(find_resource(Id :: resource_id()) -> {ok, emqx_rule_engine:resource()} | not_found).
 find_resource(Id) ->
     case mnesia:dirty_read(?RES_TAB, Id) of
         [Res] -> {ok, Res};
@@ -306,6 +307,10 @@ find_resource_type(Name) ->
         [] -> not_found
     end.
 
+-spec(get_resources_of_type(Type :: atom()) -> list(emqx_rule_engine:resource())).
+get_resources_of_type(Type) ->
+    mnesia:dirty_index_read(?RES_TAB, Type, #resource.type).
+
 -spec(register_resource_types(list(emqx_rule_engine:resource_type())) -> ok).
 register_resource_types(Types) ->
     trans(fun lists:foreach/2, [fun insert_resource_type/1, Types]).
@@ -314,7 +319,7 @@ register_resource_types(Types) ->
 -spec(unregister_resource_types_of(App :: atom()) -> ok).
 unregister_resource_types_of(App) ->
     trans(fun() ->
-            lists:foreach(fun delete_resource_type/1, mnesia:dirty_index_read(?RES_TYPE_TAB, App, #resource_type.provider))
+            lists:foreach(fun delete_resource_type/1, mnesia:index_read(?RES_TYPE_TAB, App, #resource_type.provider))
           end).
 
 %% @private
