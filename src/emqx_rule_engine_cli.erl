@@ -129,6 +129,16 @@ resources(["create" | _Opts]) ->
 resources(["list"]) ->
     print_all(emqx_rule_registry:get_resources());
 
+resources(["list" | OptStr]) ->
+    OptSpecList = [{type, $t, "type", atom, "Resource Type"}],
+    case getopt:parse(OptSpecList, OptStr) of
+        {ok, {Opts, []}} ->
+            Type = proplists:get_value(type, Opts),
+            print_all(emqx_rule_registry:get_resources_of_type(Type));
+        _ ->
+            getopt:usage(OptSpecList, "list")
+    end;
+
 resources(["show", ResourceId]) ->
     print_with(fun emqx_rule_registry:find_resource/1, list_to_binary(ResourceId));
 
@@ -139,6 +149,7 @@ resources(["delete", ResourceId]) ->
 resources(_usage) ->
     emqx_cli:usage([{"resources create", "Create a resource"},
                     {"resources list", "List all resources"},
+                    {"resources list --type=<ResourceType>", "List all resources of a type"},
                     {"resources show <ResourceId>", "Show a resource"},
                     {"resources delete <ResourceId>", "Delete a resource"}
                    ]).
@@ -213,7 +224,7 @@ parse_rule_opts(Name, Hook, SQL, Actions, Descr) ->
         {ok, #{name => list_to_binary(Name),
                for => list_to_existing_atom(Hook),
                rawsql => list_to_binary(SQL),
-               actions => [{binary_to_existing_atom(ActName, utf8), maps:from_list(ActParam)}
+               actions => [{binary_to_existing_atom(ActName, utf8), maps:from_list(atom_key_list(ActParam))}
                            || {ActName, ActParam} <- jsx:decode(list_to_binary(Actions))],
                description => Descr}}
     catch
@@ -225,7 +236,7 @@ parse_resource_opts(Name, Type, Config, Descr) ->
     try
         {ok, #{name => list_to_binary(Name),
                type => list_to_existing_atom(Type),
-               config => jsx:decode(list_to_binary(Config), [return_maps]),
+               config => maps:from_list(atom_key_list(jsx:decode(list_to_binary(Config)))),
                description => Descr}}
     catch
         _Error:Reason ->
@@ -234,3 +245,6 @@ parse_resource_opts(Name, Type, Config, Descr) ->
 
 action_names(Actions) when is_list(Actions) ->
     [Name || #{name := Name} <- Actions].
+
+atom_key_list(BinKeyList) ->
+    [{binary_to_existing_atom(K, utf8), V} || {K, V} <- BinKeyList].

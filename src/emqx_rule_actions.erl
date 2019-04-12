@@ -20,20 +20,21 @@
 -resource_type(#{name => debug_resource_type,
                  schema => "emqx_rule_engine",
                  create => on_resource_create,
+                 params => #{},
                  description => "Debug resource type"
                 }).
 
 -rule_action(#{name => debug_action,
                for => any,
                func => debug_action,
-               params => #{},
+               params => #{'$resource' => debug_resource_type},
                description => "Debug Action"
               }).
 
 -rule_action(#{name => republish_message,
                for => 'message.publish',
                func => republish_action,
-               params => #{from => topic, to => topic},
+               params => #{from => topic, to => topic, '$resource' => debug_resource_type},
                description => "Republish a MQTT message"
               }).
 
