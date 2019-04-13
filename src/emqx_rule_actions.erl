@@ -27,14 +27,14 @@
 -rule_action(#{name => debug_action,
                for => any,
                func => debug_action,
-               params => #{'$resource' => debug_resource_type},
+               params => #{},
                description => "Debug Action"
               }).
 
 -rule_action(#{name => republish_message,
                for => 'message.publish',
                func => republish_action,
-               params => #{from => topic, to => topic, '$resource' => debug_resource_type},
+               params => #{from => topic, to => topic},
                description => "Republish a MQTT message"
               }).
 

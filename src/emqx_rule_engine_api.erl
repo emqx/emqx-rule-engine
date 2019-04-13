@@ -132,6 +132,7 @@
 
 -define(ERR_NO_ACTION(NAME), list_to_binary(io_lib:format("Action ~s Not Found", [(NAME)]))).
 -define(ERR_NO_RESOURCE(RESID), list_to_binary(io_lib:format("Resource ~s Not Found", [(RESID)]))).
+-define(ERR_NO_HOOK(HOOK), list_to_binary(io_lib:format("Hook ~s Not Found", [(HOOK)]))).
 -define(ERR_NO_RESOURCE_TYPE(TYPE), list_to_binary(io_lib:format("Resource Type ~s Not Found", [(TYPE)]))).
 -define(ERR_BADARGS, <<"Bad Arguments">>).
 
@@ -148,6 +149,8 @@ create_rule(_Bindings, Params) ->
     catch
         throw:{resource_not_found, ResId} ->
             return({error, 400, ?ERR_NO_RESOURCE(ResId)});
+        throw:{invalid_hook, Hook} ->
+            return({error, 400, ?ERR_NO_HOOK(Hook)});
         _Error:_Reason ->
             return({error, 400, ?ERR_BADARGS})
     end.
@@ -283,7 +286,7 @@ parse_rule_params([], Rule) ->
 parse_rule_params([{<<"name">>, Name} | Params], Rule) ->
     parse_rule_params(Params, Rule#{name => Name});
 parse_rule_params([{<<"for">>, Hook} | Params], Rule) ->
-    parse_rule_params(Params, Rule#{for => Hook});
+    parse_rule_params(Params, Rule#{for => try binary_to_existing_atom(Hook, utf8) catch error:badarg -> throw({invalid_hook, Hook}) end});
 parse_rule_params([{<<"rawsql">>, RawSQL} | Params], Rule) ->
     parse_rule_params(Params, Rule#{rawsql => RawSQL});
 parse_rule_params([{<<"actions">>, Actions} | Params], Rule) ->
