@@ -282,9 +282,6 @@ t_show_action_api(_Config) ->
     ok.
 
 t_crud_resources_api(_Config) ->
-    %ResId = <<"resource-debug">>,
-    %Res = make_simple_resource(ResId),
-    %ok = emqx_rule_registry:add_resource(Res),
     {ok, [{code, 0}, {data, #{id := ResId}}]} =
         emqx_rule_engine_api:create_resource(#{},
             [{<<"name">>, <<"Simple Resource">>},
@@ -292,13 +289,11 @@ t_crud_resources_api(_Config) ->
             {<<"config">>, [{<<"a">>, 1}]},
             {<<"description">>, <<"Simple Resource">>}]),
     {ok, [{code, 0}, {data, Resources}]} = emqx_rule_engine_api:list_resources(#{},#{}),
-    %ct:pal("RList : ~p", [Resources]),
     ?assert(length(Resources) > 0),
 
     ?assertMatch({ok, [{code, 0}, {data, #{id := ResId}}]},
                  emqx_rule_engine_api:show_resource(#{id => ResId},#{})),
 
-    %ok = emqx_rule_registry:remove_resource(Res),
     ?assertMatch({ok, [{code, 0}]}, emqx_rule_engine_api:delete_resource(#{id => ResId},#{})),
 
     ?assertMatch({ok, [{code, 404}, _]},
@@ -307,7 +302,6 @@ t_crud_resources_api(_Config) ->
 
 t_list_resource_types_api(_Config) ->
     {ok, [{code, 0}, {data, ResourceTypes}]} = emqx_rule_engine_api:list_resource_types(#{},#{}),
-    %ct:pal("RList : ~p", [ResourceTypes]),
     ?assert(length(ResourceTypes) > 0),
     ok.
 
@@ -359,9 +353,6 @@ t_actions_cli(_Config) ->
     ok.
 
 t_resources_cli(_Config) ->
-    %ResId = <<"resource-debug">>,
-    %Res = make_simple_resource(ResId),
-    %ok = emqx_rule_registry:add_resource(Res),
     RCreate = emqx_rule_engine_cli:resources(["create", "res-1", "debug_resource_type", "{\"a\" : 1}", "test resource"]),
     ResId = re:replace(re:replace(RCreate, "Resource\s", "", [{return, list}]), "\screated\n", "", [{return, list}]),
 
@@ -373,7 +364,6 @@ t_resources_cli(_Config) ->
     ?assertMatch({match, _}, re:run(RShow, "res-1")),
     %ct:pal("RShow : ~p", [RShow]),
 
-    %ok = emqx_rule_registry:remove_resource(ResId),
     RDelete = emqx_rule_engine_cli:resources(["delete", ResId]),
     ?assertEqual("\"ok~n\"", RDelete),
 

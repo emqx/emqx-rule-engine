@@ -198,13 +198,13 @@ format(#rule{id = Id,
              actions = Actions,
              enabled = Enabled,
              description = Descr}) ->
-    lists:flatten(io_lib:format("rule(id=~s, name=~s, for=~s, rawsql=~s, actions=~0p, enabled=~s, description=~s)~n", [Id, Name, Hook, Sql, printable_actions(Actions), Enabled, Descr]));
+    lists:flatten(io_lib:format("rule(id='~s', name='~s', for='~s', rawsql='~s', actions=~0p, enabled='~s', description='~s')~n", [Id, Name, Hook, Sql, printable_actions(Actions), Enabled, Descr]));
 
 format(#action{name = Name,
                app = App,
                params = Params,
                description = Descr}) ->
-    lists:flatten(io_lib:format("action(name=~s, app=~s, params=~0p, description=~s)~n",
+    lists:flatten(io_lib:format("action(name='~s', app='~s', params=~0p, description='~s')~n",
                                 [Name, App, Params, Descr]));
 
 format(#resource{id = Id,
@@ -213,15 +213,14 @@ format(#resource{id = Id,
                  config = Config,
                  attrs = Attrs,
                  description = Descr}) ->
-    lists:flatten(io_lib:format("resource(id=~s, name=~s, type=~s, config=~0p, attrs=~0p, description=~s)~n",
-                                [Id, Name, Type, Config, Attrs, Descr]));
+    lists:flatten(io_lib:format("resource(id='~s', name='~s', type='~s', config=~0p, attrs=~0p, description='~s')~n", [Id, Name, Type, Config, Attrs, Descr]));
 
 format(#resource_type{name = Name,
                       provider = Provider,
                       params = Params,
                       on_create = OnCreate,
                       description = Descr}) ->
-    lists:flatten(io_lib:format("resource_type(name=~s, provider=~s, params=~0p, on_create=~0p, description=~s)~n", [Name, Provider, Params, OnCreate, Descr])).
+    lists:flatten(io_lib:format("resource_type(name='~s', provider='~s', params=~0p, on_create=~0p, description='~s')~n", [Name, Provider, Params, OnCreate, Descr])).
 
 make_rule(Opts) ->
     Actions = get_value(actions, Opts),
