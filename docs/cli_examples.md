@@ -1,125 +1,125 @@
 #Rule-Engine-CLIs
 
+## Enable webhook
+
+```shell
+./bin/emqx_ctl plugins load emqx_web_hook
+```
+
 ## Rules
 
 ### create
+
 ```shell
 $ ./bin/emqx_ctl rules create 'steven_msg_to_http' 'message.publish' 'SELECT payload FROM "#" where user=Steven' '{"emqx_web_hook:forward_action": {"$resource": "web_hook:webhook1", "url": "http://www.baidu.com"}}' -d "Forward msgs from clientid=Steven to webhook"
 
-Rule steven_msg_to_http:1555136538740282000 created
+Rule steven_msg_to_http:1555138068602953000 created
 ```
 
 ### show
-```shell
-$ ./bin/emqx_ctl rules show steven_msg_to_http:1555136538740282000
 
-rule(steven_msg_to_http:1555136538740282000, name=steven_msg_to_http, for=message.publish, rawsql=SELECT payload FROM "#" where user=Steven, actions=['emqx_web_hook:forward_action'], enabled=true, description=Forward msgs from clientid=Steven to webhook)
+```shell
+$ ./bin/emqx_ctl rules show steven_msg_to_http:1555138068602953000
+
+rule(id=steven_msg_to_http:1555138068602953000, name=steven_msg_to_http, for=message.publish, rawsql=SELECT payload FROM "#" where user=Steven, actions=<<"[{\"name\":\"emqx_web_hook:forward_action\",\"params\":{\"$resource\":\"web_hook:webhook1\",\"url\":\"http://www.baidu.com\"}}]">>, enabled=true, description=Forward msgs from clientid=Steven to webhook)
 ```
 
 ### list
 
 ```shell
-$ curl -v --basic -u $APPSECRET -k http://localhost:8080/api/v3/rules
+$ ./bin/emqx_ctl rules list
 
-{"code":0,"data":[{"actions":["default:debug_action"],"description":"Rule for debug","enabled":true,"id":"inspect:1554792545782692586","name":"inspect","rawsql":"select * from t1"}]}
+rule(id=steven_msg_to_http:1555138068602953000, name=steven_msg_to_http, for=message.publish, rawsql=SELECT payload FROM "#" where user=Steven, actions=<<"[{\"name\":\"emqx_web_hook:forward_action\",\"params\":{\"$resource\":\"web_hook:webhook1\",\"url\":\"http://www.baidu.com\"}}]">>, enabled=true, description=Forward msgs from clientid=Steven to webhook)
+
 ```
 
 ### delete
 
 ```shell
-$ curl -XDELETE -v --basic -u $APPSECRET -k http://localhost:8080/api/v3/rules/inspect:1554792545782692586
+$ ./bin/emqx_ctl rules delete 'steven_msg_to_http:1555138068602953000'
 
-{"code":0}
+ok
 ```
-
-
 
 ## Actions
 
 ### list
 
 ```shell
-$ curl -v --basic -u $APPSECRET -k http://localhost:8080/api/v3/actions
+$ ./bin/emqx_ctl rule-actions list
 
-{"code":0,"data":[{"app":"emqx_rule_engine","description":"Debug Action","name":"default:debug_action","params":{}},{"app":"emqx_rule_engine","description":"Republish a MQTT message","name":"default:republish_message","params":{"from":"topic","to":"topic"}}]}
+action(name=default:debug_action, app=emqx_rule_engine, params=#{'$resource' => debug_resource_type}, description=Debug Action)
+action(name=emqx_web_hook:forward_action, app=emqx_web_hook, params=#{'$resource' => web_hook,url => string}, description=Forward a MQTT message)
+action(name=default:republish_message, app=emqx_rule_engine, params=#{'$resource' => debug_resource_type,from => topic,to => topic}, description=Republish a MQTT message)
 ```
-
-
 
 ### show
 
 ```shell
-$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/actions/default:debug_action'
+$ ./bin/emqx_ctl rule-actions show 'emqx_web_hook:forward_action'
 
-{"code":0,"data":{"app":"emqx_rule_engine","description":"Debug Action","name":"default:debug_action","params":{}}}
+action(name=emqx_web_hook:forward_action, app=emqx_web_hook, params=#{'$resource' => web_hook,url => string}, description=Forward a MQTT message)
 ```
 
+## Resource
 
+### create
 
-## Resource Types
+```shell
+$ ./bin/emqx_ctl resources create 'webhook1' 'web_hook' '{"url": "http://host-name/chats"}'
+
+Resource web_hook:webhook1 created
+```
 
 ### list
 
 ```shell
-$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resource_types'
+$ ./bin/emqx_ctl resources list
 
-{"code":0,"data":[{"description":"Debug resource type","name":"debug_resource_type","params":{},"provider":"emqx_rule_engine"}]}
+resource(id=web_hook:webhook1, name=webhook1, type=web_hook, config=#{}, attrs=undefined, description=)
+
 ```
 
 ### list all resources of a type
 
 ```shell
-$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resource_types/debug_resource_type/resources'
+$ ./bin/emqx_ctl resources list -t 'web_hook'
 
-{"code":0,"data":[{"attrs":"undefined","config":{"a":1},"description":"test-rule","id":"debug_resource_type:test-resource","type":"debug_resource_type"}]}
+resource(id=web_hook:webhook1, name=webhook1, type=web_hook, config=#{}, attrs=undefined, description=)
+
 ```
 
 ### show
 
 ```shell
-$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resource_types/debug_resource_type'
+$ ./bin/emqx_ctl resources show 'web_hook:webhook1'
 
-{"code":0,"data":{"description":"Debug resource type","name":"debug_resource_type","params":{},"provider":"emqx_rule_engine"}}
+resource(id=web_hook:webhook1, name=webhook1, type=web_hook, config=#{}, attrs=undefined, description=)
 ```
-
-
-
-## Resources
-
-### create
-
-```shell
-$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resources' -d \
-'{"name":"test-resource", "type": "debug_resource_type", "config": {"a":1}, "description": "test-rule"}'
-
-{"code":0,"data":{"attrs":"undefined","config":{"a":1},"description":"test-rule","id":"debug_resource_type:test-resource","type":"debug_resource_type"}}
-```
-
-### list
-
-```shell
-$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resources'
-
-{"code":0,"data":[{"attrs":"undefined","config":{"a":1},"description":"test-rule","id":"debug_resource_type:test-resource","type":"debug_resource_type"}]}
-```
-
-
-
-### show
-
-```shell
-$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resources/debug_resource_type:test-resource'
-
-{"code":0,"data":{"attrs":"undefined","config":{"a":1},"description":"test-rule","id":"debug_resource_type:test-resource","type":"debug_resource_type"}}
-```
-
-
 
 ### delete
 
 ```shell
-$ curl -XDELETE -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resources/debug_resource_type:test-res'
+$ ./bin/emqx_ctl resources delete 'web_hook:webhook1'
 
-{"code":0}
+ok
 ```
 
+## Resources Types
+
+### list
+
+```shell
+$ ./bin/emqx_ctl resource-types list
+
+resource_type(name=debug_resource_type, provider=emqx_rule_engine, params=#{}, on_create={emqx_rule_actions,on_resource_create}, description=Debug resource type)
+resource_type(name=web_hook, provider=emqx_web_hook, params=#{}, on_create={emqx_web_hook_actions,on_resource_create}, description=WebHook Resource)
+```
+
+### show
+
+```shell
+$ ./bin/emqx_ctl resource-types show debug_resource_type
+
+resource_type(name=debug_resource_type, provider=emqx_rule_engine, params=#{}, on_create={emqx_rule_actions,on_resource_create}, description=Debug resource type)
+```
