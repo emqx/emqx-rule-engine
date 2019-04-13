@@ -162,7 +162,8 @@ prepare_action({Name, Args}) ->
     case emqx_rule_registry:find_action(Name) of
         {ok, #action{module = M, func = F}} ->
             NewArgs = with_resource_config(Args),
-            #{name => Name, params => Args, apply => M:F(NewArgs)};
+            #{name => Name, params => Args,
+              apply => try M:F(NewArgs) catch _:Err -> throw({init_action_failure, Err, {M,F}}) end};
         not_found ->
             throw({action_not_found, Name})
     end.
