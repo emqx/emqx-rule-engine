@@ -162,9 +162,10 @@ prepare_action({Name, Args}) ->
     case emqx_rule_registry:find_action(Name) of
         {ok, #action{module = M, func = F}} ->
             NewArgs = with_resource_config(Args),
-            #{name => Name, args => Args, apply => M:F(NewArgs)};
+            #{name => Name, params => Args,
+              apply => try M:F(NewArgs) catch _:Err -> throw({init_action_failure, Err, {M,F}}) end};
         not_found ->
-            throw(action_not_found)
+            throw({action_not_found, Name})
     end.
 
 with_resource_config(Args = #{'$resource' := ResId}) ->
@@ -172,7 +173,7 @@ with_resource_config(Args = #{'$resource' := ResId}) ->
         {ok, #resource{config = Config}} ->
             maps:merge(Args, Config);
         not_found ->
-            throw(resource_not_found)
+            throw({resource_not_found, ResId})
     end;
 
 with_resource_config(Args) -> Args.
@@ -187,12 +188,13 @@ create_resource(#{name := Name,
             NewConfig = Mod:OnCreate(Name, Config),
             ResId = iolist_to_binary([atom_to_list(Type), ":", Name]),
             Resource = #resource{id = ResId,
+                                 name = Name,
                                  type = Type,
                                  config = NewConfig,
                                  description = iolist_to_binary(Descr)},
             ok = emqx_rule_registry:add_resource(Resource),
             {ok, Resource};
         not_found ->
-            {error, resource_type_not_found}
+            {error, {resource_type_not_found, Name}}
     end.
 

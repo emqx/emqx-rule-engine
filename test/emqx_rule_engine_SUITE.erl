@@ -180,7 +180,7 @@ t_create_resource(_Config) ->
     ok = emqx_rule_engine:register_provider(?APP),
     {ok, #resource{id = ResId}} = emqx_rule_engine:create_resource(
             #{name => <<"debug-resource">>,
-              type => default_resource,
+              type => debug_resource_type,
               config => #{},
               description => <<"debug resource">>}),
     ?assert(true, is_binary(ResId)),
@@ -196,7 +196,7 @@ t_inspect_action(_Config) ->
     ok = emqx_rule_engine:register_provider(?APP),
     {ok, #resource{id = ResId}} = emqx_rule_engine:create_resource(
             #{name => <<"debug-resource">>,
-              type => default_resource,
+              type => debug_resource_type,
               config => #{},
               description => <<"debug resource">>}),
     {ok, #rule{id = Id, topics = [<<"t1">>]}} = emqx_rule_engine:create_rule(
@@ -247,11 +247,12 @@ t_republish_action(_Config) ->
 t_crud_rule_api(_Config) ->
     {ok, [{code, 0}, {data, Rule = #{id := RuleID}}]} =
         emqx_rule_engine_api:create_rule(#{},
-                #{name => <<"debug-rule">>,
-                  for => 'message.publish',
-                  rawsql => <<"select * from \"t/a\"">>,
-                  actions => [{'default:debug_action', #{arg1 => 1}}],
-                  description => <<"debug rule">>}),
+                [{<<"name">>, <<"debug-rule">>},
+                 {<<"for">>, <<"message.publish">>},
+                 {<<"rawsql">>, <<"select * from \"t/a\"">>},
+                 {<<"actions">>, [[{<<"name">>,<<"default:debug_action">>},
+                                   {<<"params">>,[{<<"arg1">>,1}]}]]},
+                 {<<"description">>, <<"debug rule">>}]),
     %ct:pal("RCreated : ~p", [Rule]),
 
     {ok, [{code, 0}, {data, Rules}]} = emqx_rule_engine_api:list_rules(#{},#{}),
@@ -281,10 +282,15 @@ t_show_action_api(_Config) ->
     ok.
 
 t_crud_resources_api(_Config) ->
-    ResId = <<"resource-debug">>,
-    Res = make_simple_resource(ResId),
-    ok = emqx_rule_registry:add_resource(Res),
-
+    %ResId = <<"resource-debug">>,
+    %Res = make_simple_resource(ResId),
+    %ok = emqx_rule_registry:add_resource(Res),
+    {ok, [{code, 0}, {data, #{id := ResId}}]} =
+        emqx_rule_engine_api:create_resource(#{},
+            [{<<"name">>, <<"Simple Resource">>},
+            {<<"type">>, <<"debug_resource_type">>},
+            {<<"config">>, [{<<"a">>, 1}]},
+            {<<"description">>, <<"Simple Resource">>}]),
     {ok, [{code, 0}, {data, Resources}]} = emqx_rule_engine_api:list_resources(#{},#{}),
     %ct:pal("RList : ~p", [Resources]),
     ?assert(length(Resources) > 0),
@@ -292,7 +298,8 @@ t_crud_resources_api(_Config) ->
     ?assertMatch({ok, [{code, 0}, {data, #{id := ResId}}]},
                  emqx_rule_engine_api:show_resource(#{id => ResId},#{})),
 
-    ok = emqx_rule_registry:remove_resource(Res),
+    %ok = emqx_rule_registry:remove_resource(Res),
+    ?assertMatch({ok, [{code, 0}]}, emqx_rule_engine_api:delete_resource(#{id => ResId},#{})),
 
     ?assertMatch({ok, [{code, 404}, _]},
                  emqx_rule_engine_api:show_resource(#{id => ResId},#{})),
@@ -305,9 +312,9 @@ t_list_resource_types_api(_Config) ->
     ok.
 
 t_show_resource_type_api(_Config) ->
-    RShow = emqx_rule_engine_api:show_resource_type(#{name => 'default_resource'},#{}),
+    RShow = emqx_rule_engine_api:show_resource_type(#{name => 'debug_resource_type'},#{}),
     ct:pal("RShow : ~p", [RShow]),
-    ?assertMatch({ok, [{code, 0}, {data, #{name := default_resource}}]}, RShow),
+    ?assertMatch({ok, [{code, 0}, {data, #{name := debug_resource_type}}]}, RShow),
     ok.
 
 %%------------------------------------------------------------------------------
@@ -316,8 +323,9 @@ t_show_resource_type_api(_Config) ->
 
 t_rules_cli(_Config) ->
     RCreate = emqx_rule_engine_cli:rules(["create", "inspect", "message.publish",
-                                          "select * from t1", "default:debug_action",
-                                          "{\"arg1\": 1}", "Debug Rule"]),
+                                          "select * from t1",
+                                          "{\"default:debug_action\": {\"arg1\": 1}}",
+                                          "Debug Rule"]),
     ?assertMatch({match, _}, re:run(RCreate, "created")),
     %ct:pal("Result : ~p", [RCreate]),
 
@@ -351,19 +359,23 @@ t_actions_cli(_Config) ->
     ok.
 
 t_resources_cli(_Config) ->
-    ResId = <<"resource-debug">>,
-    Res = make_simple_resource(ResId),
-    ok = emqx_rule_registry:add_resource(Res),
+    %ResId = <<"resource-debug">>,
+    %Res = make_simple_resource(ResId),
+    %ok = emqx_rule_registry:add_resource(Res),
+    RCreate = emqx_rule_engine_cli:resources(["create", "res-1", "debug_resource_type", "{\"a\" : 1}", "test resource"]),
+    ResId = re:replace(re:replace(RCreate, "Resource\s", "", [{return, list}]), "\screated\n", "", [{return, list}]),
 
     RList = emqx_rule_engine_cli:resources(["list"]),
-    ?assertMatch({match, _}, re:run(RList, "Simple Resource")),
+    ?assertMatch({match, _}, re:run(RList, "res-1")),
     %ct:pal("RList : ~p", [RList]),
 
     RShow = emqx_rule_engine_cli:resources(["show", ResId]),
-    ?assertMatch({match, _}, re:run(RShow, "Simple Resource")),
+    ?assertMatch({match, _}, re:run(RShow, "res-1")),
     %ct:pal("RShow : ~p", [RShow]),
 
-    ok = emqx_rule_registry:remove_resource(Res),
+    %ok = emqx_rule_registry:remove_resource(ResId),
+    RDelete = emqx_rule_engine_cli:resources(["delete", ResId]),
+    ?assertEqual("\"ok~n\"", RDelete),
 
     RShow2 = emqx_rule_engine_cli:resources(["show", ResId]),
     ?assertMatch({match, _}, re:run(RShow2, "Cannot found")),
@@ -372,7 +384,7 @@ t_resources_cli(_Config) ->
 
 t_resource_types_cli(_Config) ->
     RList = emqx_rule_engine_cli:resource_types(["list"]),
-    ?assertMatch({match, _}, re:run(RList, "default_resource")),
+    ?assertMatch({match, _}, re:run(RList, "debug_resource_type")),
     %ct:pal("RList : ~p", [RList]),
 
     RShow = emqx_rule_engine_cli:resource_types(["show", "default:debug_action"]),
