@@ -43,19 +43,19 @@ distclean::
 	@rm -f rebar.lock compile_commands.json cuttlefish
 
 rebar-deps:
-	rebar3 get-deps
+	./rebar3 get-deps
 
 rebar-clean:
-	@rebar3 clean
+	@./rebar3 clean
 
 rebar-compile: rebar-deps
-	rebar3 compile
+	./rebar3 compile
 
 rebar-ct: app.config
-	rebar3 ct
+	./rebar3 ct
 
 rebar-eunit: $(CUTTLEFISH_SCRIPT)
-	@rebar3 eunit
+	@./rebar3 eunit
 
 rebar-xref:
-	@rebar3 xref
+	@./rebar3 xref
