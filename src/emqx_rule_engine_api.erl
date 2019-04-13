@@ -237,7 +237,7 @@ record_to_map(#rule{id = Id,
     #{id => Id,
       name => Name,
       rawsql => RawSQL,
-      actions => [N || #{name := N} <- Actions],
+      actions => [maps:remove(apply, Act) || Act <- Actions],
       enabled => Enabled,
       description => Descr
      };
@@ -253,11 +253,13 @@ record_to_map(#action{name = Name,
      };
 
 record_to_map(#resource{id = Id,
+                        name = Name,
                         type = Type,
                         config = Config,
                         attrs = Attrs,
                         description = Descr}) ->
     #{id => Id,
+      name => Name,
       type => Type,
       config => Config,
       attrs => Attrs,
