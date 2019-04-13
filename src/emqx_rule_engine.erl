@@ -162,7 +162,7 @@ prepare_action({Name, Args}) ->
     case emqx_rule_registry:find_action(Name) of
         {ok, #action{module = M, func = F}} ->
             NewArgs = with_resource_config(Args),
-            #{name => Name, args => Args, apply => M:F(NewArgs)};
+            #{name => Name, params => Args, apply => M:F(NewArgs)};
         not_found ->
             throw({action_not_found, Name})
     end.
@@ -187,6 +187,7 @@ create_resource(#{name := Name,
             NewConfig = Mod:OnCreate(Name, Config),
             ResId = iolist_to_binary([atom_to_list(Type), ":", Name]),
             Resource = #resource{id = ResId,
+                                 name = Name,
                                  type = Type,
                                  config = NewConfig,
                                  description = iolist_to_binary(Descr)},

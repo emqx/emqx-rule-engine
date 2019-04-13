@@ -195,7 +195,7 @@ format(#rule{id = Id,
              actions = Actions,
              enabled = Enabled,
              description = Descr}) ->
-    lists:flatten(io_lib:format("rule(~s, name=~s, for=~s, rawsql=~s, actions=~0p, enabled=~s, description=~s)~n", [Id, Name, Hook, Sql, action_names(Actions), Enabled, Descr]));
+    lists:flatten(io_lib:format("rule(id=~s, name=~s, for=~s, rawsql=~s, actions=~0p, enabled=~s, description=~s)~n", [Id, Name, Hook, Sql, printable_actions(Actions), Enabled, Descr]));
 
 format(#action{name = Name,
                app = App,
@@ -205,12 +205,13 @@ format(#action{name = Name,
                                 [Name, App, Params, Descr]));
 
 format(#resource{id = Id,
+                 name = Name,
                  type = Type,
                  config = Config,
                  attrs = Attrs,
                  description = Descr}) ->
-    lists:flatten(io_lib:format("resource(~s, type=~s, config=~0p, attrs=~0p, description=~s)~n",
-                                [Id, Type, Config, Attrs, Descr]));
+    lists:flatten(io_lib:format("resource(id=~s, name=~s, type=~s, config=~0p, attrs=~0p, description=~s)~n",
+                                [Id, Name, Type, Config, Attrs, Descr]));
 
 format(#resource_type{name = Name,
                       provider = Provider,
@@ -243,8 +244,8 @@ parse_resource_opts(Name, Type, Config, Descr) ->
             {error, Reason}
     end.
 
-action_names(Actions) when is_list(Actions) ->
-    [Name || #{name := Name} <- Actions].
+printable_actions(Actions) when is_list(Actions) ->
+    jsx:encode([maps:remove(apply, Act) || Act <- Actions]).
 
 atom_key_list(BinKeyList) ->
     [{binary_to_existing_atom(K, utf8), V} || {K, V} <- BinKeyList].

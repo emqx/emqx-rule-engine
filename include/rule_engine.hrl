@@ -40,6 +40,7 @@
 
 -record(resource,
         { id :: resource_id()
+        , name :: binary()
         , type :: atom()
         , config :: #{}
         , attrs :: #{}
