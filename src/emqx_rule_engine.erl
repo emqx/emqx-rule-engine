@@ -188,15 +188,19 @@ create_resource(#{name := Name,
                   description := Descr}) ->
     case emqx_rule_registry:find_resource_type(Type) of
         {ok, #resource_type{on_create = {Mod, OnCreate}}} ->
-            NewConfig = Mod:OnCreate(Name, Config),
-            ResId = iolist_to_binary([atom_to_list(Type), ":", Name]),
-            Resource = #resource{id = ResId,
-                                 name = Name,
-                                 type = Type,
-                                 config = NewConfig,
-                                 description = iolist_to_binary(Descr)},
-            ok = emqx_rule_registry:add_resource(Resource),
-            {ok, Resource};
+            case Mod:OnCreate(Name, Config) of
+                {ok, NewConfig} ->
+                    ResId = iolist_to_binary([atom_to_list(Type), ":", Name]),
+                    Resource = #resource{id = ResId,
+                                        name = Name,
+                                        type = Type,
+                                        config = NewConfig,
+                                        description = iolist_to_binary(Descr)},
+                    ok = emqx_rule_registry:add_resource(Resource),
+                    {ok, Resource};
+                {error, Reason} ->
+                    {error, {init_resource_failure, Reason}}
+            end;
         not_found ->
             {error, {resource_type_not_found, Name}}
     end.
