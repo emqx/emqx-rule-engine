@@ -139,9 +139,9 @@ apply_rules([Rule = #rule{name = Name, topics = Filters}|More], Input) ->
 apply_rule(#rule{selects = Selects,
                  conditions = Conditions,
                  actions = Actions}, Input) ->
-    Output = select_and_transform(Selects, Input),
-    match_conditions(Conditions, Output)
-        andalso take_actions(Actions, Output).
+    Selected = select_and_transform(Selects, Input),
+    match_conditions(Conditions, Selected)
+        andalso take_actions(Actions, Selected, Input).
 
 %% Step1 -> Match topic with filters
 match_topic(_Topic, []) ->
@@ -200,11 +200,11 @@ match_conditions({}, _Data) ->
     true.
 
 %% Step4 -> Take actions
-take_actions(Actions, Data) ->
-    lists:foreach(fun(Action) -> take_action(Action, Data) end, Actions).
+take_actions(Actions, Selected, Envs) ->
+    lists:foreach(fun(Action) -> take_action(Action, Selected, Envs) end, Actions).
 
-take_action(#{apply := Apply}, Data) ->
-    Apply(Data).
+take_action(#{apply := Apply}, Selected, Envs) ->
+    Apply(Selected, Envs).
 
 eval({var, Var}, Input) -> %% nested
     nested_get(Var, Input);

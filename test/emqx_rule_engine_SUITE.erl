@@ -34,7 +34,7 @@ all() ->
     , {group, cli}
     , {group, funcs}
     , {group, registry}
-    %, {group, runtime}
+    , {group, runtime}
     ].
 
 suite() ->
@@ -83,7 +83,7 @@ groups() ->
       ]},
      {runtime, [],
       [%t_hookpoints,
-       %t_sqlselect
+       t_sqlselect
       ]}
     ].
 
@@ -222,7 +222,7 @@ t_republish_action(_Config) ->
                     #{name => <<"builtin-republish-rule">>,
                       for => 'message.publish',
                       rawsql => <<"select topic, payload, qos from \"t1\"">>,
-                      actions => [{'built_in:republish_message',
+                      actions => [{'built_in:republish_action',
                                   #{from => <<"t1">>, to => <<"t2">>}}],
                       description => <<"builtin-republish-rule">>}),
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
@@ -572,33 +572,37 @@ t_sqlselect(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     TopicRule = create_simple_repub_rule(
                     <<"topic-rule">>, <<"t2">>,
-                    "SELECT * "
+                    "SELECT payload.x as x "
                     "FROM \"t3/#\", \"t1/#\" "
                     "WHERE x = 1"),
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqx_client:connect(Client),
     {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
     ct:sleep(100),
-    emqx_client:publish(Client, <<"t1">>, <<"{\"x\": 1}">>, 0),
+
+    emqx_client:publish(Client, <<"t1">>, <<"{\"x\":1}">>, 0),
     receive {publish, #{topic := T, payload := Payload}} ->
         ?assertEqual(<<"t2">>, T),
-        ?assertEqual(<<"{\"x\": 1}">>, Payload)
+        ?assertEqual(<<"{\"x\":1}">>, Payload)
     after 1000 ->
         ct:fail(wait_for_t2)
     end,
-    emqx_client:publish(Client, <<"t1">>, <<"{\"x\": 2}">>, 0),
+
+    emqx_client:publish(Client, <<"t1">>, <<"{\"x\":2}">>, 0),
     receive {publish, #{topic := <<"t2">>, payload := _}} ->
         ct:fail(unexpected_t2)
     after 1000 ->
         ok
     end,
-    emqx_client:publish(Client, <<"t3">>, <<"{\"x\": 1}">>, 0),
+
+    emqx_client:publish(Client, <<"t3">>, <<"{\"x\":1}">>, 0),
     receive {publish, #{topic := T3, payload := Payload3}} ->
         ?assertEqual(<<"t2">>, T3),
-        ?assertEqual(<<"{\"x\": 1}">>, Payload3)
+        ?assertEqual(<<"{\"x\":1}">>, Payload3)
     after 1000 ->
         ct:fail(wait_for_t2)
     end,
+
     emqx_client:stop(Client),
     emqx_rule_registry:remove_rule(TopicRule).
 
@@ -618,16 +622,12 @@ make_simple_rule(RuleName) when is_binary(RuleName) ->
           description = <<"simple rule">>}.
 
 create_simple_repub_rule(RuleName, TargetTopic, SQL) ->
-    RepubAction = #action{name = 'simple-republish', app = ?APP,
-                          module = ?MODULE, func = simple_action_republish, params = #{},
-                          description = <<"Simple republish action">>},
-    ok = emqx_rule_registry:add_action(RepubAction),
     {ok, Rule} = emqx_rule_engine:create_rule(
                     #{name => RuleName,
                       for => 'message.publish',
                       rawsql => SQL,
-                      actions => [{'simple-republish',
-                                  #{target_topic => TargetTopic}}],
+                      actions => [{'built_in:republish_action',
+                                  #{from => <<"#">>, to => TargetTopic}}],
                       description => RuleName}),
     Rule.
 
@@ -639,24 +639,6 @@ make_simple_action(ActionName) when is_atom(ActionName) ->
 simple_action_inspect(Params) ->
     fun(Data) ->
         io:format("Action InputData: ~p, Action InitParams: ~p~n", [Data, Params])
-    end.
-
-simple_action_republish(#{target_topic := Topic}) ->
-    fun(Msg = #{payload := Payload}) ->
-        %ct:pal("======== Msg :~p", [Msg]),
-        emqx_broker:safe_publish(
-            #message{
-                id = emqx_guid:gen(),
-                qos = maps:get(<<"qos">>, Msg, 0),
-                from = maps:get(<<"from">>, Msg, 'built_in:republish_action'),
-                flags = maps:get(<<"flags">>, Msg, #{}),
-                headers = maps:get(<<"headers">>, Msg, #{}),
-                topic = Topic,
-                payload = Payload,
-                timestamp = erlang:timestamp()
-            });
-    (Args) ->
-        logger:error("No sufficent args: ~p. Mandatory fields: payload", [Args])
     end.
 
 make_simple_resource(ResId) ->
