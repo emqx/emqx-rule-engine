@@ -60,7 +60,7 @@ action(name=web_hook:publish_action, app=emqx_web_hook, params=#{'$resource' => 
 ### create
 
 ```shell
-$ ./bin/emqx_ctl resources create 'webhook1' 'web_hook' '{"url": "http://host-name/chats"}'
+$ ./bin/emqx_ctl resources create 'webhook1' 'web_hook' -c '{"url": "http://host-name/chats"}'
 
 Resource web_hook:webhook1 created
 ```
@@ -125,5 +125,22 @@ resource_type(name=built_in, provider=emqx_rule_engine, params=#{}, on_create={e
 ./bin/emqx_ctl resources create 'webhook1' 'web_hook' -c '{"url": "http://127.0.0.1:9910", "headers": {"token": "axfw34y235wrq234t4ersgw4t"}, "method": "POST"}'
 
 ./bin/emqx_ctl rules create 'connected_msg_to_http' 'client.connected' 'SELECT * FROM "#"' '{"web_hook:event_action": {"$resource": "web_hook:webhook1", "template": {"client": "${client_id}", "user": "${username}", "c": {"u": "${username}", "e": "${e}"}}}}' -d "Forward connected events to webhook"
+
+```
+
+Start a `web server` using `nc`, and then connect to emqx broker using a mqtt client with username = 'Shawn':
+
+```shell
+nc -l 127.0.0.1 9910
+
+POST / HTTP/1.1
+content-type: application/json
+content-length: 80
+te:
+host: 127.0.0.1:9910
+connection: keep-alive
+token: axfw34y235wrq234t4ersgw4t
+
+{"client":"clientId-E7EYzGa6HK","user":"Shawn","c":{"u":"Shawn","e":null}}
 
 ```

@@ -54,9 +54,9 @@
 %% Default actions for the Rule Engine
 %%------------------------------------------------------------------------------
 
--spec(on_resource_create(binary(), map()) -> {ok, map()} | {error, Reason::term()}).
+-spec(on_resource_create(binary(), map()) -> map()).
 on_resource_create(_Name, Conf) ->
-    {ok, Conf}.
+    Conf.
 
 -spec(inspect_action(Params :: map()) -> action_fun()).
 inspect_action(Params) ->

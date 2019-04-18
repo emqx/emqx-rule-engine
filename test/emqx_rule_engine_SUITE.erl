@@ -654,7 +654,7 @@ make_simple_resource_type(ResTypeName) ->
                    description = <<"Simple Resource Type">>}.
 
 on_simple_resource_type_create(#{}) ->
-    {ok, #{}}.
+    #{}.
 
 hook_metrics_action(_Params) ->
     fun(_Data = #{<<"hook">> := Hookpoint}) ->
