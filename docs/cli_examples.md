@@ -50,7 +50,7 @@ $ ./bin/emqx_ctl rule-actions list
 
 action(name=built_in:inspect_action, app=emqx_rule_engine, params=#{'$resource' => built_in}, description=Debug Action)
 action(name=emqx_web_hook:forward_action, app=emqx_web_hook, params=#{'$resource' => web_hook,url => string}, description=Forward a MQTT message)
-action(name=built_in:republish_message, app=emqx_rule_engine, params=#{'$resource' => built_in,from => topic,to => topic}, description=Republish a MQTT message)
+action(name=built_in:republish_action, app=emqx_rule_engine, params=#{'$resource' => built_in,from => topic,to => topic}, description=Republish a MQTT message)
 ```
 
 ### show

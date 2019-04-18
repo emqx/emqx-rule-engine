@@ -54,7 +54,7 @@ $ curl -XDELETE -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules/
 ```shell
 $ curl -v --basic -u $APPSECRET -k http://localhost:8080/api/v3/actions
 
-{"code":0,"data":[{"app":"emqx_rule_engine","description":"Debug Action","name":"built_in:inspect_action","params":{"$resource":"built_in"}},{"app":"emqx_rule_engine","description":"Republish a MQTT message","name":"built_in:republish_message","params":{"$resource":"built_in","from":"topic","to":"topic"}}]}
+{"code":0,"data":[{"app":"emqx_rule_engine","description":"Debug Action","name":"built_in:inspect_action","params":{"$resource":"built_in"}},{"app":"emqx_rule_engine","description":"Republish a MQTT message","name":"built_in:republish_action","params":{"$resource":"built_in","from":"topic","to":"topic"}}]}
 ```
 
 
