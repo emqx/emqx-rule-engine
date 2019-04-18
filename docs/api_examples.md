@@ -136,3 +136,31 @@ $ curl -XDELETE -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resour
 {"code":0}
 ```
 
+## Rule example using webhook
+
+``` shell
+
+$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resources' -d \
+'{"name":"webhook1", "type": "web_hook", "config": {"url": "http://127.0.0.1:9910", "headers": {"token": "axfw34y235wrq234t4ersgw4t"}, "method": "POST"}, "description": "web hook resource-1"}'
+
+curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules' -d \
+'{"name":"connected_msg_to_http","for":"client.connected","rawsql":"select * from \"#\"","actions":[{"name":"web_hook:event_action","params":{"$resource": "web_hook:webhook1", "template": {"client": "${client_id}", "user": "${username}", "c": {"u": "${username}", "e": "${e}"}}}}],"description":"Forward connected events to webhook"}'
+
+```
+
+Start a `web server` using `nc`, and then connect to emqx broker using a mqtt client with username = 'Shawn':
+
+```shell
+nc -l 127.0.0.1 9910
+
+POST / HTTP/1.1
+content-type: application/json
+content-length: 80
+te:
+host: 127.0.0.1:9910
+connection: keep-alive
+token: axfw34y235wrq234t4ersgw4t
+
+{"client":"clientId-E7EYzGa6HK","user":"Shawn","c":{"u":"Shawn","e":null}}
+
+```
