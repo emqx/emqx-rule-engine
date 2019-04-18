@@ -29,11 +29,6 @@
 
 -import(proplists, [get_value/2]).
 
--define(RAISE(EXP, ERROR),
-        begin
-            try (EXP) catch _:_ -> throw(ERROR) end
-        end).
-
 -define(OPTSPEC_RESOURCE_TYPE, [{type, $t, "type", atom, "Resource Type"}]).
 
 -define(OPTSPEC_RESOURCES_CREATE,

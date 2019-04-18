@@ -166,7 +166,7 @@ prepare_action({Name, Args}) ->
         {ok, #action{module = M, func = F}} ->
             NewArgs = with_resource_config(Args),
             #{name => Name, params => Args,
-              apply => try M:F(NewArgs) catch _:Err -> throw({init_action_failure, Err, {M,F}}) end};
+              apply => ?RAISE(M:F(NewArgs), {init_action_failure,_REASON_,{M,F}})};
         not_found ->
             throw({action_not_found, Name})
     end.
@@ -188,19 +188,15 @@ create_resource(#{name := Name,
                   description := Descr}) ->
     case emqx_rule_registry:find_resource_type(Type) of
         {ok, #resource_type{on_create = {Mod, OnCreate}}} ->
-            case Mod:OnCreate(Name, Config) of
-                {ok, NewConfig} ->
-                    ResId = iolist_to_binary([atom_to_list(Type), ":", Name]),
-                    Resource = #resource{id = ResId,
-                                        name = Name,
-                                        type = Type,
-                                        config = NewConfig,
-                                        description = iolist_to_binary(Descr)},
-                    ok = emqx_rule_registry:add_resource(Resource),
-                    {ok, Resource};
-                {error, Reason} ->
-                    {error, {init_resource_failure, Reason}}
-            end;
+            NewConfig = ?RAISE(Mod:OnCreate(Name, Config), {init_resource_failure,_REASON_,{Mod,OnCreate}}),
+            ResId = iolist_to_binary([atom_to_list(Type), ":", Name]),
+            Resource = #resource{id = ResId,
+                                 name = Name,
+                                 type = Type,
+                                 config = NewConfig,
+                                 description = iolist_to_binary(Descr)},
+            ok = emqx_rule_registry:add_resource(Resource),
+            {ok, Resource};
         not_found ->
             {error, {resource_type_not_found, Name}}
     end.

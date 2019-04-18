@@ -1,17 +1,11 @@
 #Rule-Engine-CLIs
 
-## Enable webhook
-
-```shell
-./bin/emqx_ctl plugins load emqx_web_hook
-```
-
 ## Rules
 
 ### create
 
 ```shell
-$ ./bin/emqx_ctl rules create 'steven_msg_to_http' 'message.publish' 'SELECT payload FROM "#" where user=Steven' '{"emqx_web_hook:forward_action": {"$resource": "web_hook:webhook1", "url": "http://www.baidu.com"}}' -d "Forward msgs from clientid=Steven to webhook"
+$ ./bin/emqx_ctl rules create 'steven_msg_to_http' 'message.publish' 'SELECT payload FROM "#" where user=Steven' '{"web_hook:publish_action": {"$resource": "web_hook:webhook1", "url": "http://www.baidu.com"}}' -d "Forward msgs from clientid=Steven to webhook"
 
 Rule steven_msg_to_http:1555138068602953000 created
 ```
@@ -21,7 +15,7 @@ Rule steven_msg_to_http:1555138068602953000 created
 ```shell
 $ ./bin/emqx_ctl rules show steven_msg_to_http:1555138068602953000
 
-rule(id=steven_msg_to_http:1555138068602953000, name=steven_msg_to_http, for=message.publish, rawsql=SELECT payload FROM "#" where user=Steven, actions=<<"[{\"name\":\"emqx_web_hook:forward_action\",\"params\":{\"$resource\":\"web_hook:webhook1\",\"url\":\"http://www.baidu.com\"}}]">>, enabled=true, description=Forward msgs from clientid=Steven to webhook)
+rule(id=steven_msg_to_http:1555138068602953000, name=steven_msg_to_http, for=message.publish, rawsql=SELECT payload FROM "#" where user=Steven, actions=<<"[{\"name\":\"web_hook:publish_action\",\"params\":{\"$resource\":\"web_hook:webhook1\",\"url\":\"http://www.baidu.com\"}}]">>, enabled=true, description=Forward msgs from clientid=Steven to webhook)
 ```
 
 ### list
@@ -29,7 +23,7 @@ rule(id=steven_msg_to_http:1555138068602953000, name=steven_msg_to_http, for=mes
 ```shell
 $ ./bin/emqx_ctl rules list
 
-rule(id=steven_msg_to_http:1555138068602953000, name=steven_msg_to_http, for=message.publish, rawsql=SELECT payload FROM "#" where user=Steven, actions=<<"[{\"name\":\"emqx_web_hook:forward_action\",\"params\":{\"$resource\":\"web_hook:webhook1\",\"url\":\"http://www.baidu.com\"}}]">>, enabled=true, description=Forward msgs from clientid=Steven to webhook)
+rule(id=steven_msg_to_http:1555138068602953000, name=steven_msg_to_http, for=message.publish, rawsql=SELECT payload FROM "#" where user=Steven, actions=<<"[{\"name\":\"web_hook:publish_action\",\"params\":{\"$resource\":\"web_hook:webhook1\",\"url\":\"http://www.baidu.com\"}}]">>, enabled=true, description=Forward msgs from clientid=Steven to webhook)
 
 ```
 
@@ -49,16 +43,16 @@ ok
 $ ./bin/emqx_ctl rule-actions list
 
 action(name=built_in:inspect_action, app=emqx_rule_engine, params=#{'$resource' => built_in}, description=Debug Action)
-action(name=emqx_web_hook:forward_action, app=emqx_web_hook, params=#{'$resource' => web_hook,url => string}, description=Forward a MQTT message)
+action(name=web_hook:publish_action, app=emqx_web_hook, params=#{'$resource' => web_hook,url => string}, description=Forward a MQTT message)
 action(name=built_in:republish_action, app=emqx_rule_engine, params=#{'$resource' => built_in,from => topic,to => topic}, description=Republish a MQTT message)
 ```
 
 ### show
 
 ```shell
-$ ./bin/emqx_ctl rule-actions show 'emqx_web_hook:forward_action'
+$ ./bin/emqx_ctl rule-actions show 'web_hook:publish_action'
 
-action(name=emqx_web_hook:forward_action, app=emqx_web_hook, params=#{'$resource' => web_hook,url => string}, description=Forward a MQTT message)
+action(name=web_hook:publish_action, app=emqx_web_hook, params=#{'$resource' => web_hook,url => string}, description=Forward a MQTT message)
 ```
 
 ## Resource
@@ -122,4 +116,14 @@ resource_type(name=web_hook, provider=emqx_web_hook, params=#{}, on_create={emqx
 $ ./bin/emqx_ctl resource-types show built_in
 
 resource_type(name=built_in, provider=emqx_rule_engine, params=#{}, on_create={emqx_rule_actions,on_resource_create}, description=Debug resource type)
+```
+
+## Rule example using webhook
+
+``` shell
+
+./bin/emqx_ctl resources create 'webhook1' 'web_hook' -c '{"url": "http://127.0.0.1:9910", "headers": {"token": "axfw34y235wrq234t4ersgw4t"}, "method": "POST"}'
+
+./bin/emqx_ctl rules create 'connected_msg_to_http' 'client.connected' 'SELECT * FROM "#"' '{"web_hook:event_action": {"$resource": "web_hook:webhook1", "template": {"client": "${client_id}", "user": "${username}", "c": {"u": "${username}", "e": "${e}"}}}}' -d "Forward connected events to webhook"
+
 ```

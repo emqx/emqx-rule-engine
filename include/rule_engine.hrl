@@ -93,3 +93,7 @@
 %% Logical operators
 -define(is_logical(Op), (Op =:= 'and' orelse Op =:= 'or')).
 
+-define(RAISE(_EXP_, _ERROR_),
+        begin
+            try (_EXP_) catch _:_REASON_ -> throw(_ERROR_) end
+        end).
