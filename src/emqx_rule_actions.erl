@@ -17,22 +17,24 @@
 
 -include_lib("emqx/include/emqx.hrl").
 
--resource_type(#{name => debug_resource_type,
+-resource_type(#{name => built_in,
                  schema => "emqx_rule_engine",
                  create => on_resource_create,
                  params => #{},
                  description => "Debug resource type"
                 }).
 
--rule_action(#{name => debug_action,
+-rule_action(#{name => inspect_action,
                for => any,
-               func => debug_action,
+               type => built_in,
+               func => inspect_action,
                params => #{},
                description => "Debug Action"
               }).
 
 -rule_action(#{name => republish_message,
                for => 'message.publish',
+               type => built_in,
                func => republish_action,
                params => #{from => topic, to => topic},
                description => "Republish a MQTT message"
@@ -44,7 +46,7 @@
 
 -export([on_resource_create/2]).
 
--export([ debug_action/1
+-export([ inspect_action/1
         , republish_action/1
         ]).
 
@@ -56,10 +58,10 @@
 on_resource_create(_Name, Conf) ->
     Conf.
 
--spec(debug_action(Params :: map()) -> action_fun()).
-debug_action(Params) ->
+-spec(inspect_action(Params :: map()) -> action_fun()).
+inspect_action(Params) ->
     fun(Data) ->
-        io:format("Action input data: ~p~nAction init params: ~p~n", [Data, Params])
+        io:format("[Inspect Action]~nAction input data: ~p~nAction init params: ~p~n", [Data, Params])
     end.
 
 %% A Demo Action.

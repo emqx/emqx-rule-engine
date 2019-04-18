@@ -23,7 +23,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
 
--define(APP, emqx_rule_engine).
 -define(HOOK_METRICS_TAB, hook_metrics_tab).
 
 %%-define(PROPTEST(M,F), true = proper:quickcheck(M:F())).
@@ -126,15 +125,15 @@ init_per_testcase(t_hookpoints, Config) ->
     ok = emqx_rule_engine:register_provider(?APP),
     ets:new(?HOOK_METRICS_TAB, [named_table, set, public]),
     ok = emqx_rule_registry:add_action(
-            #action{name = 'default:hook-metrics-action', app = ?APP,
+            #action{name = 'built_in:hook-metrics-action', app = ?APP,
                     module = ?MODULE, func = hook_metrics_action, params = #{},
                     description = <<"Hook metrics action">>}),
     {ok, Rules} = emqx_rule_engine:create_rule(
                     #{name => <<"debug-rule">>,
                       for => 'message.publish',
                       rawsql => "select * from \"t1\"",
-                      actions => [{'default:debug_action', #{}},
-                                  {'default:hook-metrics-action', #{}}],
+                      actions => [{'built_in:inspect_action', #{}},
+                                  {'built_in:hook-metrics-action', #{}}],
                       description => <<"Debug rule">>}),
     ?assertEqual(8, length(Rules)),
     [{hook_points_rules, Rules} | Config];
@@ -144,7 +143,7 @@ init_per_testcase(_TestCase, Config) ->
 end_per_testcase(t_hookpoints, Config) ->
     ets:delete(?HOOK_METRICS_TAB),
     ok = emqx_rule_registry:remove_rules(?config(hook_points_rules, Config)),
-    ok = emqx_rule_registry:remove_action('default:hook-metrics-action');
+    ok = emqx_rule_registry:remove_action('built_in:hook-metrics-action');
 end_per_testcase(_TestCase, _Config) ->
     ok.
 
@@ -168,7 +167,7 @@ t_create_rule(_Config) ->
             #{name => <<"debug-rule">>,
               for => 'message.publish',
               rawsql => <<"select * from \"t/a\"">>,
-              actions => [{'default:debug_action', #{arg1 => 1}}],
+              actions => [{'built_in:inspect_action', #{arg1 => 1}}],
               description => <<"debug rule">>}),
     %ct:pal("======== emqx_rule_registry:get_rules :~p", [emqx_rule_registry:get_rules()]),
     ?assertMatch({ok,#rule{id = Id, for = 'message.publish'}}, emqx_rule_registry:get_rule(Id)),
@@ -180,7 +179,7 @@ t_create_resource(_Config) ->
     ok = emqx_rule_engine:register_provider(?APP),
     {ok, #resource{id = ResId}} = emqx_rule_engine:create_resource(
             #{name => <<"debug-resource">>,
-              type => debug_resource_type,
+              type => built_in,
               config => #{},
               description => <<"debug resource">>}),
     ?assert(true, is_binary(ResId)),
@@ -196,15 +195,16 @@ t_inspect_action(_Config) ->
     ok = emqx_rule_engine:register_provider(?APP),
     {ok, #resource{id = ResId}} = emqx_rule_engine:create_resource(
             #{name => <<"debug-resource">>,
-              type => debug_resource_type,
+              type => built_in,
               config => #{},
               description => <<"debug resource">>}),
     {ok, #rule{id = Id, topics = [<<"t1">>]}} = emqx_rule_engine:create_rule(
                 #{name => <<"inspect_rule">>,
                   for => 'message.publish',
                   rawsql => "select * from \"t1\"",
-                  actions => [{'default:debug_action',
+                  actions => [{'built_in:inspect_action',
                               #{'$resource' => ResId, a=>1, b=>2}}],
+                  type => built_in,
                   description => <<"Inspect rule">>
                   }),
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
@@ -222,7 +222,7 @@ t_republish_action(_Config) ->
                     #{name => <<"builtin-republish-rule">>,
                       for => 'message.publish',
                       rawsql => <<"select topic, payload, qos from \"t1\"">>,
-                      actions => [{'default:republish_message',
+                      actions => [{'built_in:republish_message',
                                   #{from => <<"t1">>, to => <<"t2">>}}],
                       description => <<"builtin-republish-rule">>}),
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
@@ -250,7 +250,7 @@ t_crud_rule_api(_Config) ->
                 [{<<"name">>, <<"debug-rule">>},
                  {<<"for">>, <<"message.publish">>},
                  {<<"rawsql">>, <<"select * from \"t/a\"">>},
-                 {<<"actions">>, [[{<<"name">>,<<"default:debug_action">>},
+                 {<<"actions">>, [[{<<"name">>,<<"built_in:inspect_action">>},
                                    {<<"params">>,[{<<"arg1">>,1}]}]]},
                  {<<"description">>, <<"debug rule">>}]),
     %ct:pal("RCreated : ~p", [Rule]),
@@ -274,18 +274,22 @@ t_list_actions_api(_Config) ->
     {ok, [{code, 0}, {data, Actions}]} = emqx_rule_engine_api:list_actions(#{},#{}),
     %ct:pal("RList : ~p", [Actions]),
     ?assert(length(Actions) > 0),
+
+    {ok, [{code, 0}, {data, Actions0}]} = emqx_rule_engine_api:list_actions_by_type(#{type => 'built_in'},#{}),
+    %ct:pal("RListT : ~p", [Actions0]),
+    ?assert(length(Actions0) > 0),
     ok.
 
 t_show_action_api(_Config) ->
-    ?assertMatch({ok, [{code, 0}, {data, #{name := 'default:debug_action'}}]},
-                 emqx_rule_engine_api:show_action(#{name => 'default:debug_action'},#{})),
+    ?assertMatch({ok, [{code, 0}, {data, #{name := 'built_in:inspect_action'}}]},
+                 emqx_rule_engine_api:show_action(#{name => 'built_in:inspect_action'},#{})),
     ok.
 
 t_crud_resources_api(_Config) ->
     {ok, [{code, 0}, {data, #{id := ResId}}]} =
         emqx_rule_engine_api:create_resource(#{},
             [{<<"name">>, <<"Simple Resource">>},
-            {<<"type">>, <<"debug_resource_type">>},
+            {<<"type">>, <<"built_in">>},
             {<<"config">>, [{<<"a">>, 1}]},
             {<<"description">>, <<"Simple Resource">>}]),
     {ok, [{code, 0}, {data, Resources}]} = emqx_rule_engine_api:list_resources(#{},#{}),
@@ -306,9 +310,9 @@ t_list_resource_types_api(_Config) ->
     ok.
 
 t_show_resource_type_api(_Config) ->
-    RShow = emqx_rule_engine_api:show_resource_type(#{name => 'debug_resource_type'},#{}),
-    ct:pal("RShow : ~p", [RShow]),
-    ?assertMatch({ok, [{code, 0}, {data, #{name := debug_resource_type}}]}, RShow),
+    RShow = emqx_rule_engine_api:show_resource_type(#{name => 'built_in'},#{}),
+    %ct:pal("RShow : ~p", [RShow]),
+    ?assertMatch({ok, [{code, 0}, {data, #{name := built_in}}]}, RShow),
     ok.
 
 %%------------------------------------------------------------------------------
@@ -318,8 +322,8 @@ t_show_resource_type_api(_Config) ->
 t_rules_cli(_Config) ->
     RCreate = emqx_rule_engine_cli:rules(["create", "inspect", "message.publish",
                                           "select * from t1",
-                                          "{\"default:debug_action\": {\"arg1\": 1}}",
-                                          "Debug Rule"]),
+                                          "{\"built_in:inspect_action\": {\"arg1\": 1}}",
+                                          "-d", "Debug Rule"]),
     ?assertMatch({match, _}, re:run(RCreate, "created")),
     %ct:pal("Result : ~p", [RCreate]),
 
@@ -344,21 +348,28 @@ t_rules_cli(_Config) ->
 
 t_actions_cli(_Config) ->
     RList = emqx_rule_engine_cli:actions(["list"]),
-    ?assertMatch({match, _}, re:run(RList, "debug_action")),
+    ?assertMatch({match, _}, re:run(RList, "inspect_action")),
     %ct:pal("RList : ~p", [RList]),
+    RListT = emqx_rule_engine_cli:actions(["list", "-t", "built_in"]),
+    %ct:pal("RListT : ~p", [RListT]),
+    ?assertMatch({match, _}, re:run(RListT, "inspect_action")),
 
-    RShow = emqx_rule_engine_cli:actions(["show", "default:debug_action"]),
-    ?assertMatch({match, _}, re:run(RShow, "debug_action")),
+    RShow = emqx_rule_engine_cli:actions(["show", "built_in:inspect_action"]),
+    ?assertMatch({match, _}, re:run(RShow, "inspect_action")),
     %ct:pal("RShow : ~p", [RShow]),
     ok.
 
 t_resources_cli(_Config) ->
-    RCreate = emqx_rule_engine_cli:resources(["create", "res-1", "debug_resource_type", "{\"a\" : 1}", "test resource"]),
+    RCreate = emqx_rule_engine_cli:resources(["create", "res-1", "built_in", "{\"a\" : 1}", "-d", "test resource"]),
     ResId = re:replace(re:replace(RCreate, "Resource\s", "", [{return, list}]), "\screated\n", "", [{return, list}]),
 
     RList = emqx_rule_engine_cli:resources(["list"]),
     ?assertMatch({match, _}, re:run(RList, "res-1")),
     %ct:pal("RList : ~p", [RList]),
+
+    RListT = emqx_rule_engine_cli:resources(["list", "-t", "built_in"]),
+    ?assertMatch({match, _}, re:run(RListT, "res-1")),
+    %ct:pal("RListT : ~p", [RListT]),
 
     RShow = emqx_rule_engine_cli:resources(["show", ResId]),
     ?assertMatch({match, _}, re:run(RShow, "res-1")),
@@ -374,11 +385,11 @@ t_resources_cli(_Config) ->
 
 t_resource_types_cli(_Config) ->
     RList = emqx_rule_engine_cli:resource_types(["list"]),
-    ?assertMatch({match, _}, re:run(RList, "debug_resource_type")),
+    ?assertMatch({match, _}, re:run(RList, "built_in")),
     %ct:pal("RList : ~p", [RList]),
 
-    RShow = emqx_rule_engine_cli:resource_types(["show", "default:debug_action"]),
-    ?assertMatch({match, _}, re:run(RShow, "debug_action")),
+    RShow = emqx_rule_engine_cli:resource_types(["show", "built_in:inspect_action"]),
+    ?assertMatch({match, _}, re:run(RShow, "inspect_action")),
     %ct:pal("RShow : ~p", [RShow]),
     ok.
 
@@ -603,7 +614,7 @@ make_simple_rule(RuleName) when is_binary(RuleName) ->
           topics = [<<"simple/topic">>],
           selects = [<<"*">>],
           conditions = {},
-          actions = [{'default:debug_action', #{}}],
+          actions = [{'built_in:inspect_action', #{}}],
           description = <<"simple rule">>}.
 
 create_simple_repub_rule(RuleName, TargetTopic, SQL) ->
@@ -632,12 +643,12 @@ simple_action_inspect(Params) ->
 
 simple_action_republish(#{target_topic := Topic}) ->
     fun(Msg = #{payload := Payload}) ->
-        ct:pal("======== Msg :~p", [Msg]),
+        %ct:pal("======== Msg :~p", [Msg]),
         emqx_broker:safe_publish(
             #message{
                 id = emqx_guid:gen(),
                 qos = maps:get(<<"qos">>, Msg, 0),
-                from = maps:get(<<"from">>, Msg, 'default:republish_action'),
+                from = maps:get(<<"from">>, Msg, 'built_in:republish_action'),
                 flags = maps:get(<<"flags">>, Msg, #{}),
                 headers = maps:get(<<"headers">>, Msg, #{}),
                 topic = Topic,

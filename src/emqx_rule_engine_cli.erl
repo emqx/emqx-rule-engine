@@ -34,6 +34,23 @@
             try (EXP) catch _:_ -> throw(ERROR) end
         end).
 
+-define(OPTSPEC_RESOURCE_TYPE, [{type, $t, "type", atom, "Resource Type"}]).
+
+-define(OPTSPEC_RESOURCES_CREATE,
+        [{name, undefined, undefined, binary, "Resource Name"}
+        ,{type, undefined, undefined, atom, "Resource Type"}
+        ,{config, $c, "config", {binary, <<"{}">>}, "Config"}
+        ,{descr, $d, "descr", {binary, <<"">>}, "Description"}
+        ]).
+
+-define(OPTSPEC_RULES_CREATE,
+        [{name, undefined, undefined, binary, "Rule Name"}
+        ,{hook, undefined, undefined, atom, "On Which Hook"}
+        ,{sql, undefined, undefined, binary, "Filter Condition SQL"}
+        ,{actions, undefined, undefined, binary, "Action List To Be Used"}
+        ,{descr, $d, "descr", {binary, <<"">>}, "Description"}
+        ]).
+
 %%-----------------------------------------------------------------------------
 %% Load/Unload Commands
 %%-----------------------------------------------------------------------------
@@ -81,12 +98,7 @@ rules(["create" | Params]) ->
                     throw:Error ->
                         emqx_cli:print("Invalid options: ~p~n", [Error])
                 end
-              end, Params,[{name, undefined, undefined, binary, "Rule Name"}
-                          ,{hook, undefined, undefined, atom, "On Which Hook"}
-                          ,{sql, undefined, undefined, binary, "Filter Condition SQL"}
-                          ,{actions, undefined, undefined, binary, "Action List To Be Used"}
-                          ,{descr, $d, "descr", {binary, <<"">>}, "Description"}
-                          ], {?FUNCTION_NAME, create});
+              end, Params, ?OPTSPEC_RULES_CREATE, {?FUNCTION_NAME, create});
 
 rules(["delete", RuleId]) ->
     ok = emqx_rule_registry:remove_rule(list_to_binary(RuleId)),
@@ -105,6 +117,12 @@ rules(_usage) ->
 
 actions(["list"]) ->
     print_all(emqx_rule_registry:get_actions());
+
+actions(["list" | Params]) ->
+    with_opts(fun({Opts, _}) ->
+            print_all(emqx_rule_registry:get_actions_by_type(
+                get_value(type, Opts)))
+        end, Params, ?OPTSPEC_RESOURCE_TYPE, {?FUNCTION_NAME, list});
 
 actions(["show", ActionId]) ->
     print_with(fun emqx_rule_registry:find_action/1, list_to_existing_atom(ActionId));
@@ -128,20 +146,16 @@ resources(["create" | Params]) ->
                     throw:Reason ->
                         emqx_cli:print("Invalid options: ~p~n", [Reason])
                 end
-              end, Params,[{name, undefined, undefined, binary, "Resource Name"}
-                          ,{type, undefined, undefined, atom, "Resource Type"}
-                          ,{config, $c, "config", {binary, <<"{}">>}, "Config"}
-                          ,{descr, $d, "descr", {binary, <<"">>}, "Description"}
-                          ], {?FUNCTION_NAME, create});
+              end, Params, ?OPTSPEC_RESOURCES_CREATE, {?FUNCTION_NAME, create});
 
 resources(["list"]) ->
     print_all(emqx_rule_registry:get_resources());
 
 resources(["list" | Params]) ->
     with_opts(fun({Opts, _}) ->
-            print_all(emqx_rule_registry:get_resources_of_type(
+            print_all(emqx_rule_registry:get_resources_by_type(
                 get_value(type, Opts)))
-        end, Params, [{type, $t, "type", atom, "Resource Type"}], {?FUNCTION_NAME, list});
+        end, Params, ?OPTSPEC_RESOURCE_TYPE, {?FUNCTION_NAME, list});
 
 resources(["show", ResourceId]) ->
     print_with(fun emqx_rule_registry:find_resource/1, list_to_binary(ResourceId));
@@ -202,10 +216,11 @@ format(#rule{id = Id,
 
 format(#action{name = Name,
                app = App,
+               type = Type,
                params = Params,
                description = Descr}) ->
-    lists:flatten(io_lib:format("action(name='~s', app='~s', params=~0p, description='~s')~n",
-                                [Name, App, Params, Descr]));
+    lists:flatten(io_lib:format("action(name='~s', app='~s', type='~s', params=~0p, description='~s')~n",
+                                [Name, App, Type, Params, Descr]));
 
 format(#resource{id = Id,
                  name = Name,

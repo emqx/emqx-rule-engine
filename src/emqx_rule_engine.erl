@@ -63,6 +63,7 @@ find_resource_types(App) ->
 
 new_action({App, Mod, #{name := Name,
                         for := Hook,
+                        type := Type,
                         func := Func,
                         params := Params,
                         description := Descr}}) ->
@@ -71,12 +72,7 @@ new_action({App, Mod, #{name := Name,
         true -> ok;
         false -> error({action_func_not_found, Func})
     end,
-    Prefix = case App =:= ?MODULE of
-                 true -> default;
-                 false -> App
-             end,
-    Name1 = list_to_atom(lists:concat([Prefix, ":", Name])),
-    #action{name = Name1, for = Hook, app = App,
+    #action{name = action_name(Type, Name), for = Hook, app = App, type = Type,
             module = Mod, func = Func, params = Params,
             description = iolist_to_binary(Descr)}.
 
@@ -153,9 +149,6 @@ create_rule(Params = #{name := Name,
         Error -> error(Error)
     end.
 
-rule_id(Name) ->
-    iolist_to_binary([Name, ":", integer_to_list(erlang:system_time())]).
-
 prepare_action(Name) when is_atom(Name) ->
     prepare_action({Name, #{}});
 prepare_action({Name, Args}) ->
@@ -198,3 +191,8 @@ create_resource(#{name := Name,
             {error, {resource_type_not_found, Name}}
     end.
 
+rule_id(Name) ->
+    iolist_to_binary([Name, ":", integer_to_list(erlang:system_time())]).
+
+action_name(Type, Name) ->
+    list_to_atom(lists:concat([Type, ":", Name])).

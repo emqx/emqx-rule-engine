@@ -48,9 +48,9 @@ ok
 ```shell
 $ ./bin/emqx_ctl rule-actions list
 
-action(name=default:debug_action, app=emqx_rule_engine, params=#{'$resource' => debug_resource_type}, description=Debug Action)
+action(name=built_in:inspect_action, app=emqx_rule_engine, params=#{'$resource' => built_in}, description=Debug Action)
 action(name=emqx_web_hook:forward_action, app=emqx_web_hook, params=#{'$resource' => web_hook,url => string}, description=Forward a MQTT message)
-action(name=default:republish_message, app=emqx_rule_engine, params=#{'$resource' => debug_resource_type,from => topic,to => topic}, description=Republish a MQTT message)
+action(name=built_in:republish_message, app=emqx_rule_engine, params=#{'$resource' => built_in,from => topic,to => topic}, description=Republish a MQTT message)
 ```
 
 ### show
@@ -112,14 +112,14 @@ ok
 ```shell
 $ ./bin/emqx_ctl resource-types list
 
-resource_type(name=debug_resource_type, provider=emqx_rule_engine, params=#{}, on_create={emqx_rule_actions,on_resource_create}, description=Debug resource type)
+resource_type(name=built_in, provider=emqx_rule_engine, params=#{}, on_create={emqx_rule_actions,on_resource_create}, description=Debug resource type)
 resource_type(name=web_hook, provider=emqx_web_hook, params=#{}, on_create={emqx_web_hook_actions,on_resource_create}, description=WebHook Resource)
 ```
 
 ### show
 
 ```shell
-$ ./bin/emqx_ctl resource-types show debug_resource_type
+$ ./bin/emqx_ctl resource-types show built_in
 
-resource_type(name=debug_resource_type, provider=emqx_rule_engine, params=#{}, on_create={emqx_rule_actions,on_resource_create}, description=Debug resource type)
+resource_type(name=built_in, provider=emqx_rule_engine, params=#{}, on_create={emqx_rule_actions,on_resource_create}, description=Debug resource type)
 ```
