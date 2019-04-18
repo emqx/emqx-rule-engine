@@ -122,7 +122,7 @@ end_per_group(_Groupname, _Config) ->
 %%------------------------------------------------------------------------------
 
 init_per_testcase(t_hookpoints, Config) ->
-    ok = emqx_rule_engine:register_provider(?APP),
+    ok = emqx_rule_engine:load_providers(),
     ets:new(?HOOK_METRICS_TAB, [named_table, set, public]),
     ok = emqx_rule_registry:add_action(
             #action{name = 'built_in:hook-metrics-action', app = ?APP,
@@ -152,17 +152,17 @@ end_per_testcase(_TestCase, _Config) ->
 %%------------------------------------------------------------------------------
 
 t_register_provider(_Config) ->
-    ok = emqx_rule_engine:register_provider(?APP),
+    ok = emqx_rule_engine:load_providers(),
     ?assert(length(emqx_rule_registry:get_actions()) >= 2),
     ok.
 
 t_unregister_provider(_Config) ->
-    ok = emqx_rule_engine:unregister_provider(?APP),
+    ok = emqx_rule_engine:unload_providers(),
     ?assert(length(emqx_rule_registry:get_actions()) == 0),
     ok.
 
 t_create_rule(_Config) ->
-    ok = emqx_rule_engine:register_provider(?APP),
+    ok = emqx_rule_engine:load_providers(),
     {ok, #rule{id = Id}} = emqx_rule_engine:create_rule(
             #{name => <<"debug-rule">>,
               for => 'message.publish',
@@ -171,19 +171,19 @@ t_create_rule(_Config) ->
               description => <<"debug rule">>}),
     %ct:pal("======== emqx_rule_registry:get_rules :~p", [emqx_rule_registry:get_rules()]),
     ?assertMatch({ok,#rule{id = Id, for = 'message.publish'}}, emqx_rule_registry:get_rule(Id)),
-    ok = emqx_rule_engine:unregister_provider(?APP),
+    ok = emqx_rule_engine:unload_providers(),
     emqx_rule_registry:remove_rule(Id),
     ok.
 
 t_create_resource(_Config) ->
-    ok = emqx_rule_engine:register_provider(?APP),
+    ok = emqx_rule_engine:load_providers(),
     {ok, #resource{id = ResId}} = emqx_rule_engine:create_resource(
             #{name => <<"debug-resource">>,
               type => built_in,
               config => #{},
               description => <<"debug resource">>}),
     ?assert(true, is_binary(ResId)),
-    ok = emqx_rule_engine:unregister_provider(?APP),
+    ok = emqx_rule_engine:unload_providers(),
     emqx_rule_registry:remove_resource(ResId),
     ok.
 
@@ -192,7 +192,7 @@ t_create_resource(_Config) ->
 %%------------------------------------------------------------------------------
 
 t_inspect_action(_Config) ->
-    ok = emqx_rule_engine:register_provider(?APP),
+    ok = emqx_rule_engine:load_providers(),
     {ok, #resource{id = ResId}} = emqx_rule_engine:create_resource(
             #{name => <<"debug-resource">>,
               type => built_in,
@@ -216,7 +216,7 @@ t_inspect_action(_Config) ->
     ok.
 
 t_republish_action(_Config) ->
-    ok = emqx_rule_engine:register_provider(?APP),
+    ok = emqx_rule_engine:load_providers(),
     {ok, #rule{id = Id, for = 'message.publish'}} =
         emqx_rule_engine:create_rule(
                     #{name => <<"builtin-republish-rule">>,
@@ -569,7 +569,7 @@ client_disconnected(Client) ->
     ok.
 
 t_sqlselect(_Config) ->
-    ok = emqx_rule_engine:register_provider(?APP),
+    ok = emqx_rule_engine:load_providers(),
     TopicRule = create_simple_repub_rule(
                     <<"topic-rule">>, <<"t2">>,
                     "SELECT * "

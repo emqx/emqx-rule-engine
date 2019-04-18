@@ -16,8 +16,8 @@
 
 -include("rule_engine.hrl").
 
--export([ register_provider/1
-        , unregister_provider/1
+-export([ load_providers/0
+        , unload_providers/0
         ]).
 
 -export([ create_rule/1
@@ -36,20 +36,40 @@
              ]).
 
 %%------------------------------------------------------------------------------
-%% Register an application as rule-engine's provider
+%% Load resource/action providers from all available applications
 %%------------------------------------------------------------------------------
 
-%% Register an application as rule engine's provider.
--spec(register_provider(App :: atom()) -> ok).
-register_provider(App) when is_atom(App) ->
-    ok = register_actions(App),
-    ok = register_resource_types(App).
+%% Load all providers .
+-spec(load_providers() -> ok).
+load_providers() ->
+    [load_provider(App) || App <- ignore_lib_apps(application:loaded_applications())],
+    ok.
 
-register_actions(App) ->
+-spec(load_provider(App :: atom()) -> ok).
+load_provider(App) when is_atom(App) ->
+    ok = load_actions(App),
+    ok = load_resource_types(App).
+
+%%------------------------------------------------------------------------------
+%% Unload providers
+%%------------------------------------------------------------------------------
+%% Load all providers .
+-spec(unload_providers() -> ok).
+unload_providers() ->
+    [unload_provider(App) || App <- ignore_lib_apps(application:loaded_applications())],
+    ok.
+
+%% @doc Unload a provider.
+-spec(unload_provider(App :: atom()) -> ok).
+unload_provider(App) ->
+    ok = emqx_rule_registry:remove_actions_of(App),
+    ok = emqx_rule_registry:unregister_resource_types_of(App).
+
+load_actions(App) ->
     Actions = find_actions(App),
     emqx_rule_registry:add_actions(Actions).
 
-register_resource_types(App) ->
+load_resource_types(App) ->
     ResourceTypes = find_resource_types(App),
     emqx_rule_registry:register_resource_types(ResourceTypes).
 
@@ -111,16 +131,6 @@ module_attributes(Module) ->
         error:undef -> [];
         error:Reason -> error(Reason)
     end.
-
-%%------------------------------------------------------------------------------
-%% Unregister a provider
-%%------------------------------------------------------------------------------
-
-%% @doc Unregister a provider.
--spec(unregister_provider(App :: atom()) -> ok).
-unregister_provider(App) ->
-    ok = emqx_rule_registry:remove_actions_of(App),
-    ok = emqx_rule_registry:unregister_resource_types_of(App).
 
 %%------------------------------------------------------------------------------
 %% Create a rule or resource
@@ -196,3 +206,13 @@ rule_id(Name) ->
 
 action_name(Type, Name) ->
     list_to_atom(lists:concat([Type, ":", Name])).
+
+ignore_lib_apps(Apps) ->
+    LibApps = [kernel, stdlib, sasl, appmon, eldap, erts,
+               syntax_tools, ssl, crypto, mnesia, os_mon,
+               inets, goldrush, gproc, runtime_tools,
+               snmp, otp_mibs, public_key, asn1, ssh, hipe,
+               common_test, observer, webtool, xmerl, tools,
+               test_server, compiler, debugger, eunit, et,
+               wx],
+    [AppName || {AppName, _, _} <- Apps, not lists:member(AppName, LibApps)].
