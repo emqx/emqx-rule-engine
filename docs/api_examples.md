@@ -57,6 +57,34 @@ $ curl -v --basic -u $APPSECRET -k http://localhost:8080/api/v3/actions
 {"code":0,"data":[{"app":"emqx_rule_engine","description":"Debug Action","name":"built_in:inspect_action","params":{"$resource":"built_in"}},{"app":"emqx_rule_engine","description":"Republish a MQTT message","name":"built_in:republish_action","params":{"$resource":"built_in","from":"topic","to":"topic"}}]}
 ```
 
+### list all actions of a resource type
+
+```shell
+$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resource_types/built_in/actions'
+
+{"code":0,"data":[{"app":"emqx_rule_engine","description":"Debug Action","name":"built_in:inspect_action","params":{},"type":"built_in"},{"app":"emqx_rule_engine","description":"Republish a MQTT message","name":"built_in:republish_action","params":{"from":"topic","to":"topic"},"type":"built_in"}]}
+```
+
+
+
+### list all actions of a hook type
+
+```shell
+$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/actions?for=message.publish'
+
+{"app":"emqx_rule_engine","description":"Republish a MQTT message","name":"built_in:republish_action","params":{"from":"topic","to":"topic"},"type":"built_in"}]}
+
+$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/actions?for=$messages'
+
+{"code":0,"data":[{"app":"emqx_rule_engine","description":"Debug Action","for":"$any","name":"built_in:inspect_action","params":{},"type":"built_in"},{"app":"emqx_rule_engine","description":"Republish a MQTT message","for":"message.publish","name":"built_in:republish_action","params":{"from":"topic","to":"topic"},"type":"built_in"},{"app":"emqx_web_hook","description":"Forward Messages to Web Server","for":"message.publish","name":"web_hook:publish_action","params":{"$resource":"web_hook"},"type":"web_hook"}]}
+
+$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/actions?for=$events'
+
+{"code":0,"data":[{"app":"emqx_web_hook","description":"Forward Events to Web Server","for":"$events","name":"web_hook:event_action","params":{"$resource":"web_hook","template":"json"},"type":"web_hook"},{"app":"emqx_rule_engine","description":"Debug Action","for":"$any","name":"built_in:inspect_action","params":{},"type":"built_in"}]}
+
+
+```
+
 
 
 ### show

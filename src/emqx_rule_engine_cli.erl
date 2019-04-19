@@ -29,13 +29,18 @@
 
 -import(proplists, [get_value/2]).
 
--define(OPTSPEC_RESOURCE_TYPE, [{type, $t, "type", atom, "Resource Type"}]).
+-define(OPTSPEC_RESOURCE_TYPE,
+        [{type, $t, "type", {atom, undefined}, "Resource Type"}]).
+-define(OPTSPEC_ACTION_TYPE,
+        [ {type, $t, "type", {atom, undefined}, "Resource Type"}
+        , {hook, $k, "hook", {atom, undefined}, "Hook Type"}
+        ]).
 
 -define(OPTSPEC_RESOURCES_CREATE,
-        [{name, undefined, undefined, binary, "Resource Name"}
-        ,{type, undefined, undefined, atom, "Resource Type"}
-        ,{config, $c, "config", {binary, <<"{}">>}, "Config"}
-        ,{descr, $d, "descr", {binary, <<"">>}, "Description"}
+        [ {name, undefined, undefined, binary, "Resource Name"}
+        , {type, undefined, undefined, atom, "Resource Type"}
+        , {config, $c, "config", {binary, <<"{}">>}, "Config"}
+        , {descr, $d, "descr", {binary, <<"">>}, "Description"}
         ]).
 
 -define(OPTSPEC_RULES_CREATE,
@@ -110,14 +115,10 @@ rules(_usage) ->
 %% 'rule-actions' command
 %%-----------------------------------------------------------------------------
 
-actions(["list"]) ->
-    print_all(emqx_rule_registry:get_actions());
-
 actions(["list" | Params]) ->
     with_opts(fun({Opts, _}) ->
-            print_all(emqx_rule_registry:get_actions_by_type(
-                get_value(type, Opts)))
-        end, Params, ?OPTSPEC_RESOURCE_TYPE, {?FUNCTION_NAME, list});
+            print_all(get_actions(get_value(type, Opts), get_value(hook, Opts)))
+        end, Params, ?OPTSPEC_ACTION_TYPE, {'rule-actions', list});
 
 actions(["show", ActionId]) ->
     print_with(fun emqx_rule_registry:find_action/1, list_to_existing_atom(ActionId));
@@ -210,12 +211,13 @@ format(#rule{id = Id,
     lists:flatten(io_lib:format("rule(id='~s', name='~s', for='~s', rawsql='~s', actions=~s, enabled='~s', description='~s')~n", [Id, Name, Hook, Sql, printable_actions(Actions), Enabled, Descr]));
 
 format(#action{name = Name,
+               for = Hook,
                app = App,
                type = Type,
                params = Params,
                description = Descr}) ->
-    lists:flatten(io_lib:format("action(name='~s', app='~s', type='~s', params=~0p, description='~s')~n",
-                                [Name, App, Type, Params, Descr]));
+    lists:flatten(io_lib:format("action(name='~s', app='~s', for='~s', type='~s', params=~0p, description='~s')~n",
+                                [Name, App, Hook, Type, Params, Descr]));
 
 format(#resource{id = Id,
                  name = Name,
@@ -266,3 +268,15 @@ with_opts(Action, RawParams, OptSpecList, {CmdObject, CmdName}) ->
                 io_lib:format("emqx_ctl ~s ~s", [CmdObject, CmdName]), standard_io),
             emqx_cli:print("~p~n", [Reason])
     end.
+
+get_actions(undefined, undefined) ->
+    emqx_rule_registry:get_actions();
+get_actions(Type, undefined) ->
+    emqx_rule_registry:get_actions_by_type(Type);
+get_actions(undefined, Hook) ->
+    emqx_rule_registry:get_actions_for(Hook);
+get_actions(Type, Hook) ->
+    ActionsByType = emqx_rule_registry:get_actions_by_type(Type),
+    ActionsByHook = emqx_rule_registry:get_actions_for(Hook),
+    [ActT || ActT <- ActionsByType,
+             ActH <- ActionsByHook, ActT =:= ActH].
