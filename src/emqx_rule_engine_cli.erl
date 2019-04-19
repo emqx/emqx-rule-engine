@@ -29,10 +29,27 @@
 
 -import(proplists, [get_value/2]).
 
--define(RAISE(EXP, ERROR),
-        begin
-            try (EXP) catch _:_ -> throw(ERROR) end
-        end).
+-define(OPTSPEC_RESOURCE_TYPE,
+        [{type, $t, "type", {atom, undefined}, "Resource Type"}]).
+-define(OPTSPEC_ACTION_TYPE,
+        [ {type, $t, "type", {atom, undefined}, "Resource Type"}
+        , {hook, $k, "hook", {atom, undefined}, "Hook Type"}
+        ]).
+
+-define(OPTSPEC_RESOURCES_CREATE,
+        [ {name, undefined, undefined, binary, "Resource Name"}
+        , {type, undefined, undefined, atom, "Resource Type"}
+        , {config, $c, "config", {binary, <<"{}">>}, "Config"}
+        , {descr, $d, "descr", {binary, <<"">>}, "Description"}
+        ]).
+
+-define(OPTSPEC_RULES_CREATE,
+        [{name, undefined, undefined, binary, "Rule Name"}
+        ,{hook, undefined, undefined, atom, "On Which Hook"}
+        ,{sql, undefined, undefined, binary, "Filter Condition SQL"}
+        ,{actions, undefined, undefined, binary, "Action List To Be Used"}
+        ,{descr, $d, "descr", {binary, <<"">>}, "Description"}
+        ]).
 
 %%-----------------------------------------------------------------------------
 %% Load/Unload Commands
@@ -81,12 +98,7 @@ rules(["create" | Params]) ->
                     throw:Error ->
                         emqx_cli:print("Invalid options: ~p~n", [Error])
                 end
-              end, Params,[{name, undefined, undefined, binary, "Rule Name"}
-                          ,{hook, undefined, undefined, atom, "On Which Hook"}
-                          ,{sql, undefined, undefined, binary, "Filter Condition SQL"}
-                          ,{actions, undefined, undefined, binary, "Action List To Be Used"}
-                          ,{descr, $d, "descr", {binary, <<"">>}, "Description"}
-                          ], {?FUNCTION_NAME, create});
+              end, Params, ?OPTSPEC_RULES_CREATE, {?FUNCTION_NAME, create});
 
 rules(["delete", RuleId]) ->
     ok = emqx_rule_registry:remove_rule(list_to_binary(RuleId)),
@@ -103,8 +115,10 @@ rules(_usage) ->
 %% 'rule-actions' command
 %%-----------------------------------------------------------------------------
 
-actions(["list"]) ->
-    print_all(emqx_rule_registry:get_actions());
+actions(["list" | Params]) ->
+    with_opts(fun({Opts, _}) ->
+            print_all(get_actions(get_value(type, Opts), get_value(hook, Opts)))
+        end, Params, ?OPTSPEC_ACTION_TYPE, {'rule-actions', list});
 
 actions(["show", ActionId]) ->
     print_with(fun emqx_rule_registry:find_action/1, list_to_existing_atom(ActionId));
@@ -128,20 +142,16 @@ resources(["create" | Params]) ->
                     throw:Reason ->
                         emqx_cli:print("Invalid options: ~p~n", [Reason])
                 end
-              end, Params,[{name, undefined, undefined, binary, "Resource Name"}
-                          ,{type, undefined, undefined, atom, "Resource Type"}
-                          ,{config, $c, "config", {binary, <<"{}">>}, "Config"}
-                          ,{descr, $d, "descr", {binary, <<"">>}, "Description"}
-                          ], {?FUNCTION_NAME, create});
+              end, Params, ?OPTSPEC_RESOURCES_CREATE, {?FUNCTION_NAME, create});
 
 resources(["list"]) ->
     print_all(emqx_rule_registry:get_resources());
 
 resources(["list" | Params]) ->
     with_opts(fun({Opts, _}) ->
-            print_all(emqx_rule_registry:get_resources_of_type(
+            print_all(emqx_rule_registry:get_resources_by_type(
                 get_value(type, Opts)))
-        end, Params, [{type, $t, "type", atom, "Resource Type"}], {?FUNCTION_NAME, list});
+        end, Params, ?OPTSPEC_RESOURCE_TYPE, {?FUNCTION_NAME, list});
 
 resources(["show", ResourceId]) ->
     print_with(fun emqx_rule_registry:find_resource/1, list_to_binary(ResourceId));
@@ -198,14 +208,16 @@ format(#rule{id = Id,
              actions = Actions,
              enabled = Enabled,
              description = Descr}) ->
-    lists:flatten(io_lib:format("rule(id=~s, name=~s, for=~s, rawsql=~s, actions=~0p, enabled=~s, description=~s)~n", [Id, Name, Hook, Sql, printable_actions(Actions), Enabled, Descr]));
+    lists:flatten(io_lib:format("rule(id='~s', name='~s', for='~s', rawsql='~s', actions=~s, enabled='~s', description='~s')~n", [Id, Name, Hook, Sql, printable_actions(Actions), Enabled, Descr]));
 
 format(#action{name = Name,
+               for = Hook,
                app = App,
+               type = Type,
                params = Params,
                description = Descr}) ->
-    lists:flatten(io_lib:format("action(name=~s, app=~s, params=~0p, description=~s)~n",
-                                [Name, App, Params, Descr]));
+    lists:flatten(io_lib:format("action(name='~s', app='~s', for='~s', type='~s', params=~0p, description='~s')~n",
+                                [Name, App, Hook, Type, Params, Descr]));
 
 format(#resource{id = Id,
                  name = Name,
@@ -213,15 +225,14 @@ format(#resource{id = Id,
                  config = Config,
                  attrs = Attrs,
                  description = Descr}) ->
-    lists:flatten(io_lib:format("resource(id=~s, name=~s, type=~s, config=~0p, attrs=~0p, description=~s)~n",
-                                [Id, Name, Type, Config, Attrs, Descr]));
+    lists:flatten(io_lib:format("resource(id='~s', name='~s', type='~s', config=~0p, attrs=~0p, description='~s')~n", [Id, Name, Type, Config, Attrs, Descr]));
 
 format(#resource_type{name = Name,
                       provider = Provider,
                       params = Params,
                       on_create = OnCreate,
                       description = Descr}) ->
-    lists:flatten(io_lib:format("resource_type(name=~s, provider=~s, params=~0p, on_create=~0p, description=~s)~n", [Name, Provider, Params, OnCreate, Descr])).
+    lists:flatten(io_lib:format("resource_type(name='~s', provider='~s', params=~0p, on_create=~0p, description='~s')~n", [Name, Provider, Params, OnCreate, Descr])).
 
 make_rule(Opts) ->
     Actions = get_value(actions, Opts),
@@ -257,3 +268,15 @@ with_opts(Action, RawParams, OptSpecList, {CmdObject, CmdName}) ->
                 io_lib:format("emqx_ctl ~s ~s", [CmdObject, CmdName]), standard_io),
             emqx_cli:print("~p~n", [Reason])
     end.
+
+get_actions(undefined, undefined) ->
+    emqx_rule_registry:get_actions();
+get_actions(Type, undefined) ->
+    emqx_rule_registry:get_actions_by_type(Type);
+get_actions(undefined, Hook) ->
+    emqx_rule_registry:get_actions_for(Hook);
+get_actions(Type, Hook) ->
+    ActionsByType = emqx_rule_registry:get_actions_by_type(Type),
+    ActionsByHook = emqx_rule_registry:get_actions_for(Hook),
+    [ActT || ActT <- ActionsByType,
+             ActH <- ActionsByHook, ActT =:= ActH].

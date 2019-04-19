@@ -17,34 +17,35 @@
 
 -include_lib("emqx/include/emqx.hrl").
 
--resource_type(#{name => debug_resource_type,
-                 schema => "emqx_rule_engine",
+-resource_type(#{name => built_in,
                  create => on_resource_create,
                  params => #{},
                  description => "Debug resource type"
                 }).
 
--rule_action(#{name => debug_action,
-               for => any,
-               func => debug_action,
+-rule_action(#{name => inspect_action,
+               for => '$any',
+               type => built_in,
+               func => inspect_action,
                params => #{},
                description => "Debug Action"
               }).
 
--rule_action(#{name => republish_message,
+-rule_action(#{name => republish_action,
                for => 'message.publish',
+               type => built_in,
                func => republish_action,
                params => #{from => topic, to => topic},
                description => "Republish a MQTT message"
               }).
 
--type(action_fun() :: fun((Data :: map()) -> Result :: any())).
+-type(action_fun() :: fun((SelectedData::map(), Envs::map()) -> Result::any())).
 
 -export_type([action_fun/0]).
 
 -export([on_resource_create/2]).
 
--export([ debug_action/1
+-export([ inspect_action/1
         , republish_action/1
         ]).
 
@@ -56,22 +57,45 @@
 on_resource_create(_Name, Conf) ->
     Conf.
 
--spec(debug_action(Params :: map()) -> action_fun()).
-debug_action(Params) ->
-    fun(Data) ->
-        io:format("Action input data: ~p~nAction init params: ~p~n", [Data, Params])
+-spec(inspect_action(Params :: map()) -> action_fun()).
+inspect_action(Params) ->
+    fun(Selected, Envs) ->
+        io:format("[built_in:inspect_action]~n"
+                  "\tSelected Data: ~p~n"
+                  "\tEnvs: ~p~n"
+                  "\tAction Init Params: ~p~n", [Selected, Envs, Params])
     end.
 
 %% A Demo Action.
 -spec(republish_action(#{from := emqx_topic:topic(),
                          to := emqx_topic:topic()})
       -> action_fun()).
-republish_action(#{from := From, to := To}) ->
-    fun(#{message := Msg = #message{topic = Origin}}) ->
-            case emqx_topic:match(Origin, From) of
+republish_action(#{from := SrcTopic, to := TargetTopic}) ->
+    fun(Selected, #{topic := OriginTopic, qos := QoS, from := Client,
+                    flags := Flags, headers := Headers}) ->
+            case emqx_topic:match(OriginTopic, SrcTopic) of
                 true ->
-                    emqx_broker:safe_publish(Msg#message{topic = To});
+                    logger:debug("[built_in:republish_action] republish to: ~p, Payload: ~p",
+                                 [TargetTopic, Selected]),
+                    emqx_broker:safe_publish(
+                        #message{
+                            id = emqx_guid:gen(),
+                            qos = QoS,
+                            from = republish_from(Client),
+                            flags = Flags,
+                            headers = Headers,
+                            topic = TargetTopic,
+                            payload = jsx:encode(Selected),
+                            timestamp = erlang:timestamp()
+                        });
                 false -> ok
             end
     end.
 
+republish_from(Client) ->
+    C = bin(Client), <<"built_in:republish_action:", C/binary>>.
+
+bin(Bin) when is_binary(Bin) -> Bin;
+bin(Atom) when is_atom(Atom) ->
+    list_to_binary(atom_to_list(Atom));
+bin(Str) when is_list(Str) -> list_to_binary(Str).

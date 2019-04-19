@@ -16,8 +16,8 @@
 
 -include("rule_engine.hrl").
 
--export([ register_provider/1
-        , unregister_provider/1
+-export([ load_providers/0
+        , unload_providers/0
         ]).
 
 -export([ create_rule/1
@@ -36,20 +36,40 @@
              ]).
 
 %%------------------------------------------------------------------------------
-%% Register an application as rule-engine's provider
+%% Load resource/action providers from all available applications
 %%------------------------------------------------------------------------------
 
-%% Register an application as rule engine's provider.
--spec(register_provider(App :: atom()) -> ok).
-register_provider(App) when is_atom(App) ->
-    ok = register_actions(App),
-    ok = register_resource_types(App).
+%% Load all providers .
+-spec(load_providers() -> ok).
+load_providers() ->
+    [load_provider(App) || App <- ignore_lib_apps(application:loaded_applications())],
+    ok.
 
-register_actions(App) ->
+-spec(load_provider(App :: atom()) -> ok).
+load_provider(App) when is_atom(App) ->
+    ok = load_actions(App),
+    ok = load_resource_types(App).
+
+%%------------------------------------------------------------------------------
+%% Unload providers
+%%------------------------------------------------------------------------------
+%% Load all providers .
+-spec(unload_providers() -> ok).
+unload_providers() ->
+    [unload_provider(App) || App <- ignore_lib_apps(application:loaded_applications())],
+    ok.
+
+%% @doc Unload a provider.
+-spec(unload_provider(App :: atom()) -> ok).
+unload_provider(App) ->
+    ok = emqx_rule_registry:remove_actions_of(App),
+    ok = emqx_rule_registry:unregister_resource_types_of(App).
+
+load_actions(App) ->
     Actions = find_actions(App),
     emqx_rule_registry:add_actions(Actions).
 
-register_resource_types(App) ->
+load_resource_types(App) ->
     ResourceTypes = find_resource_types(App),
     emqx_rule_registry:register_resource_types(ResourceTypes).
 
@@ -63,6 +83,7 @@ find_resource_types(App) ->
 
 new_action({App, Mod, #{name := Name,
                         for := Hook,
+                        type := Type,
                         func := Func,
                         params := Params,
                         description := Descr}}) ->
@@ -71,37 +92,18 @@ new_action({App, Mod, #{name := Name,
         true -> ok;
         false -> error({action_func_not_found, Func})
     end,
-    Prefix = case App =:= ?MODULE of
-                 true -> default;
-                 false -> App
-             end,
-    Name1 = list_to_atom(lists:concat([Prefix, ":", Name])),
-    #action{name = Name1, for = Hook, app = App,
+    #action{name = action_name(Type, Name), for = Hook, app = App, type = Type,
             module = Mod, func = Func, params = Params,
             description = iolist_to_binary(Descr)}.
 
 new_resource_type({App, Mod, #{name := Name,
-                               schema := Prefix,
+                               params := Params,
                                create := Create,
                                description := Descr}}) ->
-    Path = lists:concat([code:priv_dir(App), "/", App, ".schema"]),
-    {_, Mappings, _Validators} = cuttlefish_schema:files([Path]),
-    Params = find_resource_params(Prefix, Mappings),
     #resource_type{name = Name, provider = App,
-                   params = maps:from_list(Params),
+                   params = Params,
                    on_create = {Mod, Create},
                    description = iolist_to_binary(Descr)}.
-
-find_resource_params(Prefix, Mappings) ->
-    lists:foldr(
-      fun(M, Acc) ->
-              Var = cuttlefish_mapping:variable(M),
-              case string:prefix(string:join(Var, "."), Prefix ++ ".") of
-                  nomatch -> Acc;
-                  Param ->
-                      [{list_to_atom(Param), cuttlefish_mapping:datatype(M)}|Acc]
-              end
-      end, [], Mappings).
 
 find_attrs(App, Def) ->
     [{App, Mod, Attr} || {ok, Modules} <- [application:get_key(App, modules)],
@@ -115,16 +117,6 @@ module_attributes(Module) ->
         error:undef -> [];
         error:Reason -> error(Reason)
     end.
-
-%%------------------------------------------------------------------------------
-%% Unregister a provider
-%%------------------------------------------------------------------------------
-
-%% @doc Unregister a provider.
--spec(unregister_provider(App :: atom()) -> ok).
-unregister_provider(App) ->
-    ok = emqx_rule_registry:remove_actions_of(App),
-    ok = emqx_rule_registry:unregister_resource_types_of(App).
 
 %%------------------------------------------------------------------------------
 %% Create a rule or resource
@@ -153,9 +145,6 @@ create_rule(Params = #{name := Name,
         Error -> error(Error)
     end.
 
-rule_id(Name) ->
-    iolist_to_binary([Name, ":", integer_to_list(erlang:system_time())]).
-
 prepare_action(Name) when is_atom(Name) ->
     prepare_action({Name, #{}});
 prepare_action({Name, Args}) ->
@@ -163,7 +152,7 @@ prepare_action({Name, Args}) ->
         {ok, #action{module = M, func = F}} ->
             NewArgs = with_resource_config(Args),
             #{name => Name, params => Args,
-              apply => try M:F(NewArgs) catch _:Err -> throw({init_action_failure, Err, {M,F}}) end};
+              apply => ?RAISE(M:F(NewArgs), {init_action_failure,_REASON_,{M,F}})};
         not_found ->
             throw({action_not_found, Name})
     end.
@@ -185,7 +174,7 @@ create_resource(#{name := Name,
                   description := Descr}) ->
     case emqx_rule_registry:find_resource_type(Type) of
         {ok, #resource_type{on_create = {Mod, OnCreate}}} ->
-            NewConfig = Mod:OnCreate(Name, Config),
+            NewConfig = ?RAISE(Mod:OnCreate(Name, Config), {init_resource_failure,_REASON_,{Mod,OnCreate}}),
             ResId = iolist_to_binary([atom_to_list(Type), ":", Name]),
             Resource = #resource{id = ResId,
                                  name = Name,
@@ -198,3 +187,18 @@ create_resource(#{name := Name,
             {error, {resource_type_not_found, Name}}
     end.
 
+rule_id(Name) ->
+    iolist_to_binary([Name, ":", integer_to_list(erlang:system_time())]).
+
+action_name(Type, Name) ->
+    list_to_atom(lists:concat([Type, ":", Name])).
+
+ignore_lib_apps(Apps) ->
+    LibApps = [kernel, stdlib, sasl, appmon, eldap, erts,
+               syntax_tools, ssl, crypto, mnesia, os_mon,
+               inets, goldrush, gproc, runtime_tools,
+               snmp, otp_mibs, public_key, asn1, ssh, hipe,
+               common_test, observer, webtool, xmerl, tools,
+               test_server, compiler, debugger, eunit, et,
+               wx],
+    [AppName || {AppName, _, _} <- Apps, not lists:member(AppName, LibApps)].

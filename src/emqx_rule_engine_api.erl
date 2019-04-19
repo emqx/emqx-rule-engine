@@ -102,11 +102,18 @@
             descr  => "Show a resource type"
            }).
 
--rest_api(#{name   => list_resources_of_type,
+-rest_api(#{name   => list_resources_by_type,
             method => 'GET',
             path   => "/resource_types/:atom:type/resources",
-            func   => list_resources_of_type,
+            func   => list_resources_by_type,
             descr  => "List all resources of a resource type"
+           }).
+
+-rest_api(#{name   => list_actions_by_type,
+            method => 'GET',
+            path   => "/resource_types/:atom:type/actions",
+            func   => list_actions_by_type,
+            descr  => "List all actions of a resource type"
            }).
 
 -export([ create_rule/2
@@ -126,7 +133,8 @@
         ]).
 
 -export([ list_resource_types/2
-        , list_resources_of_type/2
+        , list_resources_by_type/2
+        , list_actions_by_type/2
         , show_resource_type/2
         ]).
 
@@ -169,8 +177,16 @@ delete_rule(#{id := Id}, _Params) ->
 %% Actions API
 %%------------------------------------------------------------------------------
 
-list_actions(#{}, _Params) ->
-    return_all(emqx_rule_registry:get_actions()).
+list_actions(#{}, Params) ->
+    case proplists:get_value(<<"for">>, Params) of
+        undefined ->
+            return_all(emqx_rule_registry:get_actions());
+        Hook ->
+            try binary_to_existing_atom(Hook, utf8) of
+                Hook0 -> return_all(emqx_rule_registry:get_actions_for(Hook0))
+            catch _:badarg -> return({error, 400, ?ERR_NO_HOOK(Hook)})
+            end
+    end.
 
 show_action(#{name := Name}, _Params) ->
     reply_with(fun emqx_rule_registry:find_action/1, Name).
@@ -195,8 +211,11 @@ create_resource(#{}, Params) ->
 list_resources(#{}, _Params) ->
     return_all(emqx_rule_registry:get_resources()).
 
-list_resources_of_type(#{type := Type}, _Params) ->
-    return_all(emqx_rule_registry:get_resources_of_type(Type)).
+list_resources_by_type(#{type := Type}, _Params) ->
+    return_all(emqx_rule_registry:get_resources_by_type(Type)).
+
+list_actions_by_type(#{type := Type}, _Params) ->
+    return_all(emqx_rule_registry:get_actions_by_type(Type)).
 
 show_resource(#{id := Id}, _Params) ->
     reply_with(fun emqx_rule_registry:find_resource/1, Id).
@@ -233,12 +252,14 @@ reply_with(Find, Key) ->
 
 record_to_map(#rule{id = Id,
                     name = Name,
+                    for = Hook,
                     rawsql = RawSQL,
                     actions = Actions,
                     enabled = Enabled,
                     description = Descr}) ->
     #{id => Id,
       name => Name,
+      for => Hook,
       rawsql => RawSQL,
       actions => [maps:remove(apply, Act) || Act <- Actions],
       enabled => Enabled,
@@ -247,10 +268,14 @@ record_to_map(#rule{id = Id,
 
 record_to_map(#action{name = Name,
                       app = App,
+                      for = Hook,
+                      type = Type,
                       params = Params,
                       description = Descr}) ->
     #{name => Name,
       app => App,
+      for => Hook,
+      type => Type,
       params => Params,
       description => Descr
      };

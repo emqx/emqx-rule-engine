@@ -35,6 +35,7 @@
         , add_actions/1
         , get_actions/0
         , get_actions_for/1
+        , get_actions_by_type/1
         , find_action/1
         , remove_action/1
         , remove_actions/1
@@ -45,7 +46,7 @@
 -export([ get_resources/0
         , add_resource/1
         , find_resource/1
-        , get_resources_of_type/1
+        , get_resources_by_type/1
         , remove_resource/1
         ]).
 
@@ -107,7 +108,7 @@ mnesia(boot) ->
     ok = ekka_mnesia:create_table(?ACTION_TAB, [
                 {ram_copies, [node()]},
                 {record_name, action},
-                {index, [#action.for, #action.app]},
+                {index, [#action.for, #action.app, #action.type]},
                 {attributes, record_info(fields, action)},
                 {storage_properties, StoreProps}]),
     %% Resource table
@@ -159,11 +160,11 @@ start_link() ->
 get_rules() ->
     get_all_records(?RULE_TAB).
 
--spec(get_rules_for(Hook :: atom()) -> list(emqx_rule_engine:rule())).
+-spec(get_rules_for(Hook :: hook()) -> list(emqx_rule_engine:rule())).
 get_rules_for(Hook) ->
     mnesia:dirty_index_read(?RULE_TAB, Hook, #rule.for).
 
--spec(get_rule(Id :: binary()) -> {ok, emqx_rule_engine:rule()} | not_found).
+-spec(get_rule(Id :: rule_id()) -> {ok, emqx_rule_engine:rule()} | not_found).
 get_rule(Id) ->
     case mnesia:dirty_read(?RULE_TAB, Id) of
         [Rule] -> {ok, Rule};
@@ -205,13 +206,26 @@ delete_rule(RuleId) when is_binary(RuleId) ->
 get_actions() ->
     get_all_records(?ACTION_TAB).
 
-%% @doc Get actions for a hook.
--spec(get_actions_for(Hook :: atom()) -> list(emqx_rule_engine:action())).
-get_actions_for(Hook) ->
+%% @doc Get actions for a hook or hook alias.
+-spec(get_actions_for(Hook :: hook() | list(hook()))
+        -> list(emqx_rule_engine:action())).
+get_actions_for(HookAlias) ->
+    do_get_actions_for(?HOOKS_ALIAS(HookAlias)).
+
+-spec(do_get_actions_for(Hook :: hook() | list(hook()))
+        -> list(emqx_rule_engine:action())).
+do_get_actions_for([]) -> [];
+do_get_actions_for([H | T] = Hooks) when is_list(Hooks) ->
+    do_get_actions_for(H) ++ do_get_actions_for(T);
+do_get_actions_for(Hook) when not is_list(Hook) ->
     mnesia:dirty_index_read(?ACTION_TAB, Hook, #action.for).
 
+-spec(get_actions_by_type(Type :: resource_type_name()) -> list(emqx_rule_engine:action())).
+get_actions_by_type(Type) ->
+    mnesia:dirty_index_read(?ACTION_TAB, Type, #action.type).
+
 %% @doc Find an action by name.
--spec(find_action(Name :: atom()) -> {ok, emqx_rule_engine:action()} | not_found).
+-spec(find_action(Name :: action_name()) -> {ok, emqx_rule_engine:action()} | not_found).
 find_action(Name) ->
     case mnesia:dirty_read(?ACTION_TAB, Name) of
         [Action] -> {ok, Action};
@@ -300,15 +314,15 @@ insert_resource(Resource) ->
 get_resource_types() ->
     get_all_records(?RES_TYPE_TAB).
 
--spec(find_resource_type(Name :: atom()) -> {ok, emqx_rule_engine:resource_type()} | not_found).
+-spec(find_resource_type(Name :: resource_type_name()) -> {ok, emqx_rule_engine:resource_type()} | not_found).
 find_resource_type(Name) ->
     case mnesia:dirty_read(?RES_TYPE_TAB, Name) of
         [ResType] -> {ok, ResType};
         [] -> not_found
     end.
 
--spec(get_resources_of_type(Type :: atom()) -> list(emqx_rule_engine:resource())).
-get_resources_of_type(Type) ->
+-spec(get_resources_by_type(Type :: resource_type_name()) -> list(emqx_rule_engine:resource())).
+get_resources_by_type(Type) ->
     mnesia:dirty_index_read(?RES_TAB, Type, #resource.type).
 
 -spec(register_resource_types(list(emqx_rule_engine:resource_type())) -> ok).
