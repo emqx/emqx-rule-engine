@@ -97,27 +97,13 @@ new_action({App, Mod, #{name := Name,
             description = iolist_to_binary(Descr)}.
 
 new_resource_type({App, Mod, #{name := Name,
-                               schema := Prefix,
+                               params := Params,
                                create := Create,
                                description := Descr}}) ->
-    Path = lists:concat([code:priv_dir(App), "/", App, ".schema"]),
-    {_, Mappings, _Validators} = cuttlefish_schema:files([Path]),
-    Params = find_resource_params(Prefix, Mappings),
     #resource_type{name = Name, provider = App,
-                   params = maps:from_list(Params),
+                   params = Params,
                    on_create = {Mod, Create},
                    description = iolist_to_binary(Descr)}.
-
-find_resource_params(Prefix, Mappings) ->
-    lists:foldr(
-      fun(M, Acc) ->
-              Var = cuttlefish_mapping:variable(M),
-              case string:prefix(string:join(Var, "."), Prefix ++ ".") of
-                  nomatch -> Acc;
-                  Param ->
-                      [{list_to_atom(Param), cuttlefish_mapping:datatype(M)}|Acc]
-              end
-      end, [], Mappings).
 
 find_attrs(App, Def) ->
     [{App, Mod, Attr} || {ok, Modules} <- [application:get_key(App, modules)],

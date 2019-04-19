@@ -18,7 +18,6 @@
 -include_lib("emqx/include/emqx.hrl").
 
 -resource_type(#{name => built_in,
-                 schema => "emqx_rule_engine",
                  create => on_resource_create,
                  params => #{},
                  description => "Debug resource type"
