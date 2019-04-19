@@ -33,8 +33,7 @@ start(_Type, _Args) ->
 
 stop(_State) ->
     ok = emqx_rule_runtime:stop(env()),
-    ok = emqx_rule_engine_cli:unload(),
-    ok = emqx_rule_engine:unload_providers().
+    ok = emqx_rule_engine_cli:unload().
 
 env() ->
     maps:from_list(application:get_all_env(?APP)).
