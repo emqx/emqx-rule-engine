@@ -252,12 +252,14 @@ reply_with(Find, Key) ->
 
 record_to_map(#rule{id = Id,
                     name = Name,
+                    for = Hook,
                     rawsql = RawSQL,
                     actions = Actions,
                     enabled = Enabled,
                     description = Descr}) ->
     #{id => Id,
       name => Name,
+      for => Hook,
       rawsql => RawSQL,
       actions => [maps:remove(apply, Act) || Act <- Actions],
       enabled => Enabled,
