@@ -24,7 +24,7 @@
                 }).
 
 -rule_action(#{name => inspect_action,
-               for => any,
+               for => '$any',
                type => built_in,
                func => inspect_action,
                params => #{},

@@ -74,6 +74,7 @@ groups() ->
        t_add_get_remove_action,
        t_add_get_remove_actions,
        t_remove_actions_of,
+       t_get_actions_for,
        t_get_resources,
        t_add_get_remove_resource,
        t_register_resource_types,
@@ -255,34 +256,34 @@ t_crud_rule_api(_Config) ->
                  {<<"description">>, <<"debug rule">>}]),
     %ct:pal("RCreated : ~p", [Rule]),
 
-    {ok, [{code, 0}, {data, Rules}]} = emqx_rule_engine_api:list_rules(#{},#{}),
+    {ok, [{code, 0}, {data, Rules}]} = emqx_rule_engine_api:list_rules(#{},[]),
     %ct:pal("RList : ~p", [Rules]),
     ?assert(length(Rules) > 0),
 
-    {ok, [{code, 0}, {data, Rule1}]} = emqx_rule_engine_api:show_rule(#{id => RuleID}, #{}),
+    {ok, [{code, 0}, {data, Rule1}]} = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
     %ct:pal("RShow : ~p", [Rule1]),
     ?assertEqual(Rule, Rule1),
 
-    ?assertMatch({ok, [{code, 0}]}, emqx_rule_engine_api:delete_rule(#{id => RuleID}, #{})),
+    ?assertMatch({ok, [{code, 0}]}, emqx_rule_engine_api:delete_rule(#{id => RuleID}, [])),
 
-    NotFound = emqx_rule_engine_api:show_rule(#{id => RuleID}, #{}),
+    NotFound = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
     %ct:pal("Show After Deleted: ~p", [NotFound]),
     ?assertMatch({ok, [{code, 404}, {message, _}]}, NotFound),
     ok.
 
 t_list_actions_api(_Config) ->
-    {ok, [{code, 0}, {data, Actions}]} = emqx_rule_engine_api:list_actions(#{},#{}),
+    {ok, [{code, 0}, {data, Actions}]} = emqx_rule_engine_api:list_actions(#{},[]),
     %ct:pal("RList : ~p", [Actions]),
     ?assert(length(Actions) > 0),
 
-    {ok, [{code, 0}, {data, Actions0}]} = emqx_rule_engine_api:list_actions_by_type(#{type => 'built_in'},#{}),
+    {ok, [{code, 0}, {data, Actions0}]} = emqx_rule_engine_api:list_actions_by_type(#{type => 'built_in'}, []),
     %ct:pal("RListT : ~p", [Actions0]),
     ?assert(length(Actions0) > 0),
     ok.
 
 t_show_action_api(_Config) ->
     ?assertMatch({ok, [{code, 0}, {data, #{name := 'built_in:inspect_action'}}]},
-                 emqx_rule_engine_api:show_action(#{name => 'built_in:inspect_action'},#{})),
+                 emqx_rule_engine_api:show_action(#{name => 'built_in:inspect_action'},[])),
     ok.
 
 t_crud_resources_api(_Config) ->
@@ -292,25 +293,25 @@ t_crud_resources_api(_Config) ->
             {<<"type">>, <<"built_in">>},
             {<<"config">>, [{<<"a">>, 1}]},
             {<<"description">>, <<"Simple Resource">>}]),
-    {ok, [{code, 0}, {data, Resources}]} = emqx_rule_engine_api:list_resources(#{},#{}),
+    {ok, [{code, 0}, {data, Resources}]} = emqx_rule_engine_api:list_resources(#{},[]),
     ?assert(length(Resources) > 0),
 
     ?assertMatch({ok, [{code, 0}, {data, #{id := ResId}}]},
-                 emqx_rule_engine_api:show_resource(#{id => ResId},#{})),
+                 emqx_rule_engine_api:show_resource(#{id => ResId},[])),
 
     ?assertMatch({ok, [{code, 0}]}, emqx_rule_engine_api:delete_resource(#{id => ResId},#{})),
 
     ?assertMatch({ok, [{code, 404}, _]},
-                 emqx_rule_engine_api:show_resource(#{id => ResId},#{})),
+                 emqx_rule_engine_api:show_resource(#{id => ResId},[])),
     ok.
 
 t_list_resource_types_api(_Config) ->
-    {ok, [{code, 0}, {data, ResourceTypes}]} = emqx_rule_engine_api:list_resource_types(#{},#{}),
+    {ok, [{code, 0}, {data, ResourceTypes}]} = emqx_rule_engine_api:list_resource_types(#{},[]),
     ?assert(length(ResourceTypes) > 0),
     ok.
 
 t_show_resource_type_api(_Config) ->
-    RShow = emqx_rule_engine_api:show_resource_type(#{name => 'built_in'},#{}),
+    RShow = emqx_rule_engine_api:show_resource_type(#{name => 'built_in'},[]),
     %ct:pal("RShow : ~p", [RShow]),
     ?assertMatch({ok, [{code, 0}, {data, #{name := built_in}}]}, RShow),
     ok.
@@ -485,6 +486,27 @@ t_remove_actions_of(_Config) ->
     ?assert((Len1 - length(emqx_rule_registry:get_actions())) >= 2),
     ok.
 
+t_get_actions_for(_Config) ->
+    Action1 = make_simple_action('action-publish', 'message.publish'),
+    Action2 = make_simple_action('action-connected', 'client.connected'),
+    Action3 = make_simple_action('action-disconnected', 'client.disconnected'),
+    Action4 = make_simple_action('action-subscribe', 'client.subscribe'),
+    ok = emqx_rule_registry:add_actions([Action1,Action2,Action3,Action4]),
+
+    MessageActions = emqx_rule_registry:get_actions_for(?HOOK_ALIAS_MESSAGES),
+    %ct:pal("MessageActions: ~p", [MessageActions]),
+    ?assert(length(MessageActions) >= 1),
+
+    EventActions = emqx_rule_registry:get_actions_for(?HOOK_ALIAS_EVENTS),
+    %ct:pal("EventActions: ~p", [EventActions]),
+    ?assert(length(EventActions) >= 3),
+
+    EventDisconn = emqx_rule_registry:get_actions_for('client.disconnected'),
+    %ct:pal("EventDisconn: ~p", [EventDisconn]),
+    ?assert(length(EventDisconn) >= 1),
+
+    ok = emqx_rule_registry:remove_actions([Action1,Action2,Action3,Action4]).
+
 t_add_get_remove_resource(_Config) ->
     ResId = <<"resource-debug">>,
     Res = make_simple_resource(ResId),
@@ -635,6 +657,10 @@ make_simple_action(ActionName) when is_atom(ActionName) ->
     #action{name = ActionName, app = ?APP,
             module = ?MODULE, func = simple_action_inspect, params = #{},
             description = <<"Simple inspect action">>}.
+make_simple_action(ActionName, Hook) when is_atom(ActionName) ->
+    #action{name = ActionName, app = ?APP, for = Hook,
+            module = ?MODULE, func = simple_action_inspect, params = #{},
+            description = <<"Simple inspect action with hook">>}.
 
 simple_action_inspect(Params) ->
     fun(Data) ->

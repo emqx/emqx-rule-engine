@@ -177,8 +177,16 @@ delete_rule(#{id := Id}, _Params) ->
 %% Actions API
 %%------------------------------------------------------------------------------
 
-list_actions(#{}, _Params) ->
-    return_all(emqx_rule_registry:get_actions()).
+list_actions(#{}, Params) ->
+    case proplists:get_value(<<"for">>, Params) of
+        undefined ->
+            return_all(emqx_rule_registry:get_actions());
+        Hook ->
+            try binary_to_existing_atom(Hook, utf8) of
+                Hook0 -> return_all(emqx_rule_registry:get_actions_for(Hook0))
+            catch _:badarg -> return({error, 400, ?ERR_NO_HOOK(Hook)})
+            end
+    end.
 
 show_action(#{name := Name}, _Params) ->
     reply_with(fun emqx_rule_registry:find_action/1, Name).
@@ -258,11 +266,13 @@ record_to_map(#rule{id = Id,
 
 record_to_map(#action{name = Name,
                       app = App,
+                      for = Hook,
                       type = Type,
                       params = Params,
                       description = Descr}) ->
     #{name => Name,
       app => App,
+      for => Hook,
       type => Type,
       params => Params,
       description => Descr

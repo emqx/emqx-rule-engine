@@ -97,3 +97,34 @@
         begin
             try (_EXP_) catch _:_REASON_ -> throw(_ERROR_) end
         end).
+
+-define(HOOK_ALIAS_MESSAGES, '$messages').
+-define(HOOK_ALIAS_EVENTS, '$events').
+-define(HOOK_ALIAS_ANY, '$any').
+-define(HOOKS_ALIAS(ALIAS),
+        case ALIAS of
+           ?HOOK_ALIAS_MESSAGES ->
+                [ ?HOOK_ALIAS_MESSAGES
+                , ?HOOK_ALIAS_ANY
+                , 'message.publish'
+                ];
+           ?HOOK_ALIAS_EVENTS ->
+                [ ?HOOK_ALIAS_EVENTS
+                , ?HOOK_ALIAS_ANY
+                , 'client.authenticate'
+                , 'client.check_acl'
+                , 'client.connected'
+                , 'client.disconnected'
+                , 'client.subscribe'
+                , 'client.unsubscribe'
+                , 'session.created'
+                , 'session.resumed'
+                , 'session.subscribed'
+                , 'session.unsubscribe'
+                , 'session.terminated'
+                , 'message.deliver'
+                , 'message.acked'
+                , 'message.dropped'
+                ];
+           _ -> [?HOOK_ALIAS_ANY, ALIAS]
+        end).
