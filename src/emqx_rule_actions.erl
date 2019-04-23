@@ -17,6 +17,17 @@
 
 -include_lib("emqx/include/emqx.hrl").
 
+-define(REPUBLISH_PARAMS_SPEC, #{
+            from => #{type => string,
+                      format => topic,
+                      required => true,
+                      description => <<"From which topic">>},
+            to => #{type => string,
+                    format => topic,
+                    required => true,
+                    description => <<"Repubilsh To which topic">>}
+        }).
+
 -resource_type(#{name => built_in,
                  create => on_resource_create,
                  params => #{},
@@ -35,7 +46,7 @@
                for => 'message.publish',
                type => built_in,
                func => republish_action,
-               params => #{from => topic, to => topic},
+               params => ?REPUBLISH_PARAMS_SPEC,
                description => "Republish a MQTT message"
               }).
 

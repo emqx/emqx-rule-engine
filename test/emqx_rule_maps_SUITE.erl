@@ -21,6 +21,7 @@
 -export([ t_get_put_value/1
         , t_prop_get_put/1
         , t_nested_get_put/1
+        , t_atom_key_map/1
         ]).
 
 -export([ all/0
@@ -33,6 +34,7 @@
         , get_value/2
         , get_value/3
         , put_value/3
+        , atom_key_map/1
         ]).
 
 -define(PROPTEST(Prop), true = proper:quickcheck(Prop)).
@@ -61,6 +63,15 @@ t_get_put_value(_) ->
 
 t_prop_get_put(_) ->
     ?assert(proper:quickcheck(prop_get_put_value())).
+
+t_atom_key_map(_) ->
+    ?assertEqual(#{a => 1}, atom_key_map(#{<<"a">> => 1})),
+    ?assertEqual(#{a => 1, b => #{a => 2}},
+                 atom_key_map(#{<<"a">> => 1, <<"b">> => #{<<"a">> => 2}})),
+    ?assertEqual([#{a => 1}, #{b => #{a => 2}}],
+                 atom_key_map([#{<<"a">> => 1}, #{<<"b">> => #{<<"a">> => 2}}])),
+    ?assertEqual(#{a => 1, b => [#{a => 2}, #{c => 2}]},
+                 atom_key_map(#{<<"a">> => 1, <<"b">> => [#{<<"a">> => 2}, #{<<"c">> => 2}]})).
 
 prop_get_put_value() ->
     ?FORALL({Key, Val}, {term(), term()},
