@@ -323,7 +323,7 @@ t_show_resource_type_api(_Config) ->
 t_rules_cli(_Config) ->
     RCreate = emqx_rule_engine_cli:rules(["create", "inspect", "message.publish",
                                           "select * from t1",
-                                          "{\"built_in:inspect_action\": {\"arg1\": 1}}",
+                                          "[{\"name\":\"built_in:inspect_action\", \"params\": {\"arg1\": 1}}]",
                                           "-d", "Debug Rule"]),
     ?assertMatch({match, _}, re:run(RCreate, "created")),
     %ct:pal("Result : ~p", [RCreate]),

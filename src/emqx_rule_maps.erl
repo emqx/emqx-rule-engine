@@ -19,6 +19,7 @@
         , get_value/2
         , get_value/3
         , put_value/3
+        , atom_key_map/1
         ]).
 
 nested_get(Key, Map) when not is_list(Key) ->
@@ -69,3 +70,10 @@ put_value(_Key, undefined, Map) ->
 put_value(Key, Val, Map) ->
     maps:put(Key, Val, Map).
 
+atom_key_map(BinKeyMap) when is_map(BinKeyMap) ->
+    maps:fold(fun(K, V, Acc) ->
+            Acc#{binary_to_existing_atom(K, utf8) => atom_key_map(V)}
+        end, #{}, BinKeyMap);
+atom_key_map(ListV) when is_list(ListV) ->
+    [atom_key_map(V) || V <- ListV];
+atom_key_map(Val) -> Val.
