@@ -309,7 +309,7 @@ record_to_map(#resource_type{name = Name,
      }.
 
 parse_rule_params(Params) ->
-    parse_rule_params(Params, #{}).
+    parse_rule_params(Params, #{description => <<"">>}).
 parse_rule_params([], Rule) ->
     Rule;
 parse_rule_params([{<<"name">>, Name} | Params], Rule) ->
@@ -335,7 +335,7 @@ parse_action(Actions) ->
     end.
 
 parse_resource_params(Params) ->
-    parse_resource_params(Params, #{}).
+    parse_resource_params(Params, #{config => #{}, description => <<"">>}).
 parse_resource_params([], Res) ->
     Res;
 parse_resource_params([{<<"name">>, Name} | Params], Res) ->

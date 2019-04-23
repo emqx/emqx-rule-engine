@@ -126,7 +126,8 @@ module_attributes(Module) ->
 create_rule(Params = #{name := Name,
                        for := Hook,
                        rawsql := Sql,
-                       actions := Actions}) ->
+                       actions := Actions,
+                       description := Descr}) ->
     case emqx_rule_sqlparser:parse_select(Sql) of
         {ok, Select} ->
             Rule = #rule{id = rule_id(Name),
@@ -138,7 +139,7 @@ create_rule(Params = #{name := Name,
                          conditions = emqx_rule_sqlparser:select_where(Select),
                          actions = [prepare_action(Action) || Action <- Actions],
                          enabled = maps:get(enabled, Params, true),
-                         description = iolist_to_binary(maps:get(description, Params, ""))},
+                         description = iolist_to_binary(Descr)},
             ok = emqx_rule_registry:add_rule(Rule),
             {ok, Rule};
         Error -> error(Error)
@@ -168,7 +169,8 @@ with_resource_config(Args) -> Args.
 -spec(create_resource(#{}) -> {ok, resource()} | {error, Reason :: term()}).
 create_resource(#{name := Name,
                   type := Type,
-                  config := Config} = Params) ->
+                  config := Config,
+                  description := Descr}) ->
     case emqx_rule_registry:find_resource_type(Type) of
         {ok, #resource_type{on_create = {M, F}, params = ParamSpec}} ->
             ok = emqx_rule_validator:validate_params(Config, ParamSpec),
@@ -177,7 +179,7 @@ create_resource(#{name := Name,
                                  name = Name,
                                  type = Type,
                                  config = ?RAISE(M:F(Name, Config), {init_resource_failure,{{M,F},_REASON_}}),
-                                 description = iolist_to_binary(maps:get(description, Params, ""))},
+                                 description = iolist_to_binary(Descr)},
             ok = emqx_rule_registry:add_resource(Resource),
             {ok, Resource};
         not_found ->
