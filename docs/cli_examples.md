@@ -122,7 +122,7 @@ resource_type(name=built_in, provider=emqx_rule_engine, params=#{}, on_create={e
 
 ``` shell
 
-./bin/emqx_ctl resources create 'webhook1' 'web_hook' -c '{"url": "http://127.0.0.1:9910", "headers": [{"key":"token", "value":"axfw34y235wrq234t4ersgw4t"}], "method": "POST"}'
+./bin/emqx_ctl resources create 'webhook1' 'web_hook' -c '{"url": "http://127.0.0.1:9910", "headers": {"token":"axfw34y235wrq234t4ersgw4t"}, "method": "POST"}'
 
 ./bin/emqx_ctl rules create 'connected_msg_to_http' 'client.connected' 'SELECT * FROM "#"' '[{"name":"web_hook:event_action", "params": {"$resource": "web_hook:webhook1", "template": {"client": "${client_id}", "user": "${username}", "c": {"u": "${username}", "e": "${e}"}}}}]' -d "Forward connected events to webhook"
 
