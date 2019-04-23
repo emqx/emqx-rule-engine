@@ -294,14 +294,22 @@ find_resource(Id) ->
 
 -spec(remove_resource(emqx_rule_engine:resource() | binary()) -> ok).
 remove_resource(Resource) when is_record(Resource, resource) ->
-    trans(fun delete_resource/1, [Resource]);
+    trans(fun delete_resource/1, [Resource#resource.id]);
 
 remove_resource(ResId) when is_binary(ResId) ->
-    trans(fun mnesia:delete/1, [{?RES_TAB, ResId}]).
+    trans(fun delete_resource/1, [ResId]).
 
 %% @private
-delete_resource(Resource) ->
-    mnesia:delete_object(?RES_TAB, Resource, write).
+delete_resource(ResId) ->
+    try
+        [[?RAISE(not_found = find_resource(ResId1), {exists, Id})
+            || #{params := #{<<"$resource">> := ResId1}} <- Actions]
+                || #rule{id = Id, actions = Actions} <- get_rules()],
+        mnesia:delete(?RES_TAB, ResId, write)
+    catch
+        throw:{exists, Id} ->
+            throw({dependency_exists, {rule_id, Id}})
+    end.
 
 %% @private
 insert_resource(Resource) ->

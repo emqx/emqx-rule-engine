@@ -225,8 +225,13 @@ show_resource(#{id := Id}, _Params) ->
     reply_with(fun emqx_rule_registry:find_resource/1, Id).
 
 delete_resource(#{id := Id}, _Params) ->
-    ok = emqx_rule_registry:remove_resource(Id),
-    return().
+    try
+        ok = emqx_rule_registry:remove_resource(Id),
+        return()
+    catch
+        _Error:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)})
+    end.
 
 %%------------------------------------------------------------------------------
 %% Resource Types API
