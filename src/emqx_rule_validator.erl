@@ -20,10 +20,10 @@
         , validate_spec/1
         ]).
 
--type(params_spec() :: map()).
--type(params() :: map()).
+-type(params_spec() :: #{atom() => term()}).
+-type(params() :: #{binary() => term()}).
 
--define(BASIC_DATA_TYPES, [string, number, float, enum]).
+-define(DATA_TYPES, [string, number, float, boolean, object, array]).
 
 %%------------------------------------------------------------------------------
 %% APIs
@@ -49,12 +49,12 @@ validate_spec(ParamsSepc) ->
 %%------------------------------------------------------------------------------
 
 do_validate_param(Name, Spec = #{required := true}, Params) ->
-    with_fields(Name, Params,
+    find_field(Name, Params,
         fun (not_found) -> error({required_field_missing, Name});
             (Val) -> do_validate_param(Val, Spec)
         end);
 do_validate_param(Name, Spec, Params) ->
-    with_fields(Name, Params,
+    find_field(Name, Params,
         fun (not_found) -> ok; %% optional field 'Name'
             (Val) -> do_validate_param(Val, Spec)
         end).
@@ -115,17 +115,17 @@ reg_exp(any) -> ".*";
 reg_exp(RegExp) -> RegExp.
 
 do_validate_spec(Name, Spec = #{type := object}) ->
-    with_fields(schema, Spec,
-        fun (not_found) -> error({required_field_missing, {schema, Name}});
+    find_field(schema, Spec,
+        fun (not_found) -> error({required_field_missing, {schema, {in, Name}}});
             (Schema) -> validate_spec(Schema)
         end);
 do_validate_spec(Name, Spec = #{type := array}) ->
-    with_fields(items, Spec,
-        fun (not_found) -> error({required_field_missing, {items, Name}});
+    find_field(items, Spec,
+        fun (not_found) -> error({required_field_missing, {items, {in, Name}}});
             (Items) -> do_validate_spec(Name, Items)
         end);
 do_validate_spec(Name, Spec = #{type := Type}) ->
-    ok = supported_data_type(Type, ?BASIC_DATA_TYPES),
+    ok = supported_data_type(Type, ?DATA_TYPES),
     ok = validate_default_value(Name, Spec),
     ok.
 
@@ -139,14 +139,24 @@ validate_default_value(Name, Spec) ->
     case maps:get(required, Spec, false) of
         true -> ok;
         false ->
-            with_fields(default, Spec,
+            find_field(default, Spec,
                 fun (not_found) -> error({required_field_missing, {default, Name}});
                     (_Default) -> ok
                 end)
     end.
 
-with_fields(Field, Spec, Func) ->
-    case maps:find(Field, Spec) of
+find_field(Field, Spec, Func) ->
+    do_find_field([Field, bin(Field)], Spec, Func).
+
+do_find_field([], _Spec, Func) ->
+    Func(not_found);
+do_find_field([F | Fields], Spec, Func) ->
+    case maps:find(F, Spec) of
         {ok, Value} -> Func(Value);
-        error -> Func(not_found)
+        error ->
+            do_find_field(Fields, Spec, Func)
     end.
+
+bin(Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8);
+bin(Str) when is_list(Str) -> atom_to_list(Str);
+bin(Bin) when is_binary(Bin) -> Bin.

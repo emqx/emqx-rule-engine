@@ -17,6 +17,7 @@
 -behaviour(gen_server).
 
 -include("rule_engine.hrl").
+-include_lib("emqx/include/logger.hrl").
 
 -export([start_link/0]).
 
@@ -354,15 +355,15 @@ init([]) ->
     {ok, #{}}.
 
 handle_call(Req, _From, State) ->
-    logger:error("[RuleRegistry]: unexpected call - ~p", [Req]),
+    ?LOG(error, "[RuleRegistry]: unexpected call - ~p", [Req]),
     {reply, ignored, State}.
 
 handle_cast(Msg, State) ->
-    logger:error("[RuleRegistry]: unexpected cast ~p", [Msg]),
+    ?LOG(error, "[RuleRegistry]: unexpected cast ~p", [Msg]),
     {noreply, State}.
 
 handle_info(Info, State) ->
-    logger:error("[RuleRegistry]: unexpected info ~p", [Info]),
+    ?LOG(error, "[RuleRegistry]: unexpected info ~p", [Info]),
     {noreply, State}.
 
 terminate(_Reason, _State) ->

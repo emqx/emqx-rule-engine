@@ -239,17 +239,20 @@ make_rule(Opts) ->
     #{name => get_value(name, Opts),
       for => get_value(hook, Opts),
       rawsql => get_value(sql, Opts),
-      actions => [{?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}),
-                   ?RAISE(emqx_rule_maps:atom_key_map(ActParam), {invalid_action_param, ActParam})}
-                  || #{<<"name">> := ActName, <<"params">> := ActParam} <- jsx:decode(Actions, [return_maps])],
+      actions => lists:map(fun
+                    (#{<<"name">> := ActName, <<"params">> := ActParam}) ->
+                        {?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}),
+                         ActParam};
+                    (#{<<"name">> := ActName}) ->
+                         {?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}), #{}}
+                    end, jsx:decode(Actions, [return_maps])),
       description => get_value(descr, Opts)}.
 
 make_resource(Opts) ->
     Config = get_value(config, Opts),
     #{name => get_value(name, Opts),
       type => get_value(type, Opts),
-      config => ?RAISE(emqx_rule_maps:atom_key_map(jsx:decode(Config, [return_maps])),
-                       {invalid_config, Config}),
+      config => ?RAISE(jsx:decode(Config, [return_maps]), {invalid_config, Config}),
       description => get_value(descr, Opts)}.
 
 printable_actions(Actions) when is_list(Actions) ->
