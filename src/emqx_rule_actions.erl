@@ -16,16 +16,19 @@
 -module(emqx_rule_actions).
 
 -include_lib("emqx/include/emqx.hrl").
+-include_lib("emqx/include/logger.hrl").
 
 -define(REPUBLISH_PARAMS_SPEC, #{
             from => #{type => string,
                       format => topic,
                       required => true,
-                      description => <<"From which topic">>},
+                      title => <<"From Topic">>,
+                      description => <<"Wait messages from which topic">>},
             to => #{type => string,
                     format => topic,
                     required => true,
-                    description => <<"Repubilsh To which topic">>}
+                    title => <<"To Topic">>,
+                    description => <<"Repubilsh to which topic">>}
         }).
 
 -resource_type(#{name => built_in,
@@ -78,15 +81,15 @@ inspect_action(Params) ->
     end.
 
 %% A Demo Action.
--spec(republish_action(#{from := emqx_topic:topic(),
-                         to := emqx_topic:topic()})
+-spec(republish_action(#{binary() := emqx_topic:topic(),
+                         binary() := emqx_topic:topic()})
       -> action_fun()).
-republish_action(#{from := SrcTopic, to := TargetTopic}) ->
+republish_action(#{<<"from">> := SrcTopic, <<"to">> := TargetTopic}) ->
     fun(Selected, #{topic := OriginTopic, qos := QoS, from := Client,
                     flags := Flags, headers := Headers}) ->
             case emqx_topic:match(OriginTopic, SrcTopic) of
                 true ->
-                    logger:debug("[built_in:republish_action] republish to: ~p, Payload: ~p",
+                    ?LOG(debug, "[built_in:republish_action] republish to: ~p, Payload: ~p",
                                  [TargetTopic, Selected]),
                     emqx_broker:safe_publish(
                         #message{

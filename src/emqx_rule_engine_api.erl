@@ -315,7 +315,7 @@ parse_rule_params([], Rule) ->
 parse_rule_params([{<<"name">>, Name} | Params], Rule) ->
     parse_rule_params(Params, Rule#{name => Name});
 parse_rule_params([{<<"for">>, Hook} | Params], Rule) ->
-    parse_rule_params(Params, Rule#{for => try binary_to_existing_atom(Hook, utf8) catch error:badarg -> throw({invalid_hook, Hook}) end});
+    parse_rule_params(Params, Rule#{for => ?RAISE(binary_to_existing_atom(Hook,utf8), {invalid_hook,Hook})});
 parse_rule_params([{<<"rawsql">>, RawSQL} | Params], Rule) ->
     parse_rule_params(Params, Rule#{rawsql => RawSQL});
 parse_rule_params([{<<"actions">>, Actions} | Params], Rule) ->
@@ -328,10 +328,10 @@ parse_rule_params([_ | Params], Res) ->
 parse_action(Actions) ->
     case maps:find(<<"params">>, Actions) of
         error ->
-            throw({action_param_missing, Actions});
+            {binary_to_existing_atom(maps:get(<<"name">>, Actions), utf8), #{}};
         {ok, Params} ->
             {binary_to_existing_atom(maps:get(<<"name">>, Actions), utf8),
-             emqx_rule_maps:atom_key_map(Params)}
+             Params}
     end.
 
 parse_resource_params(Params) ->
@@ -340,13 +340,13 @@ parse_resource_params([], Res) ->
     Res;
 parse_resource_params([{<<"name">>, Name} | Params], Res) ->
     parse_resource_params(Params, Res#{name => Name});
-parse_resource_params([{<<"type">>, Type} | Params], Res) ->
-    try parse_resource_params(Params, Res#{type => binary_to_existing_atom(Type, utf8)})
+parse_resource_params([{<<"type">>, ResourceType} | Params], Res) ->
+    try parse_resource_params(Params, Res#{type => binary_to_existing_atom(ResourceType, utf8)})
     catch error:badarg ->
-        throw({resource_type_not_found, Type})
+        throw({resource_type_not_found, ResourceType})
     end;
 parse_resource_params([{<<"config">>, Config} | Params], Res) ->
-    parse_resource_params(Params, Res#{config => emqx_rule_maps:atom_key_map(json_term_to_map(Config))});
+    parse_resource_params(Params, Res#{config => json_term_to_map(Config)});
 parse_resource_params([{<<"description">>, Descr} | Params], Res) ->
     parse_resource_params(Params, Res#{description => Descr});
 parse_resource_params([_ | Params], Res) ->

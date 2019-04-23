@@ -17,7 +17,7 @@ $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules' -d \
 
 ## with a resource id in the action args
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules' -d \
-'{"name":"test-rule","for":"message.publish","rawsql":"select * from \"t/a\"","actions":[{"name":"built_in:inspect_action","params":{"$resource":"built_in:test-resource","a":1}}],"description":"test-rule"}'
+'{"name":"test-rule","for":"message.publish","rawsql":"select * from \"t/a\"","actions":[{"name":"built_in:inspect_action","params":{"$resource":"built_in:test-resource"}}],"description":"test-rule"}'
 
 {"code":0,"data":{"actions":[{"name":"built_in:inspect_action","params":{"$resource":"built_in:test-resource","a":1}}],"description":"test-rule","enabled":true,"id":"test-rule:1555120233443199609","name":"test-rule","rawsql":"select * from \"t/a\""}}
 ```
@@ -131,7 +131,7 @@ $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resource_types/
 
 ```shell
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resources' -d \
-'{"name":"test-resource", "type": "built_in", "config": {"a":1}, "description": "test-rule"}'
+'{"name":"test-resource", "type": "built_in", "config": {"a":1}, "description": "test-resource"}'
 
 {"code":0,"data":{"attrs":"undefined","config":{"a":1},"description":"test-rule","id":"built_in:test-resource","name":"test-resource","type":"built_in"}}
 ```

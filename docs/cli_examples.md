@@ -5,7 +5,7 @@
 ### create
 
 ```shell
-$ ./bin/emqx_ctl rules create 'steven_msg_to_http' 'message.publish' 'SELECT payload FROM "#" where user=Steven' '[{"name":"web_hook:publish_action", "params": {"$resource": "web_hook:webhook1", "url": "http://www.baidu.com"}}]' -d "Forward msgs from clientid=Steven to webhook"
+  $ ./bin/emqx_ctl rules create 'steven_msg_to_http' 'message.publish' 'SELECT payload FROM "#" where user=Steven' '[{"name":"web_hook:publish_action", "params": {"$resource": "web_hook:webhook1"}}]' -d "Forward msgs from clientid=Steven to webhook"
 
 Rule steven_msg_to_http:1555138068602953000 created
 ```
