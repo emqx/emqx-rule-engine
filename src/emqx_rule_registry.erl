@@ -302,13 +302,13 @@ remove_resource(ResId) when is_binary(ResId) ->
 %% @private
 delete_resource(ResId) ->
     try
-        [[?RAISE(not_found = find_resource(ResId1), {exists, Id})
+        [[?RAISE(not_found = find_resource(ResId1), {exists, Name})
             || #{params := #{<<"$resource">> := ResId1}} <- Actions]
-                || #rule{id = Id, actions = Actions} <- get_rules()],
+                || #rule{name = Name, actions = Actions} <- get_rules()],
         mnesia:delete(?RES_TAB, ResId, write)
     catch
-        throw:{exists, Id} ->
-            throw({dependency_exists, {rule_id, Id}})
+        throw:{exists, Name} ->
+            throw({dependency_exists, {rule_name, Name}})
     end.
 
 %% @private
