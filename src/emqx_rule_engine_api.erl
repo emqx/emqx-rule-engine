@@ -229,6 +229,8 @@ delete_resource(#{id := Id}, _Params) ->
         ok = emqx_rule_registry:remove_resource(Id),
         return()
     catch
+        _Error:{throw, Reason} ->
+            return({error, 400, ?ERR_BADARGS(Reason)});
         _Error:Reason ->
             return({error, 400, ?ERR_BADARGS(Reason)})
     end.
