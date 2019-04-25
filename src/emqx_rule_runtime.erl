@@ -128,31 +128,28 @@ apply_rules([#rule{enabled = false}|More], Input) ->
 apply_rules([Rule = #rule{name = Name, for = 'message.publish', topics = Filters}|More], Input) ->
     Topic = get_value(topic, Input),
     try match_topic(Topic, Filters)
-        andalso apply_publish_rule(Rule, Input)
+        andalso apply_rule(Rule, Input)
     catch
         _:Error:StkTrace ->
-            ?LOG(error, "Apply 'message.publish' rule ~s error: ~p. Statcktrace:~n~p",
+            ?LOG(error, "Apply message.publish rule ~s error: ~p. Statcktrace:~n~p",
                  [Name, Error, StkTrace])
     end,
     apply_rules(More, Input);
-apply_rules([Rule = #rule{name = Name, for = Hooks}|More], Input) ->
-    try apply_envent_rule(Rule, Input)
+apply_rules([Rule = #rule{name = Name}|More], Input) ->
+    try apply_rule(Rule, Input)
     catch
         _:Error:StkTrace ->
-            ?LOG(error, "Apply the ~s rule ~s error: ~p. Statcktrace:~n~p",
-                 [Name, Hooks, Error, StkTrace])
+            ?LOG(error, "Apply rule ~s error: ~p. Statcktrace:~n~p",
+                 [Name, Error, StkTrace])
     end,
     apply_rules(More, Input).
 
-apply_publish_rule(#rule{selects = Selects,
-                         conditions = Conditions,
-                         actions = Actions}, Input) ->
-    Selected = select_and_transform(Selects, Input),
+apply_rule(#rule{selects = Selects,
+                 conditions = Conditions,
+                 actions = Actions}, Input) ->
+    Selected = select_and_transform(Selects, rule_input(Input)),
     match_conditions(Conditions, Selected)
         andalso take_actions(Actions, Selected, Input).
-
-apply_envent_rule(#rule{actions = Actions}, Input) ->
-    take_actions(Actions, undefined, Input).
 
 %% Step1 -> Match topic with filters
 match_topic(_Topic, []) ->
@@ -184,31 +181,41 @@ match_conditions({'and', L, R}, Data) ->
     match_conditions(L, Data) andalso match_conditions(R, Data);
 match_conditions({'or', L, R}, Data) ->
     match_conditions(L, Data) orelse match_conditions(R, Data);
-match_conditions({'=', L, R}, Data) ->
-    eval(L, Data) == eval(R, Data);
-match_conditions({'>', L, R}, Data) ->
-    eval(L, Data) > eval(R, Data);
-match_conditions({'<', L, R}, Data) ->
-    eval(L, Data) < eval(R, Data);
-match_conditions({'<=', L, R}, Data) ->
-    eval(L, Data) =< eval(R, Data);
-match_conditions({'>=', L, R}, Data) ->
-    eval(L, Data) >= eval(R, Data);
-match_conditions({NotEq, L, R}, Data)
-  when NotEq =:= '<>'; NotEq =:= '!=' ->
-    eval(L, Data) =/= eval(R, Data);
 match_conditions({'not', Var}, Data) ->
     case eval(Var, Data) of
         Bool when is_boolean(Bool) ->
             not Bool;
         _other -> false
     end;
-%%match_conditions({'like', Var, Pattern}, Data) ->
-%%    match_like(eval(Var, Data), Pattern);
 match_conditions({in, Var, {list, Vals}}, Data) ->
     lists:member(eval(Var, Data), [eval(V, Data) || V <- Vals]);
+match_conditions({Op, L, R}, Data) when ?is_comp(Op) ->
+    compare(Op, eval(L, Data), eval(R, Data));
+%%match_conditions({'like', Var, Pattern}, Data) ->
+%%    match_like(eval(Var, Data), Pattern);
 match_conditions({}, _Data) ->
     true.
+
+%% comparing numbers against strings
+compare(Op, L, R) when is_number(L), is_binary(R) ->
+    do_compare(Op, L, number(R));
+compare(Op, L, R) when is_binary(L), is_number(R) ->
+    do_compare(Op, number(L), R);
+compare(Op, L, R) ->
+    do_compare(Op, L, R).
+
+do_compare('=', L, R) -> L == R;
+do_compare('>', L, R) -> L > R;
+do_compare('<', L, R) -> L < R;
+do_compare('<=', L, R) -> L =< R;
+do_compare('>=', L, R) -> L >= R;
+do_compare('<>', L, R) -> L /= R;
+do_compare('!=', L, R) -> L /= R.
+
+number(Bin) ->
+    try binary_to_integer(Bin)
+    catch error:badarg -> binary_to_float(Bin)
+    end.
 
 %% Step4 -> Take actions
 take_actions(Actions, Selected, Envs) ->
@@ -286,3 +293,43 @@ stop(_Env) ->
     emqx:unhook('message.deliver', fun ?MODULE:on_message_deliver/3),
     emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3).
 
+%%------------------------------------------------------------------------------
+%% Internal Functions
+%%------------------------------------------------------------------------------
+
+rule_input(Input) ->
+    rule_input(Input, #{}).
+rule_input(Input = #{id := Id}, Result) ->
+    rule_input(maps:remove(id, Input),
+               Result#{id => emqx_guid:to_hexstr(Id)});
+rule_input(Input = #{from := From}, Result) ->
+    rule_input(maps:remove(from, Input),
+               Result#{client_id => From});
+rule_input(Input = #{headers := Headers}, Result) ->
+    Username = maps:get(username, Headers, null),
+    Peername = peername(maps:get(peername, Headers, undefined)),
+    rule_input(maps:remove(headers, Input),
+               maps:merge(Result, #{username => Username,
+                                    peername => Peername}));
+rule_input(Input = #{timestamp := Timestamp}, Result) ->
+    rule_input(maps:remove(timestamp, Input),
+               Result#{timestamp => emqx_time:now_ms(Timestamp)});
+rule_input(Input = #{peername := Peername}, Result) ->
+    rule_input(maps:remove(peername, Input),
+               Result#{peername => peername(Peername)});
+rule_input(Input = #{connattrs := Conn}, Result) ->
+    ConnAt = maps:get(connected_at, Conn, null),
+    rule_input(maps:remove(connattrs, Input),
+               maps:merge(Result, #{connected_at => emqx_time:now_ms(ConnAt),
+                                    clean_start => maps:get(clean_start, Conn, null),
+                                    is_bridge => maps:get(is_bridge, Conn, null),
+                                    keepalive => maps:get(keepalive, Conn, null),
+                                    proto_ver => maps:get(proto_ver, Conn, null)
+                                    }));
+rule_input(Input, Result) ->
+    maps:merge(Result, Input).
+
+peername(undefined) ->
+    null;
+peername({IPAddr, Port}) ->
+    list_to_binary(inet:ntoa(IPAddr) ++ ":" ++ integer_to_list(Port)).

@@ -17,6 +17,7 @@
 -behaviour(gen_server).
 
 -include("rule_engine.hrl").
+-include_lib("emqx/include/logger.hrl").
 
 -export([start_link/0]).
 
@@ -293,14 +294,22 @@ find_resource(Id) ->
 
 -spec(remove_resource(emqx_rule_engine:resource() | binary()) -> ok).
 remove_resource(Resource) when is_record(Resource, resource) ->
-    trans(fun delete_resource/1, [Resource]);
+    trans(fun delete_resource/1, [Resource#resource.id]);
 
 remove_resource(ResId) when is_binary(ResId) ->
-    trans(fun mnesia:delete/1, [{?RES_TAB, ResId}]).
+    trans(fun delete_resource/1, [ResId]).
 
 %% @private
-delete_resource(Resource) ->
-    mnesia:delete_object(?RES_TAB, Resource, write).
+delete_resource(ResId) ->
+    try
+        [[?RAISE(not_found = find_resource(ResId1), {exists, Name})
+            || #{params := #{<<"$resource">> := ResId1}} <- Actions]
+                || #rule{name = Name, actions = Actions} <- get_rules()],
+        mnesia:delete(?RES_TAB, ResId, write)
+    catch
+        throw:{exists, Name} ->
+            throw({dependency_exists, {rule_name, Name}})
+    end.
 
 %% @private
 insert_resource(Resource) ->
@@ -354,15 +363,15 @@ init([]) ->
     {ok, #{}}.
 
 handle_call(Req, _From, State) ->
-    logger:error("[RuleRegistry]: unexpected call - ~p", [Req]),
+    ?LOG(error, "[RuleRegistry]: unexpected call - ~p", [Req]),
     {reply, ignored, State}.
 
 handle_cast(Msg, State) ->
-    logger:error("[RuleRegistry]: unexpected cast ~p", [Msg]),
+    ?LOG(error, "[RuleRegistry]: unexpected cast ~p", [Msg]),
     {noreply, State}.
 
 handle_info(Info, State) ->
-    logger:error("[RuleRegistry]: unexpected info ~p", [Info]),
+    ?LOG(error, "[RuleRegistry]: unexpected info ~p", [Info]),
     {noreply, State}.
 
 terminate(_Reason, _State) ->

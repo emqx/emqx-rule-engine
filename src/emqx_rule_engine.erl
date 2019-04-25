@@ -85,25 +85,25 @@ new_action({App, Mod, #{name := Name,
                         for := Hook,
                         type := Type,
                         func := Func,
-                        params := Params,
-                        description := Descr}}) ->
+                        params := ParamsSpec} = Params}) ->
     %% Check if the action's function exported
     case erlang:function_exported(Mod, Func, 1) of
         true -> ok;
         false -> error({action_func_not_found, Func})
     end,
+    ok = emqx_rule_validator:validate_spec(ParamsSpec),
     #action{name = action_name(Type, Name), for = Hook, app = App, type = Type,
-            module = Mod, func = Func, params = Params,
-            description = iolist_to_binary(Descr)}.
+            module = Mod, func = Func, params = ParamsSpec,
+            description = iolist_to_binary(maps:get(description, Params, ""))}.
 
 new_resource_type({App, Mod, #{name := Name,
-                               params := Params,
-                               create := Create,
-                               description := Descr}}) ->
+                               params := ParamsSpec,
+                               create := Create} = Params}) ->
+    ok = emqx_rule_validator:validate_spec(ParamsSpec),
     #resource_type{name = Name, provider = App,
-                   params = Params,
+                   params = ParamsSpec,
                    on_create = {Mod, Create},
-                   description = iolist_to_binary(Descr)}.
+                   description = iolist_to_binary(maps:get(description, Params, ""))}.
 
 find_attrs(App, Def) ->
     [{App, Mod, Attr} || {ok, Modules} <- [application:get_key(App, modules)],
@@ -126,8 +126,7 @@ module_attributes(Module) ->
 create_rule(Params = #{name := Name,
                        for := Hook,
                        rawsql := Sql,
-                       actions := Actions,
-                       description := Descr}) ->
+                       actions := Actions}) ->
     case emqx_rule_sqlparser:parse_select(Sql) of
         {ok, Select} ->
             Rule = #rule{id = rule_id(Name),
@@ -139,25 +138,24 @@ create_rule(Params = #{name := Name,
                          conditions = emqx_rule_sqlparser:select_where(Select),
                          actions = [prepare_action(Action) || Action <- Actions],
                          enabled = maps:get(enabled, Params, true),
-                         description = iolist_to_binary(Descr)},
+                         description = iolist_to_binary(maps:get(description, Params, ""))},
             ok = emqx_rule_registry:add_rule(Rule),
             {ok, Rule};
         Error -> error(Error)
     end.
 
-prepare_action(Name) when is_atom(Name) ->
-    prepare_action({Name, #{}});
 prepare_action({Name, Args}) ->
     case emqx_rule_registry:find_action(Name) of
-        {ok, #action{module = M, func = F}} ->
+        {ok, #action{module = M, func = F, params = ParamSpec}} ->
+            ok = emqx_rule_validator:validate_params(Args, ParamSpec),
             NewArgs = with_resource_config(Args),
-            #{name => Name, params => Args,
-              apply => ?RAISE(M:F(NewArgs), {init_action_failure,_REASON_,{M,F}})};
+            #{name => Name, params => NewArgs,
+              apply => ?RAISE(M:F(NewArgs), {init_action_failure,{{M,F},_REASON_}})};
         not_found ->
             throw({action_not_found, Name})
     end.
 
-with_resource_config(Args = #{'$resource' := ResId}) ->
+with_resource_config(Args = #{<<"$resource">> := ResId}) ->
     case emqx_rule_registry:find_resource(ResId) of
         {ok, #resource{config = Config}} ->
             maps:merge(Args, Config);
@@ -170,17 +168,16 @@ with_resource_config(Args) -> Args.
 -spec(create_resource(#{}) -> {ok, resource()} | {error, Reason :: term()}).
 create_resource(#{name := Name,
                   type := Type,
-                  config := Config,
-                  description := Descr}) ->
+                  config := Config} = Params) ->
     case emqx_rule_registry:find_resource_type(Type) of
-        {ok, #resource_type{on_create = {Mod, OnCreate}}} ->
-            NewConfig = ?RAISE(Mod:OnCreate(Name, Config), {init_resource_failure,_REASON_,{Mod,OnCreate}}),
+        {ok, #resource_type{on_create = {M, F}, params = ParamSpec}} ->
+            ok = emqx_rule_validator:validate_params(Config, ParamSpec),
             ResId = iolist_to_binary([atom_to_list(Type), ":", Name]),
             Resource = #resource{id = ResId,
                                  name = Name,
                                  type = Type,
-                                 config = NewConfig,
-                                 description = iolist_to_binary(Descr)},
+                                 config = ?RAISE(M:F(Name, Config), {init_resource_failure,{{M,F},_REASON_}}),
+                                 description = iolist_to_binary(maps:get(description, Params, ""))},
             ok = emqx_rule_registry:add_resource(Resource),
             {ok, Resource};
         not_found ->

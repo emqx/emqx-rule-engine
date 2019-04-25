@@ -142,7 +142,11 @@
 -define(ERR_NO_RESOURCE(RESID), list_to_binary(io_lib:format("Resource ~s Not Found", [(RESID)]))).
 -define(ERR_NO_HOOK(HOOK), list_to_binary(io_lib:format("Hook ~s Not Found", [(HOOK)]))).
 -define(ERR_NO_RESOURCE_TYPE(TYPE), list_to_binary(io_lib:format("Resource Type ~s Not Found", [(TYPE)]))).
--define(ERR_BADARGS, <<"Bad Arguments">>).
+-define(ERR_BADARGS(REASON),
+        begin
+            R0 = list_to_binary(io_lib:format("~0p", [REASON])),
+            <<"Bad Arguments: ", R0/binary>>
+        end).
 
 %%------------------------------------------------------------------------------
 %% Rules API
@@ -159,8 +163,8 @@ create_rule(_Bindings, Params) ->
             return({error, 400, ?ERR_NO_RESOURCE(ResId)});
         throw:{invalid_hook, Hook} ->
             return({error, 400, ?ERR_NO_HOOK(Hook)});
-        _Error:_Reason ->
-            return({error, 400, ?ERR_BADARGS})
+        _Error:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)})
     end.
 
 list_rules(_Bindings, _Params) ->
@@ -204,8 +208,8 @@ create_resource(#{}, Params) ->
     catch
         throw:{resource_type_not_found, Type} ->
             return({error, 400, ?ERR_NO_RESOURCE_TYPE(Type)});
-        _Error:_Reason ->
-            return({error, 400, ?ERR_BADARGS})
+        _Error:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)})
     end.
 
 list_resources(#{}, _Params) ->
@@ -221,8 +225,15 @@ show_resource(#{id := Id}, _Params) ->
     reply_with(fun emqx_rule_registry:find_resource/1, Id).
 
 delete_resource(#{id := Id}, _Params) ->
-    ok = emqx_rule_registry:remove_resource(Id),
-    return().
+    try
+        ok = emqx_rule_registry:remove_resource(Id),
+        return()
+    catch
+        _Error:{throw, Reason} ->
+            return({error, 400, ?ERR_BADARGS(Reason)});
+        _Error:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)})
+    end.
 
 %%------------------------------------------------------------------------------
 %% Resource Types API
@@ -305,48 +316,48 @@ record_to_map(#resource_type{name = Name,
      }.
 
 parse_rule_params(Params) ->
-    parse_rule_params(Params, #{}).
+    parse_rule_params(Params, #{description => <<"">>}).
 parse_rule_params([], Rule) ->
     Rule;
 parse_rule_params([{<<"name">>, Name} | Params], Rule) ->
     parse_rule_params(Params, Rule#{name => Name});
 parse_rule_params([{<<"for">>, Hook} | Params], Rule) ->
-    parse_rule_params(Params, Rule#{for => try binary_to_existing_atom(Hook, utf8) catch error:badarg -> throw({invalid_hook, Hook}) end});
+    parse_rule_params(Params, Rule#{for => ?RAISE(binary_to_existing_atom(Hook,utf8), {invalid_hook,Hook})});
 parse_rule_params([{<<"rawsql">>, RawSQL} | Params], Rule) ->
     parse_rule_params(Params, Rule#{rawsql => RawSQL});
 parse_rule_params([{<<"actions">>, Actions} | Params], Rule) ->
-    parse_rule_params(Params, Rule#{actions => [parse_action(A) || A <- Actions]});
+    parse_rule_params(Params, Rule#{actions => [parse_action(json_term_to_map(A)) || A <- Actions]});
 parse_rule_params([{<<"description">>, Descr} | Params], Rule) ->
     parse_rule_params(Params, Rule#{description => Descr});
 parse_rule_params([_ | Params], Res) ->
     parse_rule_params(Params, Res).
 
 parse_action(Actions) ->
-    case proplists:get_value(<<"params">>, Actions) of
-        undefined ->
-            binary_to_existing_atom(proplists:get_value(<<"name">>, Actions), utf8);
-        Params ->
-            {binary_to_existing_atom(proplists:get_value(<<"name">>, Actions), utf8),
-             maps:from_list(atom_key_list(Params))}
+    case maps:find(<<"params">>, Actions) of
+        error ->
+            {binary_to_existing_atom(maps:get(<<"name">>, Actions), utf8), #{}};
+        {ok, Params} ->
+            {binary_to_existing_atom(maps:get(<<"name">>, Actions), utf8),
+             Params}
     end.
 
 parse_resource_params(Params) ->
-    parse_resource_params(Params, #{}).
+    parse_resource_params(Params, #{config => #{}, description => <<"">>}).
 parse_resource_params([], Res) ->
     Res;
 parse_resource_params([{<<"name">>, Name} | Params], Res) ->
     parse_resource_params(Params, Res#{name => Name});
-parse_resource_params([{<<"type">>, Type} | Params], Res) ->
-    try parse_resource_params(Params, Res#{type => binary_to_existing_atom(Type, utf8)})
+parse_resource_params([{<<"type">>, ResourceType} | Params], Res) ->
+    try parse_resource_params(Params, Res#{type => binary_to_existing_atom(ResourceType, utf8)})
     catch error:badarg ->
-        throw({resource_type_not_found, Type})
+        throw({resource_type_not_found, ResourceType})
     end;
 parse_resource_params([{<<"config">>, Config} | Params], Res) ->
-    parse_resource_params(Params, Res#{config => maps:from_list(atom_key_list(Config))});
+    parse_resource_params(Params, Res#{config => json_term_to_map(Config)});
 parse_resource_params([{<<"description">>, Descr} | Params], Res) ->
     parse_resource_params(Params, Res#{description => Descr});
 parse_resource_params([_ | Params], Res) ->
     parse_resource_params(Params, Res).
 
-atom_key_list(BinKeyList) ->
-    [{binary_to_existing_atom(K, utf8), V} || {K, V} <- BinKeyList].
+json_term_to_map(List) ->
+    jsx:decode(jsx:encode(List), [return_maps]).

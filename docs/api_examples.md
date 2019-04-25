@@ -17,7 +17,7 @@ $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules' -d \
 
 ## with a resource id in the action args
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules' -d \
-'{"name":"test-rule","for":"message.publish","rawsql":"select * from \"t/a\"","actions":[{"name":"built_in:inspect_action","params":{"$resource":"built_in:test-resource","a":1}}],"description":"test-rule"}'
+'{"name":"test-rule","for":"message.publish","rawsql":"select * from \"t/a\"","actions":[{"name":"built_in:inspect_action","params":{"$resource":"built_in:test-resource"}}],"description":"test-rule"}'
 
 {"code":0,"data":{"actions":[{"name":"built_in:inspect_action","params":{"$resource":"built_in:test-resource","a":1}}],"description":"test-rule","enabled":true,"id":"test-rule:1555120233443199609","name":"test-rule","rawsql":"select * from \"t/a\""}}
 ```
@@ -54,7 +54,7 @@ $ curl -XDELETE -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules/
 ```shell
 $ curl -v --basic -u $APPSECRET -k http://localhost:8080/api/v3/actions
 
-{"code":0,"data":[{"app":"emqx_rule_engine","description":"Debug Action","name":"built_in:inspect_action","params":{"$resource":"built_in"}},{"app":"emqx_rule_engine","description":"Republish a MQTT message","name":"built_in:republish_action","params":{"$resource":"built_in","from":"topic","to":"topic"}}]}
+{"code":0,"data":[{"app":"emqx_rule_engine","description":"Debug Action","name":"built_in:inspect_action","params":{"$resource":"built_in"}},{"app":"emqx_rule_engine","description":"Republish a MQTT message","name":"built_in:republish_action","params":{"$resource":"built_in","target_topic":"topic"}}]}
 ```
 
 ### list all actions of a resource type
@@ -62,7 +62,7 @@ $ curl -v --basic -u $APPSECRET -k http://localhost:8080/api/v3/actions
 ```shell
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resource_types/built_in/actions'
 
-{"code":0,"data":[{"app":"emqx_rule_engine","description":"Debug Action","name":"built_in:inspect_action","params":{},"type":"built_in"},{"app":"emqx_rule_engine","description":"Republish a MQTT message","name":"built_in:republish_action","params":{"from":"topic","to":"topic"},"type":"built_in"}]}
+{"code":0,"data":[{"app":"emqx_rule_engine","description":"Debug Action","name":"built_in:inspect_action","params":{},"type":"built_in"},{"app":"emqx_rule_engine","description":"Republish a MQTT message","name":"built_in:republish_action","params":{"target_topic":"topic"},"type":"built_in"}]}
 ```
 
 
@@ -72,11 +72,11 @@ $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resource_types/
 ```shell
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/actions?for=message.publish'
 
-{"app":"emqx_rule_engine","description":"Republish a MQTT message","name":"built_in:republish_action","params":{"from":"topic","to":"topic"},"type":"built_in"}]}
+{"app":"emqx_rule_engine","description":"Republish a MQTT message","name":"built_in:republish_action","params":{"target_topic":"topic"},"type":"built_in"}]}
 
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/actions?for=$messages'
 
-{"code":0,"data":[{"app":"emqx_rule_engine","description":"Debug Action","for":"$any","name":"built_in:inspect_action","params":{},"type":"built_in"},{"app":"emqx_rule_engine","description":"Republish a MQTT message","for":"message.publish","name":"built_in:republish_action","params":{"from":"topic","to":"topic"},"type":"built_in"},{"app":"emqx_web_hook","description":"Forward Messages to Web Server","for":"message.publish","name":"web_hook:publish_action","params":{"$resource":"web_hook"},"type":"web_hook"}]}
+{"code":0,"data":[{"app":"emqx_rule_engine","description":"Debug Action","for":"$any","name":"built_in:inspect_action","params":{},"type":"built_in"},{"app":"emqx_rule_engine","description":"Republish a MQTT message","for":"message.publish","name":"built_in:republish_action","params":{"target_topic":"topic"},"type":"built_in"},{"app":"emqx_web_hook","description":"Forward Messages to Web Server","for":"message.publish","name":"web_hook:publish_action","params":{"$resource":"web_hook"},"type":"web_hook"}]}
 
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/actions?for=$events'
 
@@ -131,7 +131,7 @@ $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resource_types/
 
 ```shell
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resources' -d \
-'{"name":"test-resource", "type": "built_in", "config": {"a":1}, "description": "test-rule"}'
+'{"name":"test-resource", "type": "built_in", "config": {"a":1}, "description": "test-resource"}'
 
 {"code":0,"data":{"attrs":"undefined","config":{"a":1},"description":"test-rule","id":"built_in:test-resource","name":"test-resource","type":"built_in"}}
 ```
@@ -169,7 +169,7 @@ $ curl -XDELETE -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resour
 ``` shell
 
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resources' -d \
-'{"name":"webhook1", "type": "web_hook", "config": {"url": "http://127.0.0.1:9910", "headers": {"token": "axfw34y235wrq234t4ersgw4t"}, "method": "POST"}, "description": "web hook resource-1"}'
+'{"name":"webhook1", "type": "web_hook", "config": {"url": "http://127.0.0.1:9910", "headers": {"token":"axfw34y235wrq234t4ersgw4t"}, "method": "POST"}, "description": "web hook resource-1"}'
 
 curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules' -d \
 '{"name":"connected_msg_to_http","for":"client.connected","rawsql":"select * from \"#\"","actions":[{"name":"web_hook:event_action","params":{"$resource": "web_hook:webhook1", "template": {"client": "${client_id}", "user": "${username}", "c": {"u": "${username}", "e": "${e}"}}}}],"description":"Forward connected events to webhook"}'
