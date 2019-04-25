@@ -47,7 +47,7 @@
         [{name, undefined, undefined, binary, "Rule Name"}
         ,{hook, undefined, undefined, atom, "On Which Hook"}
         ,{sql, undefined, undefined, binary, "Filter Condition SQL"}
-        ,{actions, undefined, undefined, binary, "Action List To Be Used"}
+        ,{actions, undefined, undefined, binary, "Action List in JSON format:\n[{\"name\": <action_name>, \"params\": {<key>: <value>}}]"}
         ,{descr, $d, "descr", {binary, <<"">>}, "Description"}
         ]).
 
@@ -93,10 +93,10 @@ rules(["create" | Params]) ->
                     {ok, #rule{id = RuleId}} ->
                         emqx_cli:print("Rule ~s created~n", [RuleId]);
                     {error, Reason} ->
-                        emqx_cli:print("Invalid options: ~p~n", [Reason])
+                        emqx_cli:print("Invalid options: ~0p~n", [Reason])
                 catch
                     throw:Error ->
-                        emqx_cli:print("Invalid options: ~p~n", [Error])
+                        emqx_cli:print("Invalid options: ~0p~n", [Error])
                 end
               end, Params, ?OPTSPEC_RULES_CREATE, {?FUNCTION_NAME, create});
 
@@ -137,10 +137,10 @@ resources(["create" | Params]) ->
                     {ok, #resource{id = ResId}} ->
                         emqx_cli:print("Resource ~s created~n", [ResId]);
                     {error, Reason} ->
-                        emqx_cli:print("Invalid options: ~p~n", [Reason])
+                        emqx_cli:print("Invalid options: ~0p~n", [Reason])
                 catch
                     throw:Reason ->
-                        emqx_cli:print("Invalid options: ~p~n", [Reason])
+                        emqx_cli:print("Invalid options: ~0p~n", [Reason])
                 end
               end, Params, ?OPTSPEC_RESOURCES_CREATE, {?FUNCTION_NAME, create});
 
@@ -162,7 +162,7 @@ resources(["delete", ResourceId]) ->
         emqx_cli:print("ok~n")
     catch
         _Error:Reason ->
-            emqx_cli:print("Cannot delete resource as ~p~n", [Reason])
+            emqx_cli:print("Cannot delete resource as ~0p~n", [Reason])
     end;
 
 resources(_usage) ->
@@ -244,13 +244,7 @@ make_rule(Opts) ->
     #{name => get_value(name, Opts),
       for => get_value(hook, Opts),
       rawsql => get_value(sql, Opts),
-      actions => lists:map(fun
-                    (#{<<"name">> := ActName, <<"params">> := ActParam}) ->
-                        {?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}),
-                         ActParam};
-                    (#{<<"name">> := ActName}) ->
-                         {?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}), #{}}
-                    end, jsx:decode(Actions, [return_maps])),
+      actions => parse_action_params(Actions),
       description => get_value(descr, Opts)}.
 
 make_resource(Opts) ->
@@ -270,8 +264,19 @@ with_opts(Action, RawParams, OptSpecList, {CmdObject, CmdName}) ->
         {error, Reason} ->
             getopt:usage(OptSpecList,
                 io_lib:format("emqx_ctl ~s ~s", [CmdObject, CmdName]), standard_io),
-            emqx_cli:print("~p~n", [Reason])
+            emqx_cli:print("~0p~n", [Reason])
     end.
+
+parse_action_params(Actions) ->
+    ?RAISE(
+        lists:map(fun
+            (#{<<"name">> := ActName, <<"params">> := ActParam}) ->
+                {?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}),
+                ActParam};
+            (#{<<"name">> := ActName}) ->
+                {?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}), #{}}
+            end, jsx:decode(Actions, [return_maps])),
+        {invalid_action_params, _REASON_}).
 
 get_actions(undefined, undefined) ->
     emqx_rule_registry:get_actions();
