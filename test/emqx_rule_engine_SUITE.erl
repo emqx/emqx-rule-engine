@@ -649,7 +649,7 @@ create_simple_repub_rule(RuleName, TargetTopic, SQL) ->
                       for => 'message.publish',
                       rawsql => SQL,
                       actions => [{'built_in:republish_action',
-                                  #{<<"from">> => <<"#">>, <<"to">> => TargetTopic}}],
+                                  #{<<"target_topic">> => TargetTopic}}],
                       description => RuleName}),
     Rule.
 

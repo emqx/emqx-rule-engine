@@ -109,7 +109,7 @@ validate_boolean(false) -> ok;
 validate_boolean(Val) -> error({invalid_data_type, {boolean, Val}}).
 
 reg_exp(url) -> "^https?://\\w+(\.\\w+)*(:[0-9]+)?";
-reg_exp(topic) -> "^/?(\\w|\\#|\\+)+(/(\\w|\\#|\\+))*$";
+reg_exp(topic) -> "^/?(\\w|\\#|\\+)+(/?(\\w|\\#|\\+))*/?$";
 reg_exp(resource_type) -> "[a-zA-Z0-9_:-]";
 reg_exp(any) -> ".*";
 reg_exp(RegExp) -> RegExp.
