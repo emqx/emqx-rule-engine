@@ -47,7 +47,7 @@
         [{name, undefined, undefined, binary, "Rule Name"}
         ,{hook, undefined, undefined, atom, "On Which Hook"}
         ,{sql, undefined, undefined, binary, "Filter Condition SQL"}
-        ,{actions, undefined, undefined, binary, "Action List in JSON format:\n[{\"name\": <action_name>, \"params\": {<key>: <value>}}]"}
+        ,{actions, undefined, undefined, binary, "Action List in JSON format: [{\"name\": <action_name>, \"params\": {<key>: <value>}}]"}
         ,{descr, $d, "descr", {binary, <<"">>}, "Description"}
         ]).
 
