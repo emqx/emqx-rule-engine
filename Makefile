@@ -20,6 +20,8 @@ eunit: compile
 xref:
 	$(REBAR) xref
 
-clean:
+clean: distclean
+
+distclean:
 	@rm -rf _build
 	@rm -f data/app.*.config data/vm.*.args rebar.lock
