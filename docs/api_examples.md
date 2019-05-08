@@ -179,7 +179,7 @@ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules' -d \
 Start a `web server` using `nc`, and then connect to emqx broker using a mqtt client with username = 'Shawn':
 
 ```shell
-nc -l 127.0.0.1 9910
+echo -e "HTTP/1.1 200 OK\n\n $(date)" | nc -l 127.0.0.1 9910
 
 POST / HTTP/1.1
 content-type: application/json

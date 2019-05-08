@@ -130,10 +130,9 @@ init_per_testcase(t_hookpoints, Config) ->
                     module = ?MODULE, func = hook_metrics_action, params = #{},
                     description = <<"Hook metrics action">>}),
     {ok, Rules} = emqx_rule_engine:create_rule(
-                    #{name => <<"debug-rule">>,
-                      for => 'message.publish',
+                    #{for => 'message.publish',
                       rawsql => "select * from \"t1\"",
-                      actions => [{'built_in:inspect_action', #{}},
+                      actions => [{'inspect', #{}},
                                   {'built_in:hook-metrics-action', #{}}],
                       description => <<"Debug rule">>}),
     ?assertEqual(8, length(Rules)),
@@ -165,10 +164,9 @@ t_unregister_provider(_Config) ->
 t_create_rule(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     {ok, #rule{id = Id}} = emqx_rule_engine:create_rule(
-            #{name => <<"debug-rule">>,
-              for => 'message.publish',
+            #{for => 'message.publish',
               rawsql => <<"select * from \"t/a\"">>,
-              actions => [{'built_in:inspect_action', #{arg1 => 1}}],
+              actions => [{'inspect', #{arg1 => 1}}],
               description => <<"debug rule">>}),
     %ct:pal("======== emqx_rule_registry:get_rules :~p", [emqx_rule_registry:get_rules()]),
     ?assertMatch({ok,#rule{id = Id, for = 'message.publish'}}, emqx_rule_registry:get_rule(Id)),
@@ -179,8 +177,7 @@ t_create_rule(_Config) ->
 t_create_resource(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     {ok, #resource{id = ResId}} = emqx_rule_engine:create_resource(
-            #{name => <<"debug-resource">>,
-              type => built_in,
+            #{type => built_in,
               config => #{},
               description => <<"debug resource">>}),
     ?assert(true, is_binary(ResId)),
@@ -195,15 +192,13 @@ t_create_resource(_Config) ->
 t_inspect_action(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     {ok, #resource{id = ResId}} = emqx_rule_engine:create_resource(
-            #{name => <<"debug-resource">>,
-              type => built_in,
+            #{type => built_in,
               config => #{},
               description => <<"debug resource">>}),
     {ok, #rule{id = Id, topics = [<<"t1">>]}} = emqx_rule_engine:create_rule(
-                #{name => <<"inspect_rule">>,
-                  for => 'message.publish',
+                #{for => 'message.publish',
                   rawsql => "select * from \"t1\"",
-                  actions => [{'built_in:inspect_action',
+                  actions => [{'inspect',
                               #{'$resource' => ResId, a=>1, b=>2}}],
                   type => built_in,
                   description => <<"Inspect rule">>
@@ -220,10 +215,9 @@ t_republish_action(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     {ok, #rule{id = Id, for = 'message.publish'}} =
         emqx_rule_engine:create_rule(
-                    #{name => <<"builtin-republish-rule">>,
-                      for => 'message.publish',
+                    #{for => 'message.publish',
                       rawsql => <<"select topic, payload, qos from \"t1\"">>,
-                      actions => [{'built_in:republish_action',
+                      actions => [{'republish',
                                   #{from => <<"t1">>, to => <<"t2">>}}],
                       description => <<"builtin-republish-rule">>}),
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
@@ -251,7 +245,7 @@ t_crud_rule_api(_Config) ->
                 [{<<"name">>, <<"debug-rule">>},
                  {<<"for">>, <<"message.publish">>},
                  {<<"rawsql">>, <<"select * from \"t/a\"">>},
-                 {<<"actions">>, [[{<<"name">>,<<"built_in:inspect_action">>},
+                 {<<"actions">>, [[{<<"name">>,<<"inspect">>},
                                    {<<"params">>,[{<<"arg1">>,1}]}]]},
                  {<<"description">>, <<"debug rule">>}]),
     %ct:pal("RCreated : ~p", [Rule]),
@@ -282,8 +276,8 @@ t_list_actions_api(_Config) ->
     ok.
 
 t_show_action_api(_Config) ->
-    ?assertMatch({ok, [{code, 0}, {data, #{name := 'built_in:inspect_action'}}]},
-                 emqx_rule_engine_api:show_action(#{name => 'built_in:inspect_action'},[])),
+    ?assertMatch({ok, [{code, 0}, {data, #{name := 'inspect'}}]},
+                 emqx_rule_engine_api:show_action(#{name => 'inspect'},[])),
     ok.
 
 t_crud_resources_api(_Config) ->
@@ -321,9 +315,9 @@ t_show_resource_type_api(_Config) ->
 %%------------------------------------------------------------------------------
 
 t_rules_cli(_Config) ->
-    RCreate = emqx_rule_engine_cli:rules(["create", "inspect", "message.publish",
+    RCreate = emqx_rule_engine_cli:rules(["create", "message.publish",
                                           "select * from t1",
-                                          "[{\"name\":\"built_in:inspect_action\", \"params\": {\"arg1\": 1}}]",
+                                          "[{\"name\":\"inspect\", \"params\": {\"arg1\": 1}}]",
                                           "-d", "Debug Rule"]),
     ?assertMatch({match, _}, re:run(RCreate, "created")),
     %ct:pal("Result : ~p", [RCreate]),
@@ -349,31 +343,31 @@ t_rules_cli(_Config) ->
 
 t_actions_cli(_Config) ->
     RList = emqx_rule_engine_cli:actions(["list"]),
-    ?assertMatch({match, _}, re:run(RList, "inspect_action")),
+    ?assertMatch({match, _}, re:run(RList, "inspect")),
     %ct:pal("RList : ~p", [RList]),
     RListT = emqx_rule_engine_cli:actions(["list", "-t", "built_in"]),
     %ct:pal("RListT : ~p", [RListT]),
-    ?assertMatch({match, _}, re:run(RListT, "inspect_action")),
+    ?assertMatch({match, _}, re:run(RListT, "inspect")),
 
-    RShow = emqx_rule_engine_cli:actions(["show", "built_in:inspect_action"]),
-    ?assertMatch({match, _}, re:run(RShow, "inspect_action")),
+    RShow = emqx_rule_engine_cli:actions(["show", "inspect"]),
+    ?assertMatch({match, _}, re:run(RShow, "inspect")),
     %ct:pal("RShow : ~p", [RShow]),
     ok.
 
 t_resources_cli(_Config) ->
-    RCreate = emqx_rule_engine_cli:resources(["create", "res-1", "built_in", "{\"a\" : 1}", "-d", "test resource"]),
+    RCreate = emqx_rule_engine_cli:resources(["create", "built_in", "{\"a\" : 1}", "-d", "test resource"]),
     ResId = re:replace(re:replace(RCreate, "Resource\s", "", [{return, list}]), "\screated\n", "", [{return, list}]),
 
     RList = emqx_rule_engine_cli:resources(["list"]),
-    ?assertMatch({match, _}, re:run(RList, "res-1")),
+    ?assertMatch({match, _}, re:run(RList, "test resource")),
     %ct:pal("RList : ~p", [RList]),
 
     RListT = emqx_rule_engine_cli:resources(["list", "-t", "built_in"]),
-    ?assertMatch({match, _}, re:run(RListT, "res-1")),
+    ?assertMatch({match, _}, re:run(RListT, "test resource")),
     %ct:pal("RListT : ~p", [RListT]),
 
     RShow = emqx_rule_engine_cli:resources(["show", ResId]),
-    ?assertMatch({match, _}, re:run(RShow, "res-1")),
+    ?assertMatch({match, _}, re:run(RShow, "test resource")),
     %ct:pal("RShow : ~p", [RShow]),
 
     RDelete = emqx_rule_engine_cli:resources(["delete", ResId]),
@@ -389,8 +383,8 @@ t_resource_types_cli(_Config) ->
     ?assertMatch({match, _}, re:run(RList, "built_in")),
     %ct:pal("RList : ~p", [RList]),
 
-    RShow = emqx_rule_engine_cli:resource_types(["show", "built_in:inspect_action"]),
-    ?assertMatch({match, _}, re:run(RShow, "inspect_action")),
+    RShow = emqx_rule_engine_cli:resource_types(["show", "inspect"]),
+    ?assertMatch({match, _}, re:run(RShow, "inspect")),
     %ct:pal("RShow : ~p", [RShow]),
     ok.
 
@@ -409,14 +403,14 @@ t_topic_func(_Config) ->
 t_add_get_remove_rule(_Config) ->
     RuleId0 = <<"rule-debug-0">>,
     ok = emqx_rule_registry:add_rule(make_simple_rule(RuleId0)),
-    ?assertMatch({ok, #rule{name = RuleId0}}, emqx_rule_registry:get_rule(RuleId0)),
+    ?assertMatch({ok, #rule{id = RuleId0}}, emqx_rule_registry:get_rule(RuleId0)),
     ok = emqx_rule_registry:remove_rule(RuleId0),
     ?assertEqual(not_found, emqx_rule_registry:get_rule(RuleId0)),
 
     RuleId1 = <<"rule-debug-1">>,
     Rule1 = make_simple_rule(RuleId1),
     ok = emqx_rule_registry:add_rule(Rule1),
-    ?assertMatch({ok, #rule{name = RuleId1}}, emqx_rule_registry:get_rule(RuleId1)),
+    ?assertMatch({ok, #rule{id = RuleId1}}, emqx_rule_registry:get_rule(RuleId1)),
     ok = emqx_rule_registry:remove_rule(Rule1),
     ?assertEqual(not_found, emqx_rule_registry:get_rule(RuleId1)),
     ok.
@@ -593,7 +587,7 @@ client_disconnected(Client) ->
 t_sqlselect(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     TopicRule = create_simple_repub_rule(
-                    <<"topic-rule">>, <<"t2">>,
+                    <<"t2">>,
                     "SELECT payload.x as x "
                     "FROM \"t3/#\", \"t1/#\" "
                     "WHERE x = 1"),
@@ -632,25 +626,23 @@ t_sqlselect(_Config) ->
 %% Internal helpers
 %%------------------------------------------------------------------------------
 
-make_simple_rule(RuleName) when is_binary(RuleName) ->
-    #rule{id = RuleName,
-          name = RuleName,
+make_simple_rule(RuleId) when is_binary(RuleId) ->
+    #rule{id = RuleId,
           rawsql = <<"select * from \"simple/topic\"">>,
           for = 'message.publish',
           topics = [<<"simple/topic">>],
           selects = [<<"*">>],
           conditions = {},
-          actions = [{'built_in:inspect_action', #{}}],
+          actions = [{'inspect', #{}}],
           description = <<"simple rule">>}.
 
-create_simple_repub_rule(RuleName, TargetTopic, SQL) ->
+create_simple_repub_rule(TargetTopic, SQL) ->
     {ok, Rule} = emqx_rule_engine:create_rule(
-                    #{name => RuleName,
-                      for => 'message.publish',
+                    #{for => 'message.publish',
                       rawsql => SQL,
-                      actions => [{'built_in:republish_action',
+                      actions => [{'republish',
                                   #{<<"target_topic">> => TargetTopic}}],
-                      description => RuleName}),
+                      description => <<"simple repub rule">>}),
     Rule.
 
 make_simple_action(ActionName) when is_atom(ActionName) ->
