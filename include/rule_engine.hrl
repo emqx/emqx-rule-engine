@@ -29,7 +29,6 @@
 
 -record(rule,
         { id :: rule_id()
-        , name :: rule_name()
         , for :: hook()
         , rawsql :: binary()
         , topics :: [binary()] | undefined
@@ -53,7 +52,6 @@
 
 -record(resource,
         { id :: resource_id()
-        , name :: resource_name()
         , type :: resource_type_name()
         , config :: #{}
         , attrs :: #{}

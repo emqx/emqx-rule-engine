@@ -125,22 +125,22 @@ apply_rules([], _Input) ->
     ok;
 apply_rules([#rule{enabled = false}|More], Input) ->
     apply_rules(More, Input);
-apply_rules([Rule = #rule{name = Name, for = 'message.publish', topics = Filters}|More], Input) ->
+apply_rules([Rule = #rule{id = RuleID, for = 'message.publish', topics = Filters}|More], Input) ->
     Topic = get_value(topic, Input),
     try match_topic(Topic, Filters)
         andalso apply_rule(Rule, Input)
     catch
         _:Error:StkTrace ->
             ?LOG(error, "Apply message.publish rule ~s error: ~p. Statcktrace:~n~p",
-                 [Name, Error, StkTrace])
+                 [RuleID, Error, StkTrace])
     end,
     apply_rules(More, Input);
-apply_rules([Rule = #rule{name = Name}|More], Input) ->
+apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
     try apply_rule(Rule, Input)
     catch
         _:Error:StkTrace ->
             ?LOG(error, "Apply rule ~s error: ~p. Statcktrace:~n~p",
-                 [Name, Error, StkTrace])
+                 [RuleID, Error, StkTrace])
     end,
     apply_rules(More, Input).
 

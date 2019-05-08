@@ -5,17 +5,17 @@
 ### create
 
 ```shell
-  $ ./bin/emqx_ctl rules create 'steven_msg_to_http' 'message.publish' 'SELECT payload FROM "#" where user=Steven' '[{"name":"web_hook:publish_action", "params": {"$resource": "web_hook:webhook1"}}]' -d "Forward msgs from clientid=Steven to webhook"
+  $ ./bin/emqx_ctl rules create 'message.publish' 'SELECT payload FROM "#" where user=Steven' '[{"name":"data_to_webserver", "params": {"$resource": "resource:19addfef"}}]' --descr "Msg From Steven to WebServer"
 
-Rule steven_msg_to_http:1555138068602953000 created
+Rule rule:72456057 created
 ```
 
 ### show
 
 ```shell
-$ ./bin/emqx_ctl rules show steven_msg_to_http:1555138068602953000
+$ ./bin/emqx_ctl rules show rule:72456057
 
-rule(id=steven_msg_to_http:1555138068602953000, name=steven_msg_to_http, for=message.publish, rawsql=SELECT payload FROM "#" where user=Steven, actions=<<"[{\"name\":\"web_hook:publish_action\",\"params\":{\"$resource\":\"web_hook:webhook1\",\"url\":\"http://www.baidu.com\"}}]">>, enabled=true, description=Forward msgs from clientid=Steven to webhook)
+rule(id='rule:72456057', for='message.publish', rawsql='SELECT payload FROM "#" where user=Steven', actions=[{"name":"data_to_webserver","params":{"$resource":"resource:19addfef","url":"http://host-name/chats"}}], enabled='true', description='Msg From Steven to WebServer')
 ```
 
 ### list
@@ -23,14 +23,14 @@ rule(id=steven_msg_to_http:1555138068602953000, name=steven_msg_to_http, for=mes
 ```shell
 $ ./bin/emqx_ctl rules list
 
-rule(id=steven_msg_to_http:1555138068602953000, name=steven_msg_to_http, for=message.publish, rawsql=SELECT payload FROM "#" where user=Steven, actions=<<"[{\"name\":\"web_hook:publish_action\",\"params\":{\"$resource\":\"web_hook:webhook1\",\"url\":\"http://www.baidu.com\"}}]">>, enabled=true, description=Forward msgs from clientid=Steven to webhook)
+rule(id='rule:72456057', for='message.publish', rawsql='SELECT payload FROM "#" where user=Steven', actions=[{"name":"data_to_webserver","params":{"$resource":"resource:19addfef","url":"http://host-name/chats"}}], enabled='true', description='Msg From Steven to WebServer')
 
 ```
 
 ### delete
 
 ```shell
-$ ./bin/emqx_ctl rules delete 'steven_msg_to_http:1555138068602953000'
+$ ./bin/emqx_ctl rules delete 'rule:72456057'
 
 ok
 ```
@@ -42,16 +42,17 @@ ok
 ```shell
 $ ./bin/emqx_ctl rule-actions list
 
-action(name=built_in:inspect_action, app=emqx_rule_engine, params=#{'$resource' => built_in}, description=Debug Action)
-action(name=web_hook:publish_action, app=emqx_web_hook, params=#{'$resource' => web_hook,url => string}, description=Forward a MQTT message)
+action(name='republish', app='emqx_rule_engine', for='message.publish', type='built_in', params=#{...}, description='Republish a MQTT message to a another topic')
+action(name='inspect', app='emqx_rule_engine', for='$any', type='built_in', params=#{...}, description='Inspect the details of action params for debug purpose')
+action(name='data_to_webserver', app='emqx_web_hook', for='message.publish', type='web_hook', params=#{...}, description='Forward Messages to Web Server')
 ```
 
 ### show
 
 ```shell
-$ ./bin/emqx_ctl rule-actions show 'web_hook:publish_action'
+$ ./bin/emqx_ctl rule-actions show 'data_to_webserver'
 
-action(name=web_hook:publish_action, app=emqx_web_hook, params=#{'$resource' => web_hook,url => string}, description=Forward a MQTT message)
+action(name='data_to_webserver', app='emqx_web_hook', for='message.publish', type='web_hook', params=#{...}, description='Forward Messages to Web Server')
 ```
 
 ## Resource
@@ -59,9 +60,9 @@ action(name=web_hook:publish_action, app=emqx_web_hook, params=#{'$resource' => 
 ### create
 
 ```shell
-$ ./bin/emqx_ctl resources create 'webhook1' 'web_hook' -c '{"url": "http://host-name/chats"}'
+$ ./bin/emqx_ctl resources create 'web_hook' -c '{"url": "http://host-name/chats"}' --descr 'Resource towards http://host-name/chats'
 
-Resource web_hook:webhook1 created
+Resource resource:19addfef created
 ```
 
 ### list
@@ -69,7 +70,7 @@ Resource web_hook:webhook1 created
 ```shell
 $ ./bin/emqx_ctl resources list
 
-resource(id=web_hook:webhook1, name=webhook1, type=web_hook, config=#{}, attrs=undefined, description=)
+resource(id='resource:19addfef', type='web_hook', config=#{<<"url">> => <<"http://host-name/chats">>}, attrs=undefined, description='Resource towards http://host-name/chats')
 
 ```
 
@@ -78,22 +79,21 @@ resource(id=web_hook:webhook1, name=webhook1, type=web_hook, config=#{}, attrs=u
 ```shell
 $ ./bin/emqx_ctl resources list -t 'web_hook'
 
-resource(id=web_hook:webhook1, name=webhook1, type=web_hook, config=#{}, attrs=undefined, description=)
-
+resource(id='resource:19addfef', type='web_hook', config=#{<<"url">> => <<"http://host-name/chats">>}, attrs=undefined, description='Resource towards http://host-name/chats')
 ```
 
 ### show
 
 ```shell
-$ ./bin/emqx_ctl resources show 'web_hook:webhook1'
+$ ./bin/emqx_ctl resources show 'resource:19addfef'
 
-resource(id=web_hook:webhook1, name=webhook1, type=web_hook, config=#{}, attrs=undefined, description=)
+resource(id='resource:19addfef', type='web_hook', config=#{<<"url">> => <<"http://host-name/chats">>}, attrs=undefined, description='Resource towards http://host-name/chats')
 ```
 
 ### delete
 
 ```shell
-$ ./bin/emqx_ctl resources delete 'web_hook:webhook1'
+$ ./bin/emqx_ctl resources delete 'resource:19addfef'
 
 ok
 ```
@@ -105,8 +105,8 @@ ok
 ```shell
 $ ./bin/emqx_ctl resource-types list
 
-resource_type(name=built_in, provider=emqx_rule_engine, params=#{}, on_create={emqx_rule_actions,on_resource_create}, description=Debug resource type)
-resource_type(name=web_hook, provider=emqx_web_hook, params=#{}, on_create={emqx_web_hook_actions,on_resource_create}, description=WebHook Resource)
+resource_type(name='built_in', provider='emqx_rule_engine', params=#{...}, on_create={emqx_rule_actions,on_resource_create}, description='The built in resource type for debug purpose')
+resource_type(name='web_hook', provider='emqx_web_hook', params=#{...}, on_create={emqx_web_hook_actions,on_resource_create}, description='WebHook Resource')
 ```
 
 ### show
@@ -114,32 +114,33 @@ resource_type(name=web_hook, provider=emqx_web_hook, params=#{}, on_create={emqx
 ```shell
 $ ./bin/emqx_ctl resource-types show built_in
 
-resource_type(name=built_in, provider=emqx_rule_engine, params=#{}, on_create={emqx_rule_actions,on_resource_create}, description=Debug resource type)
+resource_type(name='built_in', provider='emqx_rule_engine', params=#{}, description='The built in resource type for debug purpose')
 ```
 
 ## Rule example using webhook
 
 ``` shell
+1. Create a webhook resource to URL http://127.0.0.1:9910.
+./bin/emqx_ctl resources create 'web_hook' --config '{"url": "http://127.0.0.1:9910", "headers": {"token":"axfw34y235wrq234t4ersgw4t"}, "method": "POST"}'
+Resource resource:3128243e created
 
-./bin/emqx_ctl resources create 'webhook1' 'web_hook' -c '{"url": "http://127.0.0.1:9910", "headers": {"token":"axfw34y235wrq234t4ersgw4t"}, "method": "POST"}'
-
-./bin/emqx_ctl rules create 'connected_msg_to_http' 'client.connected' 'SELECT * FROM "#"' '[{"name":"web_hook:event_action", "params": {"$resource": "web_hook:webhook1", "template": {"client": "${client_id}", "user": "${username}", "c": {"u": "${username}", "e": "${e}"}}}}]' -d "Forward connected events to webhook"
-
+2. Create a rule using action data_to_webserver, and bind above resource to that action.
+./bin/emqx_ctl rules create 'client.connected' 'SELECT client_id as c, username as u.name FROM "#"' '[{"name":"data_to_webserver", "params": {"$resource": "resource:3128243e"}}]' --descr "Forward Connected Events to WebServer"
+Rule rule:222b59f7 created
 ```
 
-Start a `web server` using `nc`, and then connect to emqx broker using a mqtt client with username = 'Shawn':
+Start a simple `Web Server` using `nc`, and then connect to emqx broker using a mqtt client with username = 'Shawn':
 
 ```shell
-nc -l 127.0.0.1 9910
+$ echo -e "HTTP/1.1 200 OK\n\n $(date)" | nc -l 127.0.0.1 9910
 
 POST / HTTP/1.1
 content-type: application/json
-content-length: 80
+content-length: 48
 te:
 host: 127.0.0.1:9910
 connection: keep-alive
 token: axfw34y235wrq234t4ersgw4t
 
-{"client":"clientId-E7EYzGa6HK","user":"Shawn","c":{"u":"Shawn","e":null}}
-
+{"c":"clientId-bP70ymeIyo","u":{"name":"Shawn"}
 ```

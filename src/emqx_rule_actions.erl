@@ -35,19 +35,19 @@
                  description => "The built in resource type for debug purpose"
                 }).
 
--rule_action(#{name => inspect_action,
+-rule_action(#{name => inspect,
                for => '$any',
                type => built_in,
-               func => inspect_action,
+               func => inspect,
                params => #{},
                title => <<"Inspect Action">>,
                description => <<"Inspect the details of action params for debug purpose">>
               }).
 
--rule_action(#{name => republish_action,
+-rule_action(#{name => republish,
                for => 'message.publish',
                type => built_in,
-               func => republish_action,
+               func => republish,
                params => ?REPUBLISH_PARAMS_SPEC,
                title => <<"Republish Action">>,
                description => "Republish a MQTT message to a another topic"
@@ -59,8 +59,8 @@
 
 -export([on_resource_create/2]).
 
--export([ inspect_action/1
-        , republish_action/1
+-export([ inspect/1
+        , republish/1
         ]).
 
 %%------------------------------------------------------------------------------
@@ -71,22 +71,22 @@
 on_resource_create(_Name, Conf) ->
     Conf.
 
--spec(inspect_action(Params :: map()) -> action_fun()).
-inspect_action(Params) ->
+-spec(inspect(Params :: map()) -> action_fun()).
+inspect(Params) ->
     fun(Selected, Envs) ->
-        io:format("[built_in:inspect_action]~n"
+        io:format("[inspect]~n"
                   "\tSelected Data: ~p~n"
                   "\tEnvs: ~p~n"
                   "\tAction Init Params: ~p~n", [Selected, Envs, Params])
     end.
 
 %% A Demo Action.
--spec(republish_action(#{binary() := emqx_topic:topic()})
+-spec(republish(#{binary() := emqx_topic:topic()})
       -> action_fun()).
-republish_action(#{<<"target_topic">> := TargetTopic}) ->
+republish(#{<<"target_topic">> := TargetTopic}) ->
     fun(Selected, #{qos := QoS, from := Client,
                     flags := Flags, headers := Headers}) ->
-        ?LOG(debug, "[built_in:republish_action] republish to: ~p, Payload: ~p",
+        ?LOG(debug, "[republish] republish to: ~p, Payload: ~p",
                         [TargetTopic, Selected]),
         emqx_broker:safe_publish(
             #message{
@@ -102,7 +102,7 @@ republish_action(#{<<"target_topic">> := TargetTopic}) ->
     end.
 
 republish_from(Client) ->
-    C = bin(Client), <<"built_in:republish_action:", C/binary>>.
+    C = bin(Client), <<"built_in:republish:", C/binary>>.
 
 bin(Bin) when is_binary(Bin) -> Bin;
 bin(Atom) when is_atom(Atom) ->

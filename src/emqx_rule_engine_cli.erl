@@ -37,18 +37,16 @@
         ]).
 
 -define(OPTSPEC_RESOURCES_CREATE,
-        [ {name, undefined, undefined, binary, "Resource Name"}
-        , {type, undefined, undefined, atom, "Resource Type"}
+        [ {type, undefined, undefined, atom, "Resource Type"}
         , {config, $c, "config", {binary, <<"{}">>}, "Config"}
         , {descr, $d, "descr", {binary, <<"">>}, "Description"}
         ]).
 
 -define(OPTSPEC_RULES_CREATE,
-        [{name, undefined, undefined, binary, "Rule Name"}
-        ,{hook, undefined, undefined, atom, "On Which Hook"}
-        ,{sql, undefined, undefined, binary, "Filter Condition SQL"}
-        ,{actions, undefined, undefined, binary, "Action List in JSON format: [{\"name\": <action_name>, \"params\": {<key>: <value>}}]"}
-        ,{descr, $d, "descr", {binary, <<"">>}, "Description"}
+        [ {hook, undefined, undefined, atom, "On Which Hook"}
+        , {sql, undefined, undefined, binary, "Filter Condition SQL"}
+        , {actions, undefined, undefined, binary, "Action List in JSON format: [{\"name\": <action_name>, \"params\": {<key>: <value>}}]"}
+        , {descr, $d, "descr", {binary, <<"">>}, "Description"}
         ]).
 
 %%-----------------------------------------------------------------------------
@@ -121,7 +119,7 @@ actions(["list" | Params]) ->
         end, Params, ?OPTSPEC_ACTION_TYPE, {'rule-actions', list});
 
 actions(["show", ActionId]) ->
-    print_with(fun emqx_rule_registry:find_action/1, list_to_existing_atom(ActionId));
+    print_with(fun emqx_rule_registry:find_action/1, ?RAISE(list_to_existing_atom(ActionId), {not_found, ActionId}));
 
 actions(_usage) ->
     emqx_cli:usage([{"rule-actions list",            "List all actions"},
@@ -207,13 +205,12 @@ print_with(FindFun, Key) ->
     end.
 
 format(#rule{id = Id,
-             name = Name,
              for = Hook,
              rawsql = Sql,
              actions = Actions,
              enabled = Enabled,
              description = Descr}) ->
-    lists:flatten(io_lib:format("rule(id='~s', name='~s', for='~s', rawsql='~s', actions=~s, enabled='~s', description='~s')~n", [Id, Name, Hook, Sql, printable_actions(Actions), Enabled, Descr]));
+    lists:flatten(io_lib:format("rule(id='~s', for='~s', rawsql='~s', actions=~s, enabled='~s', description='~s')~n", [Id, Hook, Sql, printable_actions(Actions), Enabled, Descr]));
 
 format(#action{name = Name,
                for = Hook,
@@ -225,32 +222,28 @@ format(#action{name = Name,
                                 [Name, App, Hook, Type, Params, Descr]));
 
 format(#resource{id = Id,
-                 name = Name,
                  type = Type,
                  config = Config,
                  attrs = Attrs,
                  description = Descr}) ->
-    lists:flatten(io_lib:format("resource(id='~s', name='~s', type='~s', config=~0p, attrs=~0p, description='~s')~n", [Id, Name, Type, Config, Attrs, Descr]));
+    lists:flatten(io_lib:format("resource(id='~s', type='~s', config=~0p, attrs=~0p, description='~s')~n", [Id, Type, Config, Attrs, Descr]));
 
 format(#resource_type{name = Name,
                       provider = Provider,
                       params = Params,
-                      on_create = OnCreate,
                       description = Descr}) ->
-    lists:flatten(io_lib:format("resource_type(name='~s', provider='~s', params=~0p, on_create=~0p, description='~s')~n", [Name, Provider, Params, OnCreate, Descr])).
+    lists:flatten(io_lib:format("resource_type(name='~s', provider='~s', params=~0p, description='~s')~n", [Name, Provider, Params, Descr])).
 
 make_rule(Opts) ->
     Actions = get_value(actions, Opts),
-    #{name => get_value(name, Opts),
-      for => get_value(hook, Opts),
+    #{for => get_value(hook, Opts),
       rawsql => get_value(sql, Opts),
       actions => parse_action_params(Actions),
       description => get_value(descr, Opts)}.
 
 make_resource(Opts) ->
     Config = get_value(config, Opts),
-    #{name => get_value(name, Opts),
-      type => get_value(type, Opts),
+    #{type => get_value(type, Opts),
       config => ?RAISE(jsx:decode(Config, [return_maps]), {invalid_config, Config}),
       description => get_value(descr, Opts)}.
 
