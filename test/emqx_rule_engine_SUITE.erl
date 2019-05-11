@@ -17,7 +17,7 @@
 -compile(export_all).
 -compile(nowarn_export_all).
 
--include("rule_engine.hrl").
+-include_lib("emqx_rule_engine/include/rule_engine.hrl").
 -include_lib("emqx/include/emqx.hrl").
 
 -include_lib("eunit/include/eunit.hrl").
