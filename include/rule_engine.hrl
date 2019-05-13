@@ -31,7 +31,6 @@
         { id :: rule_id()
         , for :: hook()
         , rawsql :: binary()
-        , topics :: [binary()] | undefined
         , selects :: list()
         , conditions :: tuple()
         , actions :: list()
@@ -58,18 +57,17 @@
         , description :: binary()
         }).
 
--record(resource_instance,
-        { id :: {binary(), node()}
-        , conns :: list(pid()) | undefined
-        , created_at :: erlang:timestamp()
-        }).
-
 -record(resource_type,
         { name :: resource_type_name()
         , provider :: atom()
         , params :: #{}
         , on_create :: fun((map()) -> map())
         , description :: binary()
+        }).
+
+-record(rule_hooks,
+        { hook :: atom()
+        , rule_id :: rule_id()
         }).
 
 %% Arithmetic operators

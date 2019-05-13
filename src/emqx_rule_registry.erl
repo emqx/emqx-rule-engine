@@ -79,7 +79,7 @@
 -define(RULE_TAB, emqx_rule).
 -define(ACTION_TAB, emqx_rule_action).
 -define(RES_TAB, emqx_resource).
--define(RES_INS_TAB, emqx_resource_instance).
+-define(RULE_HOOKS, emqx_rule_hooks).
 -define(RES_TYPE_TAB, emqx_resource_type).
 
 %% Statistics
@@ -119,18 +119,19 @@ mnesia(boot) ->
                 {index, [#resource.type]},
                 {attributes, record_info(fields, resource)},
                 {storage_properties, StoreProps}]),
-    %% Resource instance table
-    ok = ekka_mnesia:create_table(?RES_INS_TAB, [
-                {ram_copies, [node()]},
-                {record_name, resource_instance},
-                {attributes, record_info(fields, resource_instance)},
-                {storage_properties, StoreProps}]),
     %% Resource type table
     ok = ekka_mnesia:create_table(?RES_TYPE_TAB, [
                 {ram_copies, [node()]},
                 {record_name, resource_type},
                 {index, [#resource_type.provider]},
                 {attributes, record_info(fields, resource_type)},
+                {storage_properties, StoreProps}]),
+    %% Resource instance table
+    ok = ekka_mnesia:create_table(?RULE_HOOKS, [
+                {type, bag},
+                {ram_copies, [node()]},
+                {record_name, rule_hooks},
+                {attributes, record_info(fields, rule_hooks)},
                 {storage_properties, StoreProps}]);
 
 mnesia(copy) ->
@@ -140,10 +141,10 @@ mnesia(copy) ->
     ok = ekka_mnesia:copy_table(?ACTION_TAB),
     %% Copy resource table
     ok = ekka_mnesia:copy_table(?RES_TAB),
-    %% Copy resource instance table
-    ok = ekka_mnesia:copy_table(?RES_INS_TAB),
     %% Copy resource type table
-    ok = ekka_mnesia:copy_table(?RES_TYPE_TAB).
+    ok = ekka_mnesia:copy_table(?RES_TYPE_TAB),
+    %% Copy hook_name -> rule_id table
+    ok = ekka_mnesia:copy_table(?RULE_HOOKS).
 
 %%------------------------------------------------------------------------------
 %% Start the registry
@@ -163,7 +164,8 @@ get_rules() ->
 
 -spec(get_rules_for(Hook :: hook()) -> list(emqx_rule_engine:rule())).
 get_rules_for(Hook) ->
-    mnesia:dirty_index_read(?RULE_TAB, Hook, #rule.for).
+    lists:flatten([mnesia:dirty_read(?RULE_TAB, Id)
+                   || #rule_hooks{rule_id = Id} <- mnesia:dirty_read(?RULE_HOOKS, Hook)]).
 
 -spec(get_rule(Id :: rule_id()) -> {ok, emqx_rule_engine:rule()} | not_found).
 get_rule(Id) ->
@@ -189,14 +191,19 @@ remove_rules(Rules) ->
     trans(fun lists:foreach/2, [fun delete_rule/1, Rules]).
 
 %% @private
-insert_rule(Rule) ->
+insert_rule(Rule = #rule{id = Id, for = Hooks}) ->
+    [mnesia:write(?RULE_HOOKS, #rule_hooks{hook = H, rule_id = Id}, write) || H <- Hooks],
     mnesia:write(?RULE_TAB, Rule, write).
 
 %% @private
-delete_rule(Rule) when is_record(Rule, rule) ->
-    mnesia:delete_object(?RULE_TAB, Rule, write);
 delete_rule(RuleId) when is_binary(RuleId) ->
-    mnesia:delete(?RULE_TAB, RuleId, write).
+    case get_rule(RuleId) of
+        {ok, Rule} -> delete_rule(Rule);
+        not_found -> ok
+    end;
+delete_rule(Rule = #rule{id = Id, for = Hooks}) when is_record(Rule, rule) ->
+    [mnesia:delete_object(?RULE_HOOKS, #rule_hooks{hook = H, rule_id = Id}, write) || H <- Hooks],
+    mnesia:delete_object(?RULE_TAB, Rule, write).
 
 %%------------------------------------------------------------------------------
 %% Action Management

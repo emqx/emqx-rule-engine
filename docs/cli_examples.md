@@ -5,17 +5,17 @@
 ### create
 
 ```shell
-  $ ./bin/emqx_ctl rules create 'message.publish' 'SELECT payload FROM "#" where user=Steven' '[{"name":"data_to_webserver", "params": {"$resource": "resource:19addfef"}}]' --descr "Msg From Steven to WebServer"
+  $ ./bin/emqx_ctl rules create 'SELECT payload FROM "message.publish" where topic = "#" and username="Steven"' '[{"name":"data_to_webserver", "params": {"$resource": "resource:9093f1cb"}}]' --descr="Msg From Steven to WebServer"
 
-Rule rule:72456057 created
+Rule rule:98a75239 created
 ```
 
 ### show
 
 ```shell
-$ ./bin/emqx_ctl rules show rule:72456057
+$ ./bin/emqx_ctl rules show rule:98a75239
 
-rule(id='rule:72456057', for='message.publish', rawsql='SELECT payload FROM "#" where user=Steven', actions=[{"name":"data_to_webserver","params":{"$resource":"resource:19addfef","url":"http://host-name/chats"}}], enabled='true', description='Msg From Steven to WebServer')
+rule(id='rule:98a75239', for='['message.publish']', rawsql='SELECT payload FROM "message.publish" where topic = "#" and username="Steven"', actions=[{"name":"data_to_webserver","params":{"$resource":"resource:9093f1cb","url":"http://host-name/chats"}}], enabled='true', description='Msg From Steven to WebServer')
 ```
 
 ### list
@@ -23,14 +23,14 @@ rule(id='rule:72456057', for='message.publish', rawsql='SELECT payload FROM "#" 
 ```shell
 $ ./bin/emqx_ctl rules list
 
-rule(id='rule:72456057', for='message.publish', rawsql='SELECT payload FROM "#" where user=Steven', actions=[{"name":"data_to_webserver","params":{"$resource":"resource:19addfef","url":"http://host-name/chats"}}], enabled='true', description='Msg From Steven to WebServer')
+rule(id='rule:98a75239', for='['message.publish']', rawsql='SELECT payload FROM "message.publish" where topic = "#" and username="Steven"', actions=[{"name":"data_to_webserver","params":{"$resource":"resource:9093f1cb","url":"http://host-name/chats"}}], enabled='true', description='Msg From Steven to WebServer')
 
 ```
 
 ### delete
 
 ```shell
-$ ./bin/emqx_ctl rules delete 'rule:72456057'
+$ ./bin/emqx_ctl rules delete 'rule:98a75239'
 
 ok
 ```

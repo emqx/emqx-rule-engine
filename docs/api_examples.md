@@ -2,29 +2,29 @@
 
 ## ENVs
 
-APPSECRET="37990d56454af8:Mjg3Mjg4NDM0NDQ0MjkzNDU5NzQ4NDM4OTc3MjAwMTI4MDA"
+APPSECRET="88ebdd6569afc:Mjg3MzUyNTI2Mjk2NTcyOTEwMDEwMDMzMTE2NTM1MTkzNjA"
 
 ## Rules
 
 ### create
 ```shell
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules' -d \
-'{"for":"message.publish","rawsql":"select * from \"t/a\"","actions":[{"name":"inspect","params":{"a":1}}],"description":"test-rule"}'
+'{"rawsql":"select * from \"message.publish\" where topic=\"t/a\"","actions":[{"name":"inspect","params":{"a":1}}],"description":"test-rule"}'
 
-{"code":0,"data":{"actions":[{"name":"inspect","params":{"a":1}}],"description":"test-rule","enabled":true,"for":"message.publish","id":"rule:6afb617f","rawsql":"select * from \"t/a\""}}
+{"code":0,"data":{"actions":[{"name":"inspect","params":{"a":1}}],"description":"test-rule","enabled":true,"for":["message.publish"],"id":"rule:bc987915","rawsql":"select * from \"message.publish\" where topic=\"t/a\""}}
 
 ## with a resource id in the action args
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules' -d \
-'{"for":"message.publish","rawsql":"select * from \"t/a\"","actions":[{"name":"inspect","params":{"$resource":"resource:71df3086"}}],"description":"test-rule"}'
+'{"rawsql":"select * from \"message.publish\" where topic=\"t/a\"","actions":[{"name":"inspect","params":{"$resource":"resource:3a7b44a1"}}],"description":"test-rule"}'
 
-{"code":0,"data":{"actions":[{"name":"inspect","params":{"$resource":"resource:71df3086","a":1}}],"description":"test-rule","enabled":true,"for":"message.publish","id":"rule:a5f4cee1","rawsql":"select * from \"t/a\""}}
+{"code":0,"data":{"actions":[{"name":"inspect","params":{"$resource":"resource:3a7b44a1","a":1}}],"description":"test-rule","enabled":true,"for":["message.publish"],"id":"rule:6fce0ca9","rawsql":"select * from \"message.publish\" where topic=\"t/a\""}}
 ```
 
 ### show
 ```shell
-$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules/rule:6afb617f'
+$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules/rule:bc987915'
 
-{"code":0,"data":{"actions":[{"name":"inspect","params":{"a":1}}],"description":"test-rule","enabled":true,"for":"message.publish","id":"rule:6afb617f","rawsql":"select * from \"t/a\""}}
+{"code":0,"data":{"actions":[{"name":"inspect","params":{"a":1}}],"description":"test-rule","enabled":true,"for":["message.publish"],"id":"rule:bc987915","rawsql":"select * from \"message.publish\" where topic=\"t/a\""}}
 ```
 
 ### list
@@ -32,13 +32,13 @@ $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules/rule:6afb
 ```shell
 $ curl -v --basic -u $APPSECRET -k http://localhost:8080/api/v3/rules
 
-{"code":0,"data":[{"actions":[{"name":"inspect","params":{"a":1}}],"description":"test-rule","enabled":true,"for":"message.publish","id":"rule:6afb617f","rawsql":"select * from \"t/a\""}]}
+{"code":0,"data":[{"actions":[{"name":"inspect","params":{"a":1}}],"description":"test-rule","enabled":true,"for":["message.publish"],"id":"rule:bc987915","rawsql":"select * from \"message.publish\" where topic=\"t/a\""},{"actions":[{"name":"inspect","params":{"$resource":"resource:3a7b44a1","a":1}}],"description":"test-rule","enabled":true,"for":["message.publish"],"id":"rule:6fce0ca9","rawsql":"select * from \"message.publish\" where topic=\"t/a\""}]}
 ```
 
 ### delete
 
 ```shell
-$ curl -XDELETE -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules/rule:6afb617f'
+$ curl -XDELETE -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules/rule:bc987915'
 
 {"code":0}
 ```
