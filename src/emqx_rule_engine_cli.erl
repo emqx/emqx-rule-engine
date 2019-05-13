@@ -43,8 +43,7 @@
         ]).
 
 -define(OPTSPEC_RULES_CREATE,
-        [ {hook, undefined, undefined, atom, "On Which Hook"}
-        , {sql, undefined, undefined, binary, "Filter Condition SQL"}
+        [ {sql, undefined, undefined, binary, "Filter Condition SQL"}
         , {actions, undefined, undefined, binary, "Action List in JSON format: [{\"name\": <action_name>, \"params\": {<key>: <value>}}]"}
         , {descr, $d, "descr", {binary, <<"">>}, "Description"}
         ]).
@@ -210,7 +209,7 @@ format(#rule{id = Id,
              actions = Actions,
              enabled = Enabled,
              description = Descr}) ->
-    lists:flatten(io_lib:format("rule(id='~s', for='~s', rawsql='~s', actions=~s, enabled='~s', description='~s')~n", [Id, Hook, Sql, printable_actions(Actions), Enabled, Descr]));
+    lists:flatten(io_lib:format("rule(id='~s', for='~0p', rawsql='~s', actions=~s, enabled='~s', description='~s')~n", [Id, Hook, Sql, printable_actions(Actions), Enabled, Descr]));
 
 format(#action{name = Name,
                for = Hook,
@@ -236,8 +235,7 @@ format(#resource_type{name = Name,
 
 make_rule(Opts) ->
     Actions = get_value(actions, Opts),
-    #{for => get_value(hook, Opts),
-      rawsql => get_value(sql, Opts),
+    #{rawsql => get_value(sql, Opts),
       actions => parse_action_params(Actions),
       description => get_value(descr, Opts)}.
 

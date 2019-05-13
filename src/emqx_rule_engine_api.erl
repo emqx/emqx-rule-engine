@@ -315,8 +315,6 @@ parse_rule_params(Params) ->
     parse_rule_params(Params, #{description => <<"">>}).
 parse_rule_params([], Rule) ->
     Rule;
-parse_rule_params([{<<"for">>, Hook} | Params], Rule) ->
-    parse_rule_params(Params, Rule#{for => ?RAISE(binary_to_existing_atom(Hook,utf8), {invalid_hook,Hook})});
 parse_rule_params([{<<"rawsql">>, RawSQL} | Params], Rule) ->
     parse_rule_params(Params, Rule#{rawsql => RawSQL});
 parse_rule_params([{<<"actions">>, Actions} | Params], Rule) ->

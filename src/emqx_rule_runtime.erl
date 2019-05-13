@@ -125,16 +125,6 @@ apply_rules([], _Input) ->
     ok;
 apply_rules([#rule{enabled = false}|More], Input) ->
     apply_rules(More, Input);
-apply_rules([Rule = #rule{id = RuleID, for = 'message.publish', topics = Filters}|More], Input) ->
-    Topic = get_value(topic, Input),
-    try match_topic(Topic, Filters)
-        andalso apply_rule(Rule, Input)
-    catch
-        _:Error:StkTrace ->
-            ?LOG(error, "Apply message.publish rule ~s error: ~p. Statcktrace:~n~p",
-                 [RuleID, Error, StkTrace])
-    end,
-    apply_rules(More, Input);
 apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
     try apply_rule(Rule, Input)
     catch
@@ -147,20 +137,12 @@ apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
 apply_rule(#rule{selects = Selects,
                  conditions = Conditions,
                  actions = Actions}, Input) ->
-    Selected = select_and_transform(Selects, rule_input(Input)),
-    match_conditions(Conditions, Selected)
-        andalso take_actions(Actions, Selected, Input).
+    Envs = action_envs(Input),
+    Selected = select_and_transform(Selects, Envs),
+    match_conditions(Conditions, maps:merge(Envs, Selected))
+        andalso take_actions(Actions, Selected, Envs).
 
-%% Step1 -> Match topic with filters
-match_topic(_Topic, []) ->
-    true;
-match_topic(Topic, [Filter]) ->
-    emqx_topic:match(Topic, Filter);
-match_topic(Topic, [Filter|More]) ->
-    emqx_topic:match(Topic, Filter)
-        orelse match_topic(Topic, More).
-
-%% Step2 -> Select and transform data
+%% Step1 -> Select and transform data
 select_and_transform(Fields, Input) ->
     select_and_transform(Fields, Input, #{}).
 
@@ -176,7 +158,7 @@ select_and_transform([Field|More], Input, Output) ->
     Alias = alias(Field, Val),
     select_and_transform(More, Input, nested_put(Alias, Val, Output)).
 
-%% Step3 -> Match selected data with conditions
+%% Step2 -> Match selected data with conditions
 match_conditions({'and', L, R}, Data) ->
     match_conditions(L, Data) andalso match_conditions(R, Data);
 match_conditions({'or', L, R}, Data) ->
@@ -210,14 +192,15 @@ do_compare('<', L, R) -> L < R;
 do_compare('<=', L, R) -> L =< R;
 do_compare('>=', L, R) -> L >= R;
 do_compare('<>', L, R) -> L /= R;
-do_compare('!=', L, R) -> L /= R.
+do_compare('!=', L, R) -> L /= R;
+do_compare('match', T, F) -> emqx_topic:match(T, F).
 
 number(Bin) ->
     try binary_to_integer(Bin)
     catch error:badarg -> binary_to_float(Bin)
     end.
 
-%% Step4 -> Take actions
+%% Step3 -> Take actions
 take_actions(Actions, Selected, Envs) ->
     lists:foreach(fun(Action) -> take_action(Action, Selected, Envs) end, Actions).
 
@@ -297,36 +280,37 @@ stop(_Env) ->
 %% Internal Functions
 %%------------------------------------------------------------------------------
 
-rule_input(Input) ->
-    rule_input(Input, #{}).
-rule_input(Input = #{id := Id}, Result) ->
-    rule_input(maps:remove(id, Input),
+action_envs(Input) ->
+    action_envs(Input, #{}).
+action_envs(Input = #{id := Id}, Result) ->
+    action_envs(maps:remove(id, Input),
                Result#{id => emqx_guid:to_hexstr(Id)});
-rule_input(Input = #{from := From}, Result) ->
-    rule_input(maps:remove(from, Input),
+action_envs(Input = #{from := From}, Result) ->
+    action_envs(maps:remove(from, Input),
                Result#{client_id => From});
-rule_input(Input = #{headers := Headers}, Result) ->
+action_envs(Input = #{headers := Headers}, Result) ->
     Username = maps:get(username, Headers, null),
     Peername = peername(maps:get(peername, Headers, undefined)),
-    rule_input(maps:remove(headers, Input),
+    action_envs(maps:remove(headers, Input),
                maps:merge(Result, #{username => Username,
-                                    peername => Peername}));
-rule_input(Input = #{timestamp := Timestamp}, Result) ->
-    rule_input(maps:remove(timestamp, Input),
+                                    peername => Peername,
+                                    headers => Headers}));
+action_envs(Input = #{timestamp := Timestamp}, Result) ->
+    action_envs(maps:remove(timestamp, Input),
                Result#{timestamp => emqx_time:now_ms(Timestamp)});
-rule_input(Input = #{peername := Peername}, Result) ->
-    rule_input(maps:remove(peername, Input),
+action_envs(Input = #{peername := Peername}, Result) ->
+    action_envs(maps:remove(peername, Input),
                Result#{peername => peername(Peername)});
-rule_input(Input = #{connattrs := Conn}, Result) ->
+action_envs(Input = #{connattrs := Conn}, Result) ->
     ConnAt = maps:get(connected_at, Conn, null),
-    rule_input(maps:remove(connattrs, Input),
+    action_envs(maps:remove(connattrs, Input),
                maps:merge(Result, #{connected_at => emqx_time:now_ms(ConnAt),
                                     clean_start => maps:get(clean_start, Conn, null),
                                     is_bridge => maps:get(is_bridge, Conn, null),
                                     keepalive => maps:get(keepalive, Conn, null),
                                     proto_ver => maps:get(proto_ver, Conn, null)
                                     }));
-rule_input(Input, Result) ->
+action_envs(Input, Result) ->
     maps:merge(Result, Input).
 
 peername(undefined) ->

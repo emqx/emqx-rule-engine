@@ -67,7 +67,7 @@ groups() ->
       ]},
      {funcs, [],
       [t_topic_func]},
-     {registry, [sequence],
+     {registry, [parallel],
       [t_add_get_remove_rule,
        t_add_get_remove_rules,
        t_get_rules_for,
@@ -77,10 +77,7 @@ groups() ->
        t_get_actions_for,
        t_get_resources,
        t_add_get_remove_resource,
-       t_register_resource_types,
-       t_get_resource_type,
-       t_get_resource_types,
-       t_unregister_resource_types_of
+       t_resource_types
       ]},
      {runtime, [],
       [%t_hookpoints,
@@ -99,7 +96,7 @@ init_per_suite(Config) ->
     Config.
 
 end_per_suite(_Config) ->
-
+    stop_apps(),
     ok.
 
 
@@ -130,8 +127,7 @@ init_per_testcase(t_hookpoints, Config) ->
                     module = ?MODULE, func = hook_metrics_action, params = #{},
                     description = <<"Hook metrics action">>}),
     {ok, Rules} = emqx_rule_engine:create_rule(
-                    #{for => 'message.publish',
-                      rawsql => "select * from \"t1\"",
+                    #{rawsql => "select * from \"message.publish\"",
                       actions => [{'inspect', #{}},
                                   {'built_in:hook-metrics-action', #{}}],
                       description => <<"Debug rule">>}),
@@ -164,12 +160,11 @@ t_unregister_provider(_Config) ->
 t_create_rule(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     {ok, #rule{id = Id}} = emqx_rule_engine:create_rule(
-            #{for => 'message.publish',
-              rawsql => <<"select * from \"t/a\"">>,
+            #{rawsql => <<"select * from \"message.publish\" where topic = 't/a'">>,
               actions => [{'inspect', #{arg1 => 1}}],
               description => <<"debug rule">>}),
     %ct:pal("======== emqx_rule_registry:get_rules :~p", [emqx_rule_registry:get_rules()]),
-    ?assertMatch({ok,#rule{id = Id, for = 'message.publish'}}, emqx_rule_registry:get_rule(Id)),
+    ?assertMatch({ok,#rule{id = Id, for = ['message.publish']}}, emqx_rule_registry:get_rule(Id)),
     ok = emqx_rule_engine:unload_providers(),
     emqx_rule_registry:remove_rule(Id),
     ok.
@@ -195,9 +190,10 @@ t_inspect_action(_Config) ->
             #{type => built_in,
               config => #{},
               description => <<"debug resource">>}),
-    {ok, #rule{id = Id, topics = [<<"t1">>]}} = emqx_rule_engine:create_rule(
-                #{for => 'message.publish',
-                  rawsql => "select * from \"t1\"",
+    {ok, #rule{id = Id}} = emqx_rule_engine:create_rule(
+                #{rawsql => "select client_id as c, username as u "
+                            "from \"message.publish\" "
+                            "where topic='t1'",
                   actions => [{'inspect',
                               #{'$resource' => ResId, a=>1, b=>2}}],
                   type => built_in,
@@ -213,12 +209,11 @@ t_inspect_action(_Config) ->
 
 t_republish_action(_Config) ->
     ok = emqx_rule_engine:load_providers(),
-    {ok, #rule{id = Id, for = 'message.publish'}} =
+    {ok, #rule{id = Id, for = ['message.publish']}} =
         emqx_rule_engine:create_rule(
-                    #{for => 'message.publish',
-                      rawsql => <<"select topic, payload, qos from \"t1\"">>,
+                    #{rawsql => <<"select topic, payload, qos from \"message.publish\" where topic=t1">>,
                       actions => [{'republish',
-                                  #{from => <<"t1">>, to => <<"t2">>}}],
+                                  #{<<"target_topic">> => <<"t1">>}}],
                       description => <<"builtin-republish-rule">>}),
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqx_client:connect(Client),
@@ -243,8 +238,7 @@ t_crud_rule_api(_Config) ->
     {ok, [{code, 0}, {data, Rule = #{id := RuleID}}]} =
         emqx_rule_engine_api:create_rule(#{},
                 [{<<"name">>, <<"debug-rule">>},
-                 {<<"for">>, <<"message.publish">>},
-                 {<<"rawsql">>, <<"select * from \"t/a\"">>},
+                 {<<"rawsql">>, <<"select * from \"message.publish\" where topic='t/a'">>},
                  {<<"actions">>, [[{<<"name">>,<<"inspect">>},
                                    {<<"params">>,[{<<"arg1">>,1}]}]]},
                  {<<"description">>, <<"debug rule">>}]),
@@ -315,12 +309,12 @@ t_show_resource_type_api(_Config) ->
 %%------------------------------------------------------------------------------
 
 t_rules_cli(_Config) ->
-    RCreate = emqx_rule_engine_cli:rules(["create", "message.publish",
-                                          "select * from t1",
+    RCreate = emqx_rule_engine_cli:rules(["create",
+                                          "select * from \"message.publish\" where topic='t1'",
                                           "[{\"name\":\"inspect\", \"params\": {\"arg1\": 1}}]",
                                           "-d", "Debug Rule"]),
+    ct:pal("Result : ~p", [RCreate]),
     ?assertMatch({match, _}, re:run(RCreate, "created")),
-    %ct:pal("Result : ~p", [RCreate]),
 
     RuleId = re:replace(re:replace(RCreate, "Rule\s", "", [{return, list}]), "\screated\n", "", [{return, list}]),
 
@@ -520,18 +514,25 @@ t_get_resources(_Config) ->
     ok = emqx_rule_registry:add_resource(Res2),
     ?assertEqual(2, length(emqx_rule_registry:get_resources())),
     ok.
-t_register_resource_types(_Config) ->
+
+t_resource_types(_Config) ->
+    register_resource_types(),
+    get_resource_type(),
+    get_resource_types(),
+    unregister_resource_types_of().
+
+register_resource_types() ->
     ResType1 = make_simple_resource_type(<<"resource-type-debug-1">>),
     ResType2 = make_simple_resource_type(<<"resource-type-debug-2">>),
     emqx_rule_registry:register_resource_types([ResType1,ResType2]),
     ok.
-t_get_resource_type(_Config) ->
+get_resource_type() ->
     ?assertMatch({ok, #resource_type{name = <<"resource-type-debug-1">>}}, emqx_rule_registry:find_resource_type(<<"resource-type-debug-1">>)),
     ok.
-t_get_resource_types(_Config) ->
+get_resource_types() ->
     ?assert(length(emqx_rule_registry:get_resource_types()) > 0),
     ok.
-t_unregister_resource_types_of(_Config) ->
+unregister_resource_types_of() ->
     ok = emqx_rule_registry:unregister_resource_types_of(?APP),
     ?assertEqual(0, length(emqx_rule_registry:get_resource_types())),
     ok.
@@ -589,8 +590,8 @@ t_sqlselect(_Config) ->
     TopicRule = create_simple_repub_rule(
                     <<"t2">>,
                     "SELECT payload.x as x "
-                    "FROM \"t3/#\", \"t1/#\" "
-                    "WHERE x = 1"),
+                    "FROM \"message.publish\" "
+                    "WHERE (topic = 't3' or topic = 't1') and x = 1"),
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqx_client:connect(Client),
     {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
@@ -628,9 +629,8 @@ t_sqlselect(_Config) ->
 
 make_simple_rule(RuleId) when is_binary(RuleId) ->
     #rule{id = RuleId,
-          rawsql = <<"select * from \"simple/topic\"">>,
-          for = 'message.publish',
-          topics = [<<"simple/topic">>],
+          rawsql = <<"select * from \"message.publish\" where topic='simple/topic'">>,
+          for = ['message.publish'],
           selects = [<<"*">>],
           conditions = {},
           actions = [{'inspect', #{}}],
@@ -638,8 +638,7 @@ make_simple_rule(RuleId) when is_binary(RuleId) ->
 
 create_simple_repub_rule(TargetTopic, SQL) ->
     {ok, Rule} = emqx_rule_engine:create_rule(
-                    #{for => 'message.publish',
-                      rawsql => SQL,
+                    #{rawsql => SQL,
                       actions => [{'republish',
                                   #{<<"target_topic">> => TargetTopic}}],
                       description => <<"simple repub rule">>}),

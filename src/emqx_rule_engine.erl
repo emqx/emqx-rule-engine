@@ -123,15 +123,13 @@ module_attributes(Module) ->
 %%------------------------------------------------------------------------------
 
 -spec(create_rule(#{}) -> {ok, rule()} | no_return()).
-create_rule(Params = #{for := Hook,
-                       rawsql := Sql,
+create_rule(Params = #{rawsql := Sql,
                        actions := Actions}) ->
     case emqx_rule_sqlparser:parse_select(Sql) of
         {ok, Select} ->
             Rule = #rule{id = rule_id(),
                          rawsql = Sql,
-                         for = Hook,
-                         topics = emqx_rule_sqlparser:select_from(Select),
+                         for = emqx_rule_sqlparser:select_from(Select),
                          selects = emqx_rule_sqlparser:select_fields(Select),
                          conditions = emqx_rule_sqlparser:select_where(Select),
                          actions = [prepare_action(Action) || Action <- Actions],

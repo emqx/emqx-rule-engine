@@ -46,10 +46,14 @@
 -spec(parse_select(string() | binary())
       -> {ok, select()} | {parse_error, term()} | {lex_error, term()}).
 parse_select(Sql) ->
-    case sqlparse:parsetree(Sql) of
-        {ok, [{?SELECT(Fields, From, Where), _Extra}]} ->
-            {ok, preprocess(#select{fields = Fields, from = From, where = Where})};
-        Error -> Error
+    try case sqlparse:parsetree(Sql) of
+            {ok, [{?SELECT(Fields, From, Where), _Extra}]} ->
+                {ok, preprocess(#select{fields = Fields, from = From, where = Where})};
+            Error -> Error
+        end
+    catch
+        _Error:Reason ->
+            {parse_error, Reason}
     end.
 
 -spec(select_fields(select()) -> list(field())).
@@ -64,11 +68,12 @@ select_from(#select{from = From}) ->
 select_where(#select{where = Where}) ->
     Where.
 
-preprocess(#select{fields = Fields, from = Topics, where = Conditions}) ->
+preprocess(#select{fields = Fields, from = Hooks, where = Conditions}) ->
     Selected = [preprocess_field(Field) || Field <- Fields],
+    Froms = [hook(unquote(H)) || H <- Hooks],
     #select{fields = Selected,
-            from   = [unquote(Topic) || Topic <- Topics],
-            where  = preprocess_condition(Conditions, Selected)}.
+            from   = Froms,
+            where  = preprocess_condition(Conditions, as_columns(Selected) ++ fixed_columns(Froms))}.
 
 preprocess_field(<<"*">>) ->
     '*';
@@ -77,35 +82,38 @@ preprocess_field({'as', Field, Alias}) when is_binary(Alias) ->
 preprocess_field(Field) ->
     transform_non_const_field(Field).
 
-preprocess_condition({Op, L, R}, Selected) when ?is_logical(Op) orelse ?is_comp(Op) ->
-    {Op, preprocess_condition(L, Selected), preprocess_condition(R, Selected)};
-preprocess_condition({in, Field, {list, Vals}}, Selected) ->
-    {in, transform_field(Field, Selected), {list, [transform_field(Val, Selected) || Val <- Vals]}};
-preprocess_condition({'not', X}, Selected) ->
-    {'not', preprocess_condition(X, Selected)};
-preprocess_condition({}, _Selected) ->
+preprocess_condition({Op, L, R}, Columns) when ?is_logical(Op) orelse ?is_comp(Op) ->
+    {Op, preprocess_condition(L, Columns), preprocess_condition(R, Columns)};
+preprocess_condition({in, Field, {list, Vals}}, Columns) ->
+    {in, transform_field(Field, Columns), {list, [transform_field(Val, Columns) || Val <- Vals]}};
+preprocess_condition({'not', X}, Columns) ->
+    {'not', preprocess_condition(X, Columns)};
+preprocess_condition({}, _Columns) ->
     {};
-preprocess_condition(Field, Selected) ->
-    transform_field(Field, Selected).
+preprocess_condition(Field, Columns) ->
+    transform_field(Field, Columns).
 
-transform_field({const, Val}, _Selected) ->
+transform_field({const, Val}, _Columns) ->
     {const, Val};
-transform_field(<<Q, Val/binary>>, _Selected) when Q =:= $'; Q =:= $" ->
+transform_field(<<Q, Val/binary>>, _Columns) when Q =:= $'; Q =:= $" ->
     {const, binary:part(Val, {0, byte_size(Val)-1})};
-transform_field(Val, Selected) ->
-    case is_selected_field(Val, Selected) of
-        false -> {const, Val};
-        true -> do_transform_field(Val, Selected)
+transform_field(Val, Columns) ->
+    case is_number_str(Val) of
+        true -> {const, Val};
+        false ->
+            do_transform_field(Val, Columns)
     end.
-do_transform_field(<<"payload.", Attr/binary>>, _Selected) ->
+
+do_transform_field(<<"payload.", Attr/binary>>, Columns) ->
+    validate_var(<<"payload">>, Columns),
     {payload, parse_nested(Attr)};
-do_transform_field({Op, Arg1, Arg2}, Selected) when ?is_arith(Op) ->
-    {Op, transform_field(Arg1, Selected), transform_field(Arg2, Selected)};
-do_transform_field(Var, _Selected) when is_binary(Var) ->
-    {var, parse_nested(Var)};
-do_transform_field({'fun', Name, Args}, Selected) when is_binary(Name) ->
+do_transform_field({Op, Arg1, Arg2}, Columns) when ?is_arith(Op) ->
+    {Op, transform_field(Arg1, Columns), transform_field(Arg2, Columns)};
+do_transform_field(Var, Columns) when is_binary(Var) ->
+    {var, validate_var(parse_nested(Var), Columns)};
+do_transform_field({'fun', Name, Args}, Columns) when is_binary(Name) ->
     Fun = list_to_existing_atom(binary_to_list(Name)),
-    {'fun', Fun, [transform_field(Arg, Selected) || Arg <- Args]}.
+    {'fun', Fun, [transform_field(Arg, Columns) || Arg <- Args]}.
 
 transform_non_const_field(<<"payload.", Attr/binary>>) ->
     {payload, parse_nested(Attr)};
@@ -117,23 +125,51 @@ transform_non_const_field({'fun', Name, Args}) when is_binary(Name) ->
     Fun = list_to_existing_atom(binary_to_list(Name)),
     {'fun', Fun, [transform_non_const_field(Arg) || Arg <- Args]}.
 
-is_selected_field(_Val, []) ->
-    false;
-is_selected_field(_Val, ['*' | _Selected]) ->
-    true;
-is_selected_field(Val, [{as, _, Val} | _Selected]) ->
-    true;
-is_selected_field(Val, [{payload, Val} | _Selected]) ->
-    true;
-is_selected_field(Val, [{payload, Nested} | _Selected]) when is_list(Nested) ->
-    NestedFields = join_str(Nested, <<".">>),
-    Val =:= <<"payload.", NestedFields/binary>>;
-is_selected_field(Val, [{var, Val} | _Selected]) ->
-    true;
-is_selected_field(Val, [{var, Nested} | _Selected]) when is_list(Nested) ->
-    Val =:= join_str(Nested, <<".">>);
-is_selected_field(Val, [_ | Selected]) ->
-    is_selected_field(Val, Selected).
+validate_var(Var, SupportedColumns) ->
+    case {Var, lists:member(Var, SupportedColumns)} of
+        {_, true} -> Var;
+        {[TopVar | _], false} ->
+            lists:member(TopVar, SupportedColumns) orelse error({unknown_column, Var}),
+            Var;
+        {_, false} ->
+            error({unknown_column, Var})
+    end.
+
+is_number_str(Str) when is_binary(Str) ->
+    try _ = binary_to_integer(Str), true
+    catch _:_ ->
+        try _ = binary_to_float(Str), true
+        catch _:_ -> false
+        end
+    end;
+is_number_str(_NonStr) ->
+    false.
+
+as_columns(Selected) ->
+    as_columns(Selected, []).
+as_columns([], Acc) -> Acc;
+as_columns([{as, _, Val} | Selected], Acc) ->
+    as_columns(Selected, [Val | Acc]);
+as_columns([_ | Selected], Acc) ->
+    as_columns(Selected, Acc).
+
+fixed_columns(Columns) when is_list(Columns) ->
+    lists:flatten([columns(Col) || Col <- Columns]).
+
+columns('message.publish') ->
+    [ <<"client_id">>
+    , <<"username">>
+    , <<"event">>
+    , <<"flags">>
+    , <<"id">>
+    , <<"payload">>
+    , <<"peername">>
+    , <<"qos">>
+    , <<"timestamp">>
+    , <<"topic">>
+    ];
+columns(RuleType) ->
+    error({unknown_rule_type, RuleType}).
 
 transform_alias(Alias) ->
     parse_nested(unquote(Alias)).
@@ -147,12 +183,35 @@ parse_nested(Attr) ->
 unquote(Topic) ->
     string:trim(Topic, both, "\"'").
 
-join_str([], _Delim) ->
-    <<>>;
-join_str([F | Fields], Delim) ->
-    join_str(Fields, Delim, F).
-
-join_str([], _Delim, Joined) ->
-    Joined;
-join_str([F | Fields], Delim, Joined) ->
-    join_str(Fields, Delim, <<Joined/binary, Delim/binary, F/binary>>).
+hook(<<"client.authenticate">>) ->
+    'client.authenticate';
+hook(<<"client.check_acl">>) ->
+    'client.check_acl';
+hook(<<"client.connected">>) ->
+    'client.connected';
+hook(<<"client.disconnected">>) ->
+    'client.disconnected';
+hook(<<"client.subscribe">>) ->
+    'client.subscribe';
+hook(<<"client.unsubscribe">>) ->
+    'client.unsubscribe';
+hook(<<"session.created">>) ->
+    'session.created';
+hook(<<"session.resumed">>) ->
+    'session.resumed';
+hook(<<"session.subscribed">>) ->
+    'session.subscribed';
+hook(<<"session.unsubscribe">>) ->
+    'session.unsubscribe';
+hook(<<"session.terminated">>) ->
+    'session.terminated';
+hook(<<"message.publish">>) ->
+    'message.publish';
+hook(<<"message.deliver">>) ->
+    'message.deliver';
+hook(<<"message.acked">>) ->
+    'message.acked';
+hook(<<"message.dropped">>) ->
+    'message.dropped';
+hook(_) ->
+    error(unknown_hook_type).
