@@ -67,7 +67,7 @@ groups() ->
       ]},
      {funcs, [],
       [t_topic_func]},
-     {registry, [parallel],
+     {registry, [sequence],
       [t_add_get_remove_rule,
        t_add_get_remove_rules,
        t_get_rules_for,
@@ -80,7 +80,7 @@ groups() ->
        t_resource_types
       ]},
      {runtime, [],
-      [%t_hookpoints,
+      [t_events,
        t_sqlselect
       ]}
     ].
@@ -119,26 +119,42 @@ end_per_group(_Groupname, _Config) ->
 %% Testcase specific setup/teardown
 %%------------------------------------------------------------------------------
 
-init_per_testcase(t_hookpoints, Config) ->
+init_per_testcase(t_events, Config) ->
     ok = emqx_rule_engine:load_providers(),
-    ets:new(?HOOK_METRICS_TAB, [named_table, set, public]),
+    init_events_counters([ 'message.publish'
+                         , 'message.dropped'
+                         , 'message.deliver'
+                         , 'message.acked'
+                         , 'client.connected'
+                         , 'client.disconnected'
+                         , 'client.subscribe'
+                         , 'client.unsubscribe'
+                         ]),
     ok = emqx_rule_registry:add_action(
-            #action{name = 'built_in:hook-metrics-action', app = ?APP,
-                    module = ?MODULE, func = hook_metrics_action, params = #{},
+            #action{name = 'hook-metrics-action', app = ?APP,
+                    module = ?MODULE, func = hook_metrics_action,
+                    type='built_in', params = #{},
                     description = <<"Hook metrics action">>}),
-    {ok, Rules} = emqx_rule_engine:create_rule(
-                    #{rawsql => "select * from \"message.publish\"",
+    SQL = "SELECT * FROM \"message.publish\", "
+                        "\"message.dropped\", "
+                        "\"message.deliver\", "
+                        "\"message.acked\", "
+                        "\"client.connected\", "
+                        "\"client.disconnected\", "
+                        "\"client.subscribe\", "
+                        "\"client.unsubscribe\"",
+    {ok, Rule} = emqx_rule_engine:create_rule(
+                    #{rawsql => SQL,
                       actions => [{'inspect', #{}},
-                                  {'built_in:hook-metrics-action', #{}}],
+                                  {'hook-metrics-action', #{}}],
                       description => <<"Debug rule">>}),
-    ?assertEqual(8, length(Rules)),
-    [{hook_points_rules, Rules} | Config];
+    [{hook_points_rules, Rule} | Config];
 init_per_testcase(_TestCase, Config) ->
     Config.
 
-end_per_testcase(t_hookpoints, Config) ->
+end_per_testcase(t_events, Config) ->
     ets:delete(?HOOK_METRICS_TAB),
-    ok = emqx_rule_registry:remove_rules(?config(hook_points_rules, Config)),
+    ok = emqx_rule_registry:remove_rule(?config(hook_points_rules, Config)),
     ok = emqx_rule_registry:remove_action('built_in:hook-metrics-action');
 end_per_testcase(_TestCase, _Config) ->
     ok.
@@ -426,11 +442,11 @@ t_add_get_remove_rules(_Config) ->
     ok.
 
 t_get_rules_for(_Config) ->
-    ?assertEqual(0, length(emqx_rule_registry:get_rules_for('message.publish'))),
+    Len0 = length(emqx_rule_registry:get_rules_for('message.publish')),
     ok = emqx_rule_registry:add_rules(
             [make_simple_rule(<<"rule-debug-1">>),
              make_simple_rule(<<"rule-debug-2">>)]),
-    ?assertEqual(2, length(emqx_rule_registry:get_rules_for('message.publish'))),
+    ?assertEqual(Len0+2, length(emqx_rule_registry:get_rules_for('message.publish'))),
     ok = emqx_rule_registry:remove_rules([<<"rule-debug-1">>, <<"rule-debug-2">>]),
     ok.
 
@@ -481,11 +497,11 @@ t_get_actions_for(_Config) ->
     Action4 = make_simple_action('action-subscribe', 'client.subscribe'),
     ok = emqx_rule_registry:add_actions([Action1,Action2,Action3,Action4]),
 
-    MessageActions = emqx_rule_registry:get_actions_for(?HOOK_ALIAS_MESSAGES),
+    MessageActions = emqx_rule_registry:get_actions_for('$message'),
     %ct:pal("MessageActions: ~p", [MessageActions]),
     ?assert(length(MessageActions) >= 1),
 
-    EventActions = emqx_rule_registry:get_actions_for(?HOOK_ALIAS_EVENTS),
+    EventActions = emqx_rule_registry:get_actions_for('$client'),
     %ct:pal("EventActions: ~p", [EventActions]),
     ?assert(length(EventActions) >= 3),
 
@@ -542,7 +558,7 @@ unregister_resource_types_of() ->
 %% Test cases for rule runtime
 %%------------------------------------------------------------------------------
 
-t_hookpoints(_Config) ->
+t_events(_Config) ->
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
     client_connected(Client),
     client_subscribe(Client),
@@ -556,34 +572,34 @@ t_hookpoints(_Config) ->
 
 client_connected(Client) ->
     {ok, _} = emqx_client:connect(Client),
-    verify_hookpoints_counter('client.connected'),
+    verify_events_counter('client.connected'),
     ok.
 client_subscribe(Client) ->
     {ok, _, _} = emqx_client:subscribe(Client, <<"t1">>, 1),
-    verify_hookpoints_counter('client.subscribe'),
+    verify_events_counter('client.subscribe'),
     ok.
 message_publish(Client) ->
     emqx_client:publish(Client, <<"t1">>, <<"{\"id\": 1, \"name\": \"ha\"}">>, 1),
-    verify_hookpoints_counter('message.publish'),
+    verify_events_counter('message.publish'),
     ok.
 message_deliver(_Client) ->
-    verify_hookpoints_counter('message.deliver'),
+    verify_events_counter('message.deliver'),
     ok.
 
 message_acked(_Client) ->
-    verify_hookpoints_counter('message.acked'),
+    verify_events_counter('message.acked'),
     ok.
 client_unsubscribe(Client) ->
     {ok, _, _} = emqx_client:unsubscribe(Client, <<"t1">>),
-    verify_hookpoints_counter('client.unsubscribe'),
+    verify_events_counter('client.unsubscribe'),
     ok.
 message_dropped(Client) ->
     message_publish(Client),
-    verify_hookpoints_counter('message.dropped'),
+    verify_events_counter('message.dropped'),
     ok.
 client_disconnected(Client) ->
     ok = emqx_client:stop(Client),
-    verify_hookpoints_counter('client.disconnected'),
+    verify_events_counter('client.disconnected'),
     ok.
 
 t_sqlselect(_Config) ->
@@ -596,9 +612,8 @@ t_sqlselect(_Config) ->
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqx_client:connect(Client),
     {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
-    ct:sleep(100),
-
     emqx_client:publish(Client, <<"t1">>, <<"{\"x\":1}">>, 0),
+    ct:sleep(100),
     receive {publish, #{topic := T, payload := Payload}} ->
         ?assertEqual(<<"t2">>, T),
         ?assertEqual(<<"{\"x\":1}">>, Payload)
@@ -675,14 +690,17 @@ on_simple_resource_type_create(#{}) ->
     #{}.
 
 hook_metrics_action(_Params) ->
-    fun(_Data = #{<<"hook">> := Hookpoint}) ->
+    fun(_Data = #{event := Hookpoint}, _Events) ->
         ets:update_counter(?HOOK_METRICS_TAB, Hookpoint, 1, {Hookpoint, 1})
     end.
 
-verify_hookpoints_counter(Hookpoint) ->
+verify_events_counter(Hookpoint) ->
     ct:sleep(50),
     ?assert(ets:lookup_element(?HOOK_METRICS_TAB, Hookpoint, 2) > 0).
 
+init_events_counters(Hookpoints) ->
+    ets:new(?HOOK_METRICS_TAB, [named_table, set, public]),
+    [ets:insert(?HOOK_METRICS_TAB, {H, 0}) || H <- Hookpoints].
 
 %%------------------------------------------------------------------------------
 %% Start Apps
@@ -702,7 +720,7 @@ start_apps() ->
 start_apps(App, SchemaFile, ConfigFile) ->
     read_schema_configs(App, SchemaFile, ConfigFile),
     set_special_configs(App),
-    application:ensure_all_started(App).
+    {ok, _} = application:ensure_all_started(App).
 
 read_schema_configs(App, SchemaFile, ConfigFile) ->
     ct:pal("Read configs - SchemaFile: ~p, ConfigFile: ~p", [SchemaFile, ConfigFile]),

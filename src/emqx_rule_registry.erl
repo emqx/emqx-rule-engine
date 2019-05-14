@@ -218,7 +218,7 @@ get_actions() ->
 -spec(get_actions_for(Hook :: hook() | list(hook()))
         -> list(emqx_rule_engine:action())).
 get_actions_for(HookAlias) ->
-    do_get_actions_for(?HOOKS_ALIAS(HookAlias)).
+    do_get_actions_for(?EVENT_ALIAS(HookAlias)).
 
 -spec(do_get_actions_for(Hook :: hook() | list(hook()))
         -> list(emqx_rule_engine:action())).

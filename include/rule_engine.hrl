@@ -94,33 +94,130 @@
             try (_EXP_) catch _:_REASON_ -> throw(_ERROR_) end
         end).
 
--define(HOOK_ALIAS_MESSAGES, '$messages').
--define(HOOK_ALIAS_EVENTS, '$events').
--define(HOOK_ALIAS_ANY, '$any').
--define(HOOKS_ALIAS(ALIAS),
+-define(EVENT_ALIAS(ALIAS),
         case ALIAS of
-           ?HOOK_ALIAS_MESSAGES ->
-                [ ?HOOK_ALIAS_MESSAGES
-                , ?HOOK_ALIAS_ANY
+           '$message' ->
+                [ '$message'
+                , '$any'
                 , 'message.publish'
-                ];
-           ?HOOK_ALIAS_EVENTS ->
-                [ ?HOOK_ALIAS_EVENTS
-                , ?HOOK_ALIAS_ANY
-                , 'client.authenticate'
-                , 'client.check_acl'
-                , 'client.connected'
-                , 'client.disconnected'
-                , 'client.subscribe'
-                , 'client.unsubscribe'
-                , 'session.created'
-                , 'session.resumed'
-                , 'session.subscribed'
-                , 'session.unsubscribe'
-                , 'session.terminated'
                 , 'message.deliver'
                 , 'message.acked'
                 , 'message.dropped'
                 ];
-           _ -> [?HOOK_ALIAS_ANY, ALIAS]
+           '$client' ->
+                [ '$client'
+                , '$any'
+                , 'client.connected'
+                , 'client.disconnected'
+                , 'client.subscribe'
+                , 'client.unsubscribe'
+                ];
+           _ -> ['$any', ALIAS]
+        end).
+
+-define(COLUMNS(EVENT),
+        case EVENT of
+        'message.publish' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"flags">>
+                , <<"id">>
+                , <<"payload">>
+                , <<"peername">>
+                , <<"qos">>
+                , <<"timestamp">>
+                , <<"topic">>
+                ];
+        'message.deliver' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"auth_result">>
+                , <<"flags">>
+                , <<"id">>
+                , <<"payload">>
+                , <<"peername">>
+                , <<"qos">>
+                , <<"timestamp">>
+                , <<"topic">>
+                , <<"ws_cookie">>
+                , <<"zone">>
+                ];
+        'message.acked' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"flags">>
+                , <<"id">>
+                , <<"payload">>
+                , <<"peername">>
+                , <<"qos">>
+                , <<"timestamp">>
+                , <<"topic">>
+                ];
+        'message.dropped' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"flags">>
+                , <<"id">>
+                , <<"node">>
+                , <<"payload">>
+                , <<"peername">>
+                , <<"qos">>
+                , <<"timestamp">>
+                , <<"topic">>
+                ];
+        'client.connected' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"auth_result">>
+                , <<"clean_start">>
+                , <<"connack">>
+                , <<"connected_at">>
+                , <<"is_bridge">>
+                , <<"keepalive">>
+                , <<"mountpoint">>
+                , <<"peername">>
+                , <<"proto_ver">>
+                , <<"ws_cookie">>
+                , <<"zone">>
+                ];
+        'client.disconnected' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"auth_result">>
+                , <<"mountpoint">>
+                , <<"peername">>
+                , <<"reason_code">>
+                , <<"ws_cookie">>
+                , <<"zone">>
+                ];
+        'client.subscribe' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"auth_result">>
+                , <<"mountpoint">>
+                , <<"peername">>
+                , <<"topic_filters">>
+                , <<"ws_cookie">>
+                , <<"zone">>
+                ];
+        'client.unsubscribe' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"auth_result">>
+                , <<"mountpoint">>
+                , <<"peername">>
+                , <<"topic_filters">>
+                , <<"ws_cookie">>
+                , <<"zone">>
+                ];
+        RuleType ->
+                error({unknown_rule_type, RuleType})
         end).
