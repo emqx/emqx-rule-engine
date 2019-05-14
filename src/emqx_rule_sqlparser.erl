@@ -154,22 +154,7 @@ as_columns([_ | Selected], Acc) ->
     as_columns(Selected, Acc).
 
 fixed_columns(Columns) when is_list(Columns) ->
-    lists:flatten([columns(Col) || Col <- Columns]).
-
-columns('message.publish') ->
-    [ <<"client_id">>
-    , <<"username">>
-    , <<"event">>
-    , <<"flags">>
-    , <<"id">>
-    , <<"payload">>
-    , <<"peername">>
-    , <<"qos">>
-    , <<"timestamp">>
-    , <<"topic">>
-    ];
-columns(RuleType) ->
-    error({unknown_rule_type, RuleType}).
+    lists:flatten([?COLUMNS(Col) || Col <- Columns]).
 
 transform_alias(Alias) ->
     parse_nested(unquote(Alias)).
@@ -183,10 +168,6 @@ parse_nested(Attr) ->
 unquote(Topic) ->
     string:trim(Topic, both, "\"'").
 
-hook(<<"client.authenticate">>) ->
-    'client.authenticate';
-hook(<<"client.check_acl">>) ->
-    'client.check_acl';
 hook(<<"client.connected">>) ->
     'client.connected';
 hook(<<"client.disconnected">>) ->
@@ -195,16 +176,6 @@ hook(<<"client.subscribe">>) ->
     'client.subscribe';
 hook(<<"client.unsubscribe">>) ->
     'client.unsubscribe';
-hook(<<"session.created">>) ->
-    'session.created';
-hook(<<"session.resumed">>) ->
-    'session.resumed';
-hook(<<"session.subscribed">>) ->
-    'session.subscribed';
-hook(<<"session.unsubscribe">>) ->
-    'session.unsubscribe';
-hook(<<"session.terminated">>) ->
-    'session.terminated';
 hook(<<"message.publish">>) ->
     'message.publish';
 hook(<<"message.deliver">>) ->

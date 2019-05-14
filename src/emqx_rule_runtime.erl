@@ -60,23 +60,23 @@ hook_rules(Name, Fun, Env) ->
 
 on_client_connected(Credentials = #{client_id := ClientId}, ConnAck, ConnAttrs, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Client(~s) connected, connack: ~w", [ClientId, ConnAck]),
-    ApplyRules(maps:merge(Credentials, #{event => client_connected, connack => ConnAck, connattrs => ConnAttrs})).
+    ApplyRules(maps:merge(Credentials, #{event => 'client.connected', connack => ConnAck, connattrs => ConnAttrs})).
 
 on_client_disconnected(Credentials = #{client_id := ClientId}, ReasonCode, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Client(~s) disconnected, reason_code: ~w",
          [ClientId, ReasonCode]),
-    ApplyRules(maps:merge(Credentials, #{event => client_disconnected, reason_code => ReasonCode})).
+    ApplyRules(maps:merge(Credentials, #{event => 'client.disconnected', reason_code => ReasonCode})).
 
 on_client_subscribe(Credentials = #{client_id := ClientId}, TopicFilters, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Client(~s) will subscribe: ~p",
          [ClientId, TopicFilters]),
-    ApplyRules(maps:merge(Credentials, #{event => client_subscribe, topic_filters => TopicFilters})),
+    ApplyRules(maps:merge(Credentials, #{event => 'client.subscribe', topic_filters => TopicFilters})),
     {ok, TopicFilters}.
 
 on_client_unsubscribe(Credentials = #{client_id := ClientId}, TopicFilters, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Client(~s) unsubscribe ~p",
          [ClientId, TopicFilters]),
-    ApplyRules(maps:merge(Credentials, #{event => client_unsubscribe, topic_filters => TopicFilters})),
+    ApplyRules(maps:merge(Credentials, #{event => 'client.unsubscribe', topic_filters => TopicFilters})),
     {ok, TopicFilters}.
 
 on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
@@ -85,7 +85,7 @@ on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
 
 on_message_publish(Message, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Publish ~s", [emqx_message:format(Message)]),
-    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => message_publish})),
+    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.publish'})),
     {ok, Message}.
 
 on_message_dropped(_, Message = #message{topic = <<"$SYS/", _/binary>>},
@@ -95,19 +95,19 @@ on_message_dropped(_, Message = #message{topic = <<"$SYS/", _/binary>>},
 on_message_dropped(#{node := Node}, Message, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Message dropped for no subscription: ~s",
          [emqx_message:format(Message)]),
-    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => message_dropped, node => Node})),
+    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.dropped', node => Node})),
     {ok, Message}.
 
 on_message_deliver(Credentials = #{client_id := ClientId}, Message, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Deliver message to client(~s): ~s",
          [ClientId, emqx_message:format(Message)]),
-    ApplyRules(maps:merge(Credentials#{event => message_deliver}, emqx_message:to_map(Message))),
+    ApplyRules(maps:merge(Credentials#{event => 'message.deliver'}, emqx_message:to_map(Message))),
     {ok, Message}.
 
 on_message_acked(#{client_id := ClientId, username := Username}, Message, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Session(~s) acked message: ~s",
          [ClientId, emqx_message:format(Message)]),
-    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => message_acked, client_id => ClientId, username => Username})),
+    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.acked', client_id => ClientId, username => Username})),
     {ok, Message}.
 
 %%------------------------------------------------------------------------------
