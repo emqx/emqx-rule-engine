@@ -508,11 +508,12 @@ t_add_get_remove_resource(_Config) ->
     ?assertEqual(not_found, emqx_rule_registry:find_resource(ResId)),
     ok.
 t_get_resources(_Config) ->
+    Len0 = length(emqx_rule_registry:get_resources()),
     Res1 = make_simple_resource(<<"resource-debug-1">>),
     Res2 = make_simple_resource(<<"resource-debug-2">>),
     ok = emqx_rule_registry:add_resource(Res1),
     ok = emqx_rule_registry:add_resource(Res2),
-    ?assertEqual(2, length(emqx_rule_registry:get_resources())),
+    ?assertEqual(Len0+2, length(emqx_rule_registry:get_resources())),
     ok.
 
 t_resource_types(_Config) ->
