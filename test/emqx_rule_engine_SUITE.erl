@@ -608,7 +608,7 @@ t_sqlselect(_Config) ->
                     <<"t2">>,
                     "SELECT payload.x as x "
                     "FROM \"message.publish\" "
-                    "WHERE (topic = 't3' or topic = 't1') and x = 1"),
+                    "WHERE (topic =~ 't3/#' or topic = 't1') and x = 1"),
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqx_client:connect(Client),
     {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
@@ -628,7 +628,7 @@ t_sqlselect(_Config) ->
         ok
     end,
 
-    emqx_client:publish(Client, <<"t3">>, <<"{\"x\":1}">>, 0),
+    emqx_client:publish(Client, <<"t3/a">>, <<"{\"x\":1}">>, 0),
     receive {publish, #{topic := T3, payload := Payload3}} ->
         ?assertEqual(<<"t2">>, T3),
         ?assertEqual(<<"{\"x\":1}">>, Payload3)
