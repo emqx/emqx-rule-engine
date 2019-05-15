@@ -79,6 +79,7 @@
 
 %% Compare operators
 -define(is_comp(Op), (Op =:= '=' orelse
+                      Op =:= '=~' orelse
                       Op =:= '>' orelse
                       Op =:= '<' orelse
                       Op =:= '<=' orelse
