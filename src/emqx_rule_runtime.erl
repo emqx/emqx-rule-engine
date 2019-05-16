@@ -137,10 +137,10 @@ apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
 apply_rule(#rule{selects = Selects,
                  conditions = Conditions,
                  actions = Actions}, Input) ->
-    Envs = action_envs(Input),
-    Selected = select_and_transform(Selects, Envs),
-    match_conditions(Conditions, maps:merge(Envs, Selected))
-        andalso take_actions(Actions, Selected, Envs).
+    Columns = columns(Input),
+    Selected = select_and_transform(Selects, Columns),
+    match_conditions(Conditions, maps:merge(Columns, Selected))
+        andalso take_actions(Actions, Selected, Input).
 
 %% Step1 -> Select and transform data
 select_and_transform(Fields, Input) ->
@@ -280,37 +280,36 @@ stop(_Env) ->
 %% Internal Functions
 %%------------------------------------------------------------------------------
 
-action_envs(Input) ->
-    action_envs(Input, #{}).
-action_envs(Input = #{id := Id}, Result) ->
-    action_envs(maps:remove(id, Input),
-               Result#{id => emqx_guid:to_hexstr(Id)});
-action_envs(Input = #{from := From}, Result) ->
-    action_envs(maps:remove(from, Input),
-               Result#{client_id => From});
-action_envs(Input = #{headers := Headers}, Result) ->
+columns(Input) ->
+    columns(Input, #{}).
+columns(Input = #{id := Id}, Result) ->
+    columns(maps:remove(id, Input),
+            Result#{id => emqx_guid:to_hexstr(Id)});
+columns(Input = #{from := From}, Result) ->
+    columns(maps:remove(from, Input),
+            Result#{client_id => From});
+columns(Input = #{headers := Headers}, Result) ->
     Username = maps:get(username, Headers, null),
     Peername = peername(maps:get(peername, Headers, undefined)),
-    action_envs(maps:remove(headers, Input),
-               maps:merge(Result, #{username => Username,
-                                    peername => Peername,
-                                    headers => Headers}));
-action_envs(Input = #{timestamp := Timestamp}, Result) ->
-    action_envs(maps:remove(timestamp, Input),
-               Result#{timestamp => emqx_time:now_ms(Timestamp)});
-action_envs(Input = #{peername := Peername}, Result) ->
-    action_envs(maps:remove(peername, Input),
-               Result#{peername => peername(Peername)});
-action_envs(Input = #{connattrs := Conn}, Result) ->
+    columns(maps:remove(headers, Input),
+            maps:merge(Result, #{username => Username,
+                                 peername => Peername}));
+columns(Input = #{timestamp := Timestamp}, Result) ->
+    columns(maps:remove(timestamp, Input),
+            Result#{timestamp => emqx_time:now_ms(Timestamp)});
+columns(Input = #{peername := Peername}, Result) ->
+    columns(maps:remove(peername, Input),
+            Result#{peername => peername(Peername)});
+columns(Input = #{connattrs := Conn}, Result) ->
     ConnAt = maps:get(connected_at, Conn, null),
-    action_envs(maps:remove(connattrs, Input),
-               maps:merge(Result, #{connected_at => emqx_time:now_ms(ConnAt),
-                                    clean_start => maps:get(clean_start, Conn, null),
-                                    is_bridge => maps:get(is_bridge, Conn, null),
-                                    keepalive => maps:get(keepalive, Conn, null),
-                                    proto_ver => maps:get(proto_ver, Conn, null)
-                                    }));
-action_envs(Input, Result) ->
+    columns(maps:remove(connattrs, Input),
+            maps:merge(Result, #{connected_at => emqx_time:now_ms(ConnAt),
+                                 clean_start => maps:get(clean_start, Conn, null),
+                                 is_bridge => maps:get(is_bridge, Conn, null),
+                                 keepalive => maps:get(keepalive, Conn, null),
+                                 proto_ver => maps:get(proto_ver, Conn, null)
+                                }));
+columns(Input, Result) ->
     maps:merge(Result, Input).
 
 peername(undefined) ->

@@ -129,7 +129,7 @@ mnesia(boot) ->
     %% Resource instance table
     ok = ekka_mnesia:create_table(?RULE_HOOKS, [
                 {type, bag},
-                {ram_copies, [node()]},
+                {disc_copies, [node()]},
                 {record_name, rule_hooks},
                 {attributes, record_info(fields, rule_hooks)},
                 {storage_properties, StoreProps}]);
