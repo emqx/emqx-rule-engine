@@ -84,7 +84,7 @@ inspect(Params) ->
 -spec(republish(#{binary() := emqx_topic:topic()})
       -> action_fun()).
 republish(#{<<"target_topic">> := TargetTopic}) ->
-    fun(Selected, #{qos := QoS, client_id := Client,
+    fun(Selected, #{qos := QoS, from := Client,
                     flags := Flags, headers := Headers}) ->
         ?LOG(debug, "[republish] republish to: ~p, Payload: ~p",
                         [TargetTopic, Selected]),
