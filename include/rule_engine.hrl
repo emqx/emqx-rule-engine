@@ -135,15 +135,14 @@
                 , <<"username">>
                 , <<"event">>
                 , <<"auth_result">>
+                , <<"mountpoint">>
                 , <<"flags">>
                 , <<"id">>
                 , <<"payload">>
                 , <<"peername">>
+                , <<"topic">>
                 , <<"qos">>
                 , <<"timestamp">>
-                , <<"topic">>
-                , <<"ws_cookie">>
-                , <<"zone">>
                 ];
         'message.acked' ->
                 [ <<"client_id">>
@@ -153,9 +152,9 @@
                 , <<"id">>
                 , <<"payload">>
                 , <<"peername">>
+                , <<"topic">>
                 , <<"qos">>
                 , <<"timestamp">>
-                , <<"topic">>
                 ];
         'message.dropped' ->
                 [ <<"client_id">>
@@ -183,8 +182,6 @@
                 , <<"mountpoint">>
                 , <<"peername">>
                 , <<"proto_ver">>
-                , <<"ws_cookie">>
-                , <<"zone">>
                 ];
         'client.disconnected' ->
                 [ <<"client_id">>
@@ -194,8 +191,6 @@
                 , <<"mountpoint">>
                 , <<"peername">>
                 , <<"reason_code">>
-                , <<"ws_cookie">>
-                , <<"zone">>
                 ];
         'client.subscribe' ->
                 [ <<"client_id">>
@@ -205,8 +200,8 @@
                 , <<"mountpoint">>
                 , <<"peername">>
                 , <<"topic_filters">>
-                , <<"ws_cookie">>
-                , <<"zone">>
+                , <<"topic">>
+                , <<"qos">>
                 ];
         'client.unsubscribe' ->
                 [ <<"client_id">>
@@ -216,8 +211,8 @@
                 , <<"mountpoint">>
                 , <<"peername">>
                 , <<"topic_filters">>
-                , <<"ws_cookie">>
-                , <<"zone">>
+                , <<"topic">>
+                , <<"qos">>
                 ];
         RuleType ->
                 error({unknown_rule_type, RuleType})

@@ -171,6 +171,8 @@ match_conditions({'not', Var}, Data) ->
     end;
 match_conditions({in, Var, {list, Vals}}, Data) ->
     lists:member(eval(Var, Data), [eval(V, Data) || V <- Vals]);
+match_conditions({'fun', Name, Args}, Data) ->
+    apply_func(Name, [eval(Arg, Data) || Arg <- Args], Data);
 match_conditions({Op, L, R}, Data) when ?is_comp(Op) ->
     compare(Op, eval(L, Data), eval(R, Data));
 %%match_conditions({'like', Var, Pattern}, Data) ->
@@ -309,6 +311,10 @@ columns(Input = #{connattrs := Conn}, Result) ->
                                  keepalive => maps:get(keepalive, Conn, null),
                                  proto_ver => maps:get(proto_ver, Conn, null)
                                 }));
+columns(Input = #{topic_filters := [{Topic, #{qos := QoS}} | _] = Filters}, Result) ->
+    columns(maps:remove(topic_filters, Input),
+            Result#{topic => Topic, qos => QoS,
+                    topic_filters => Filters});
 columns(Input, Result) ->
     maps:merge(Result, Input).
 
