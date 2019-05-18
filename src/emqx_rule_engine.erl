@@ -16,8 +16,8 @@
 
 -include("rule_engine.hrl").
 
--export([ register_provider/1
-        , unregister_provider/1
+-export([ load_providers/0
+        , unload_providers/0
         ]).
 
 -export([ create_rule/1
@@ -36,20 +36,40 @@
              ]).
 
 %%------------------------------------------------------------------------------
-%% Register an application as rule-engine's provider
+%% Load resource/action providers from all available applications
 %%------------------------------------------------------------------------------
 
-%% Register an application as rule engine's provider.
--spec(register_provider(App :: atom()) -> ok).
-register_provider(App) when is_atom(App) ->
-    ok = register_actions(App),
-    ok = register_resource_types(App).
+%% Load all providers .
+-spec(load_providers() -> ok).
+load_providers() ->
+    [load_provider(App) || App <- ignore_lib_apps(application:loaded_applications())],
+    ok.
 
-register_actions(App) ->
+-spec(load_provider(App :: atom()) -> ok).
+load_provider(App) when is_atom(App) ->
+    ok = load_actions(App),
+    ok = load_resource_types(App).
+
+%%------------------------------------------------------------------------------
+%% Unload providers
+%%------------------------------------------------------------------------------
+%% Load all providers .
+-spec(unload_providers() -> ok).
+unload_providers() ->
+    [unload_provider(App) || App <- ignore_lib_apps(application:loaded_applications())],
+    ok.
+
+%% @doc Unload a provider.
+-spec(unload_provider(App :: atom()) -> ok).
+unload_provider(App) ->
+    ok = emqx_rule_registry:remove_actions_of(App),
+    ok = emqx_rule_registry:unregister_resource_types_of(App).
+
+load_actions(App) ->
     Actions = find_actions(App),
     emqx_rule_registry:add_actions(Actions).
 
-register_resource_types(App) ->
+load_resource_types(App) ->
     ResourceTypes = find_resource_types(App),
     emqx_rule_registry:register_resource_types(ResourceTypes).
 
@@ -63,45 +83,27 @@ find_resource_types(App) ->
 
 new_action({App, Mod, #{name := Name,
                         for := Hook,
+                        type := Type,
                         func := Func,
-                        params := Params,
-                        description := Descr}}) ->
+                        params := ParamsSpec} = Params}) ->
     %% Check if the action's function exported
     case erlang:function_exported(Mod, Func, 1) of
         true -> ok;
         false -> error({action_func_not_found, Func})
     end,
-    Prefix = case App =:= ?MODULE of
-                 true -> default;
-                 false -> App
-             end,
-    Name1 = list_to_atom(lists:concat([Prefix, ":", Name])),
-    #action{name = Name1, for = Hook, app = App,
-            module = Mod, func = Func, params = Params,
-            description = iolist_to_binary(Descr)}.
+    ok = emqx_rule_validator:validate_spec(ParamsSpec),
+    #action{name = Name, for = Hook, app = App, type = Type,
+            module = Mod, func = Func, params = ParamsSpec,
+            description = iolist_to_binary(maps:get(description, Params, ""))}.
 
 new_resource_type({App, Mod, #{name := Name,
-                               schema := Prefix,
-                               create := Create,
-                               description := Descr}}) ->
-    Path = lists:concat([code:priv_dir(App), "/", App, ".schema"]),
-    {_, Mappings, _Validators} = cuttlefish_schema:files([Path]),
-    Params = find_resource_params(Prefix, Mappings),
+                               params := ParamsSpec,
+                               create := Create} = Params}) ->
+    ok = emqx_rule_validator:validate_spec(ParamsSpec),
     #resource_type{name = Name, provider = App,
-                   params = maps:from_list(Params),
+                   params = ParamsSpec,
                    on_create = {Mod, Create},
-                   description = iolist_to_binary(Descr)}.
-
-find_resource_params(Prefix, Mappings) ->
-    lists:foldr(
-      fun(M, Acc) ->
-              Var = cuttlefish_mapping:variable(M),
-              case string:prefix(string:join(Var, "."), Prefix ++ ".") of
-                  nomatch -> Acc;
-                  Param ->
-                      [{list_to_atom(Param), cuttlefish_mapping:datatype(M)}|Acc]
-              end
-      end, [], Mappings).
+                   description = iolist_to_binary(maps:get(description, Params, ""))}.
 
 find_attrs(App, Def) ->
     [{App, Mod, Attr} || {ok, Modules} <- [application:get_key(App, modules)],
@@ -117,82 +119,88 @@ module_attributes(Module) ->
     end.
 
 %%------------------------------------------------------------------------------
-%% Unregister a provider
-%%------------------------------------------------------------------------------
-
-%% @doc Unregister a provider.
--spec(unregister_provider(App :: atom()) -> ok).
-unregister_provider(App) ->
-    ok = emqx_rule_registry:remove_actions_of(App),
-    ok = emqx_rule_registry:unregister_resource_types_of(App).
-
-%%------------------------------------------------------------------------------
 %% Create a rule or resource
 %%------------------------------------------------------------------------------
 
 -spec(create_rule(#{}) -> {ok, rule()} | no_return()).
-create_rule(Params = #{name := Name,
-                       for := Hook,
-                       rawsql := Sql,
-                       actions := Actions,
-                       description := Descr}) ->
+create_rule(Params = #{rawsql := Sql,
+                       actions := Actions}) ->
     case emqx_rule_sqlparser:parse_select(Sql) of
         {ok, Select} ->
-            Rule = #rule{id = rule_id(Name),
-                         name = Name,
+            Rule = #rule{id = rule_id(),
                          rawsql = Sql,
-                         for = Hook,
-                         topics = emqx_rule_sqlparser:select_from(Select),
+                         for = emqx_rule_sqlparser:select_from(Select),
                          selects = emqx_rule_sqlparser:select_fields(Select),
                          conditions = emqx_rule_sqlparser:select_where(Select),
                          actions = [prepare_action(Action) || Action <- Actions],
                          enabled = maps:get(enabled, Params, true),
-                         description = iolist_to_binary(Descr)},
+                         description = iolist_to_binary(maps:get(description, Params, ""))},
             ok = emqx_rule_registry:add_rule(Rule),
             {ok, Rule};
         Error -> error(Error)
     end.
 
-rule_id(Name) ->
-    iolist_to_binary([Name, ":", integer_to_list(erlang:system_time())]).
-
-prepare_action(Name) when is_atom(Name) ->
-    prepare_action({Name, #{}});
 prepare_action({Name, Args}) ->
     case emqx_rule_registry:find_action(Name) of
-        {ok, #action{module = M, func = F}} ->
+        {ok, #action{module = M, func = F, params = ParamSpec}} ->
+            ok = emqx_rule_validator:validate_params(Args, ParamSpec),
             NewArgs = with_resource_config(Args),
-            #{name => Name, args => Args, apply => M:F(NewArgs)};
+            #{name => Name, params => NewArgs,
+              apply => ?RAISE(M:F(NewArgs), {init_action_failure,{{M,F},_REASON_}})};
         not_found ->
-            throw(action_not_found)
+            throw({action_not_found, Name})
     end.
 
-with_resource_config(Args = #{'$resource' := ResId}) ->
+with_resource_config(Args = #{<<"$resource">> := ResId}) ->
     case emqx_rule_registry:find_resource(ResId) of
         {ok, #resource{config = Config}} ->
             maps:merge(Args, Config);
         not_found ->
-            throw(resource_not_found)
+            throw({resource_not_found, ResId})
     end;
 
 with_resource_config(Args) -> Args.
 
 -spec(create_resource(#{}) -> {ok, resource()} | {error, Reason :: term()}).
-create_resource(#{name := Name,
-                  type := Type,
-                  config := Config,
-                  description := Descr}) ->
+create_resource(#{type := Type,
+                  config := Config} = Params) ->
     case emqx_rule_registry:find_resource_type(Type) of
-        {ok, #resource_type{on_create = {Mod, OnCreate}}} ->
-            NewConfig = Mod:OnCreate(Name, Config),
-            ResId = iolist_to_binary([atom_to_list(Type), ":", Name]),
+        {ok, #resource_type{on_create = {M, F}, params = ParamSpec}} ->
+            ok = emqx_rule_validator:validate_params(Config, ParamSpec),
+            ResId = resource_id(),
             Resource = #resource{id = ResId,
                                  type = Type,
-                                 config = NewConfig,
-                                 description = iolist_to_binary(Descr)},
+                                 config = ?RAISE(M:F(ResId, Config), {init_resource_failure,{{M,F},_REASON_}}),
+                                 description = iolist_to_binary(maps:get(description, Params, ""))},
             ok = emqx_rule_registry:add_resource(Resource),
             {ok, Resource};
         not_found ->
-            {error, resource_type_not_found}
+            {error, {resource_type_not_found, Type}}
     end.
 
+%%------------------------------------------------------------------------------
+%% Internal Functions
+%%------------------------------------------------------------------------------
+
+ignore_lib_apps(Apps) ->
+    LibApps = [kernel, stdlib, sasl, appmon, eldap, erts,
+               syntax_tools, ssl, crypto, mnesia, os_mon,
+               inets, goldrush, gproc, runtime_tools,
+               snmp, otp_mibs, public_key, asn1, ssh, hipe,
+               common_test, observer, webtool, xmerl, tools,
+               test_server, compiler, debugger, eunit, et,
+               wx],
+    [AppName || {AppName, _, _} <- Apps, not lists:member(AppName, LibApps)].
+
+resource_id() ->
+    gen_id("resource:", fun emqx_rule_registry:find_resource/1).
+
+rule_id() ->
+    gen_id("rule:", fun emqx_rule_registry:get_rule/1).
+
+gen_id(Prefix, TestFun) ->
+    Id = iolist_to_binary([Prefix, emqx_rule_id:gen()]),
+    case TestFun(Id) of
+        not_found -> Id;
+        _Res -> gen_id(Prefix, TestFun)
+    end.

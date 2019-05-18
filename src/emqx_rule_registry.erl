@@ -17,6 +17,7 @@
 -behaviour(gen_server).
 
 -include("rule_engine.hrl").
+-include_lib("emqx/include/logger.hrl").
 
 -export([start_link/0]).
 
@@ -35,6 +36,7 @@
         , add_actions/1
         , get_actions/0
         , get_actions_for/1
+        , get_actions_by_type/1
         , find_action/1
         , remove_action/1
         , remove_actions/1
@@ -45,6 +47,7 @@
 -export([ get_resources/0
         , add_resource/1
         , find_resource/1
+        , get_resources_by_type/1
         , remove_resource/1
         ]).
 
@@ -76,7 +79,7 @@
 -define(RULE_TAB, emqx_rule).
 -define(ACTION_TAB, emqx_rule_action).
 -define(RES_TAB, emqx_resource).
--define(RES_INS_TAB, emqx_resource_instance).
+-define(RULE_HOOKS, emqx_rule_hooks).
 -define(RES_TYPE_TAB, emqx_resource_type).
 
 %% Statistics
@@ -106,7 +109,7 @@ mnesia(boot) ->
     ok = ekka_mnesia:create_table(?ACTION_TAB, [
                 {ram_copies, [node()]},
                 {record_name, action},
-                {index, [#action.for, #action.app]},
+                {index, [#action.for, #action.app, #action.type]},
                 {attributes, record_info(fields, action)},
                 {storage_properties, StoreProps}]),
     %% Resource table
@@ -116,18 +119,19 @@ mnesia(boot) ->
                 {index, [#resource.type]},
                 {attributes, record_info(fields, resource)},
                 {storage_properties, StoreProps}]),
-    %% Resource instance table
-    ok = ekka_mnesia:create_table(?RES_INS_TAB, [
-                {ram_copies, [node()]},
-                {record_name, resource_instance},
-                {attributes, record_info(fields, resource_instance)},
-                {storage_properties, StoreProps}]),
     %% Resource type table
     ok = ekka_mnesia:create_table(?RES_TYPE_TAB, [
                 {ram_copies, [node()]},
                 {record_name, resource_type},
                 {index, [#resource_type.provider]},
                 {attributes, record_info(fields, resource_type)},
+                {storage_properties, StoreProps}]),
+    %% Resource instance table
+    ok = ekka_mnesia:create_table(?RULE_HOOKS, [
+                {type, bag},
+                {disc_copies, [node()]},
+                {record_name, rule_hooks},
+                {attributes, record_info(fields, rule_hooks)},
                 {storage_properties, StoreProps}]);
 
 mnesia(copy) ->
@@ -137,10 +141,10 @@ mnesia(copy) ->
     ok = ekka_mnesia:copy_table(?ACTION_TAB),
     %% Copy resource table
     ok = ekka_mnesia:copy_table(?RES_TAB),
-    %% Copy resource instance table
-    ok = ekka_mnesia:copy_table(?RES_INS_TAB),
     %% Copy resource type table
-    ok = ekka_mnesia:copy_table(?RES_TYPE_TAB).
+    ok = ekka_mnesia:copy_table(?RES_TYPE_TAB),
+    %% Copy hook_name -> rule_id table
+    ok = ekka_mnesia:copy_table(?RULE_HOOKS).
 
 %%------------------------------------------------------------------------------
 %% Start the registry
@@ -158,11 +162,12 @@ start_link() ->
 get_rules() ->
     get_all_records(?RULE_TAB).
 
--spec(get_rules_for(Hook :: atom()) -> list(emqx_rule_engine:rule())).
+-spec(get_rules_for(Hook :: hook()) -> list(emqx_rule_engine:rule())).
 get_rules_for(Hook) ->
-    mnesia:dirty_index_read(?RULE_TAB, Hook, #rule.for).
+    lists:flatten([mnesia:dirty_read(?RULE_TAB, Id)
+                   || #rule_hooks{rule_id = Id} <- mnesia:dirty_read(?RULE_HOOKS, Hook)]).
 
--spec(get_rule(Id :: binary()) -> {ok, emqx_rule_engine:rule()} | not_found).
+-spec(get_rule(Id :: rule_id()) -> {ok, emqx_rule_engine:rule()} | not_found).
 get_rule(Id) ->
     case mnesia:dirty_read(?RULE_TAB, Id) of
         [Rule] -> {ok, Rule};
@@ -186,14 +191,19 @@ remove_rules(Rules) ->
     trans(fun lists:foreach/2, [fun delete_rule/1, Rules]).
 
 %% @private
-insert_rule(Rule) ->
+insert_rule(Rule = #rule{id = Id, for = Hooks}) ->
+    [mnesia:write(?RULE_HOOKS, #rule_hooks{hook = H, rule_id = Id}, write) || H <- Hooks],
     mnesia:write(?RULE_TAB, Rule, write).
 
 %% @private
-delete_rule(Rule) when is_record(Rule, rule) ->
-    mnesia:delete_object(?RULE_TAB, Rule, write);
 delete_rule(RuleId) when is_binary(RuleId) ->
-    mnesia:delete(?RULE_TAB, RuleId, write).
+    case get_rule(RuleId) of
+        {ok, Rule} -> delete_rule(Rule);
+        not_found -> ok
+    end;
+delete_rule(Rule = #rule{id = Id, for = Hooks}) when is_record(Rule, rule) ->
+    [mnesia:delete_object(?RULE_HOOKS, #rule_hooks{hook = H, rule_id = Id}, write) || H <- Hooks],
+    mnesia:delete_object(?RULE_TAB, Rule, write).
 
 %%------------------------------------------------------------------------------
 %% Action Management
@@ -204,13 +214,26 @@ delete_rule(RuleId) when is_binary(RuleId) ->
 get_actions() ->
     get_all_records(?ACTION_TAB).
 
-%% @doc Get actions for a hook.
--spec(get_actions_for(Hook :: atom()) -> list(emqx_rule_engine:action())).
-get_actions_for(Hook) ->
+%% @doc Get actions for a hook or hook alias.
+-spec(get_actions_for(Hook :: hook() | list(hook()))
+        -> list(emqx_rule_engine:action())).
+get_actions_for(HookAlias) ->
+    do_get_actions_for(?EVENT_ALIAS(HookAlias)).
+
+-spec(do_get_actions_for(Hook :: hook() | list(hook()))
+        -> list(emqx_rule_engine:action())).
+do_get_actions_for([]) -> [];
+do_get_actions_for([H | T] = Hooks) when is_list(Hooks) ->
+    do_get_actions_for(H) ++ do_get_actions_for(T);
+do_get_actions_for(Hook) when not is_list(Hook) ->
     mnesia:dirty_index_read(?ACTION_TAB, Hook, #action.for).
 
+-spec(get_actions_by_type(Type :: resource_type_name()) -> list(emqx_rule_engine:action())).
+get_actions_by_type(Type) ->
+    mnesia:dirty_index_read(?ACTION_TAB, Type, #action.type).
+
 %% @doc Find an action by name.
--spec(find_action(Name :: atom()) -> {ok, emqx_rule_engine:action()} | not_found).
+-spec(find_action(Name :: action_name()) -> {ok, emqx_rule_engine:action()} | not_found).
 find_action(Name) ->
     case mnesia:dirty_read(?ACTION_TAB, Name) of
         [Action] -> {ok, Action};
@@ -244,7 +267,7 @@ remove_actions(Actions) ->
 -spec(remove_actions_of(App :: atom()) -> ok).
 remove_actions_of(App) ->
     trans(fun() ->
-            lists:foreach(fun delete_action/1, mnesia:dirty_index_read(?ACTION_TAB, App, #action.app))
+            lists:foreach(fun delete_action/1, mnesia:index_read(?ACTION_TAB, App, #action.app))
           end).
 
 %% @private
@@ -269,7 +292,7 @@ get_resources() ->
 add_resource(Resource) when is_record(Resource, resource) ->
     trans(fun insert_resource/1, [Resource]).
 
--spec(find_resource(Id :: binary()) -> {ok, emqx_rule_engine:resource()} | not_found).
+-spec(find_resource(Id :: resource_id()) -> {ok, emqx_rule_engine:resource()} | not_found).
 find_resource(Id) ->
     case mnesia:dirty_read(?RES_TAB, Id) of
         [Res] -> {ok, Res};
@@ -278,14 +301,22 @@ find_resource(Id) ->
 
 -spec(remove_resource(emqx_rule_engine:resource() | binary()) -> ok).
 remove_resource(Resource) when is_record(Resource, resource) ->
-    trans(fun delete_resource/1, [Resource]);
+    trans(fun delete_resource/1, [Resource#resource.id]);
 
 remove_resource(ResId) when is_binary(ResId) ->
-    trans(fun mnesia:delete/1, [{?RES_TAB, ResId}]).
+    trans(fun delete_resource/1, [ResId]).
 
 %% @private
-delete_resource(Resource) ->
-    mnesia:delete_object(?RES_TAB, Resource, write).
+delete_resource(ResId) ->
+    try
+        [[?RAISE(not_found = find_resource(ResId1), {exists, Id})
+            || #{params := #{<<"$resource">> := ResId1}} <- Actions]
+                || #rule{id = Id, actions = Actions} <- get_rules()],
+        mnesia:delete(?RES_TAB, ResId, write)
+    catch
+        throw:{exists, Id} ->
+            throw({dependency_exists, {rule, Id}})
+    end.
 
 %% @private
 insert_resource(Resource) ->
@@ -299,12 +330,16 @@ insert_resource(Resource) ->
 get_resource_types() ->
     get_all_records(?RES_TYPE_TAB).
 
--spec(find_resource_type(Name :: atom()) -> {ok, emqx_rule_engine:resource_type()} | not_found).
+-spec(find_resource_type(Name :: resource_type_name()) -> {ok, emqx_rule_engine:resource_type()} | not_found).
 find_resource_type(Name) ->
     case mnesia:dirty_read(?RES_TYPE_TAB, Name) of
         [ResType] -> {ok, ResType};
         [] -> not_found
     end.
+
+-spec(get_resources_by_type(Type :: resource_type_name()) -> list(emqx_rule_engine:resource())).
+get_resources_by_type(Type) ->
+    mnesia:dirty_index_read(?RES_TAB, Type, #resource.type).
 
 -spec(register_resource_types(list(emqx_rule_engine:resource_type())) -> ok).
 register_resource_types(Types) ->
@@ -314,7 +349,7 @@ register_resource_types(Types) ->
 -spec(unregister_resource_types_of(App :: atom()) -> ok).
 unregister_resource_types_of(App) ->
     trans(fun() ->
-            lists:foreach(fun delete_resource_type/1, mnesia:dirty_index_read(?RES_TYPE_TAB, App, #resource_type.provider))
+            lists:foreach(fun delete_resource_type/1, mnesia:index_read(?RES_TYPE_TAB, App, #resource_type.provider))
           end).
 
 %% @private
@@ -335,15 +370,15 @@ init([]) ->
     {ok, #{}}.
 
 handle_call(Req, _From, State) ->
-    logger:error("[RuleRegistry]: unexpected call - ~p", [Req]),
+    ?LOG(error, "[RuleRegistry]: unexpected call - ~p", [Req]),
     {reply, ignored, State}.
 
 handle_cast(Msg, State) ->
-    logger:error("[RuleRegistry]: unexpected cast ~p", [Msg]),
+    ?LOG(error, "[RuleRegistry]: unexpected cast ~p", [Msg]),
     {noreply, State}.
 
 handle_info(Info, State) ->
-    logger:error("[RuleRegistry]: unexpected info ~p", [Info]),
+    ?LOG(error, "[RuleRegistry]: unexpected info ~p", [Info]),
     {noreply, State}.
 
 terminate(_Reason, _State) ->

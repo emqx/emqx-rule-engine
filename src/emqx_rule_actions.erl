@@ -16,35 +16,51 @@
 -module(emqx_rule_actions).
 
 -include_lib("emqx/include/emqx.hrl").
+-include_lib("emqx/include/logger.hrl").
 
--resource_type(#{name => default_resource,
-                 schema => "emqx_rule_engine",
+-define(REPUBLISH_PARAMS_SPEC, #{
+            target_topic => #{
+                type => string,
+                format => topic,
+                required => true,
+                title => <<"To Which Topic">>,
+                description => <<"Repubilsh the message to which topic">>
+            }
+        }).
+
+-resource_type(#{name => built_in,
                  create => on_resource_create,
-                 description => "Default resource"
+                 params => #{},
+                 title => <<"Built-In Resource Type">>,
+                 description => "The built in resource type for debug purpose"
                 }).
 
--rule_action(#{name => debug_action,
-               for => any,
-               func => debug_action,
+-rule_action(#{name => inspect,
+               for => '$any',
+               type => built_in,
+               func => inspect,
                params => #{},
-               description => "Debug Action"
+               title => <<"Inspect Action">>,
+               description => <<"Inspect the details of action params for debug purpose">>
               }).
 
--rule_action(#{name => republish_message,
+-rule_action(#{name => republish,
                for => 'message.publish',
-               func => republish_action,
-               params => #{from => topic, to => topic},
-               description => "Republish a MQTT message"
+               type => built_in,
+               func => republish,
+               params => ?REPUBLISH_PARAMS_SPEC,
+               title => <<"Republish Action">>,
+               description => "Republish a MQTT message to a another topic"
               }).
 
--type(action_fun() :: fun((Data :: map()) -> Result :: any())).
+-type(action_fun() :: fun((SelectedData::map(), Envs::map()) -> Result::any())).
 
 -export_type([action_fun/0]).
 
 -export([on_resource_create/2]).
 
--export([ debug_action/1
-        , republish_action/1
+-export([ inspect/1
+        , republish/1
         ]).
 
 %%------------------------------------------------------------------------------
@@ -55,22 +71,40 @@
 on_resource_create(_Name, Conf) ->
     Conf.
 
--spec(debug_action(Params :: map()) -> action_fun()).
-debug_action(Params) ->
-    fun(Data) ->
-        io:format("Action input data: ~p~nAction init params: ~p~n", [Data, Params])
+-spec(inspect(Params :: map()) -> action_fun()).
+inspect(Params) ->
+    fun(Selected, Envs) ->
+        io:format("[inspect]~n"
+                  "\tSelected Data: ~p~n"
+                  "\tEnvs: ~p~n"
+                  "\tAction Init Params: ~p~n", [Selected, Envs, Params])
     end.
 
 %% A Demo Action.
--spec(republish_action(#{from := emqx_topic:topic(),
-                         to := emqx_topic:topic()})
+-spec(republish(#{binary() := emqx_topic:topic()})
       -> action_fun()).
-republish_action(#{from := From, to := To}) ->
-    fun(#{message := Msg = #message{topic = Origin}}) ->
-            case emqx_topic:match(Origin, From) of
-                true ->
-                    emqx_broker:safe_publish(Msg#message{topic = To});
-                false -> ok
-            end
+republish(#{<<"target_topic">> := TargetTopic}) ->
+    fun(Selected, #{qos := QoS, from := Client,
+                    flags := Flags, headers := Headers}) ->
+        ?LOG(debug, "[republish] republish to: ~p, Payload: ~p",
+                        [TargetTopic, Selected]),
+        emqx_broker:safe_publish(
+            #message{
+                id = emqx_guid:gen(),
+                qos = QoS,
+                from = republish_from(Client),
+                flags = Flags,
+                headers = Headers,
+                topic = TargetTopic,
+                payload = jsx:encode(Selected),
+                timestamp = erlang:timestamp()
+            })
     end.
 
+republish_from(Client) ->
+    C = bin(Client), <<"built_in:republish:", C/binary>>.
+
+bin(Bin) when is_binary(Bin) -> Bin;
+bin(Atom) when is_atom(Atom) ->
+    list_to_binary(atom_to_list(Atom));
+bin(Str) when is_list(Str) -> list_to_binary(Str).

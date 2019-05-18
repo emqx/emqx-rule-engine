@@ -12,15 +12,25 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
+-define(APP, emqx_rule_engine).
+
+-type(maybe(T) :: T | undefined).
+
 -type(rule_id() :: binary()).
+-type(rule_name() :: binary()).
+
 -type(resource_id() :: binary()).
+-type(resource_name() :: binary()).
+
+-type(action_name() :: atom()).
+-type(resource_type_name() :: atom()).
+
+-type(hook() :: atom() | 'any').
 
 -record(rule,
         { id :: rule_id()
-        , name :: binary()
-        , for :: atom()
+        , for :: hook()
         , rawsql :: binary()
-        , topics :: [binary()] | undefined
         , selects :: list()
         , conditions :: tuple()
         , actions :: list()
@@ -29,9 +39,10 @@
         }).
 
 -record(action,
-        { name :: atom()
-        , for :: atom()
+        { name :: action_name()
+        , for :: hook()
         , app :: atom()
+        , type :: maybe(resource_name())
         , module :: module()
         , func :: atom()
         , params :: #{atom() => term()}
@@ -40,24 +51,23 @@
 
 -record(resource,
         { id :: resource_id()
-        , type :: atom()
+        , type :: resource_type_name()
         , config :: #{}
         , attrs :: #{}
         , description :: binary()
         }).
 
--record(resource_instance,
-        { id :: {binary(), node()}
-        , conns :: list(pid()) | undefined
-        , created_at :: erlang:timestamp()
-        }).
-
 -record(resource_type,
-        { name :: atom()
+        { name :: resource_type_name()
         , provider :: atom()
         , params :: #{}
         , on_create :: fun((map()) -> map())
         , description :: binary()
+        }).
+
+-record(rule_hooks,
+        { hook :: atom()
+        , rule_id :: rule_id()
         }).
 
 %% Arithmetic operators
@@ -69,6 +79,7 @@
 
 %% Compare operators
 -define(is_comp(Op), (Op =:= '=' orelse
+                      Op =:= '=~' orelse
                       Op =:= '>' orelse
                       Op =:= '<' orelse
                       Op =:= '<=' orelse
@@ -79,3 +90,130 @@
 %% Logical operators
 -define(is_logical(Op), (Op =:= 'and' orelse Op =:= 'or')).
 
+-define(RAISE(_EXP_, _ERROR_),
+        begin
+            try (_EXP_) catch _:_REASON_ -> throw(_ERROR_) end
+        end).
+
+-define(EVENT_ALIAS(ALIAS),
+        case ALIAS of
+           '$message' ->
+                [ '$message'
+                , '$any'
+                , 'message.publish'
+                , 'message.deliver'
+                , 'message.acked'
+                , 'message.dropped'
+                ];
+           '$client' ->
+                [ '$client'
+                , '$any'
+                , 'client.connected'
+                , 'client.disconnected'
+                , 'client.subscribe'
+                , 'client.unsubscribe'
+                ];
+           _ -> ['$any', ALIAS]
+        end).
+
+-define(COLUMNS(EVENT),
+        case EVENT of
+        'message.publish' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"flags">>
+                , <<"id">>
+                , <<"payload">>
+                , <<"peername">>
+                , <<"qos">>
+                , <<"timestamp">>
+                , <<"topic">>
+                ];
+        'message.deliver' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"auth_result">>
+                , <<"mountpoint">>
+                , <<"flags">>
+                , <<"id">>
+                , <<"payload">>
+                , <<"peername">>
+                , <<"topic">>
+                , <<"qos">>
+                , <<"timestamp">>
+                ];
+        'message.acked' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"flags">>
+                , <<"id">>
+                , <<"payload">>
+                , <<"peername">>
+                , <<"topic">>
+                , <<"qos">>
+                , <<"timestamp">>
+                ];
+        'message.dropped' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"flags">>
+                , <<"id">>
+                , <<"node">>
+                , <<"payload">>
+                , <<"peername">>
+                , <<"qos">>
+                , <<"timestamp">>
+                , <<"topic">>
+                ];
+        'client.connected' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"auth_result">>
+                , <<"clean_start">>
+                , <<"connack">>
+                , <<"connected_at">>
+                , <<"is_bridge">>
+                , <<"keepalive">>
+                , <<"mountpoint">>
+                , <<"peername">>
+                , <<"proto_ver">>
+                ];
+        'client.disconnected' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"auth_result">>
+                , <<"mountpoint">>
+                , <<"peername">>
+                , <<"reason_code">>
+                ];
+        'client.subscribe' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"auth_result">>
+                , <<"mountpoint">>
+                , <<"peername">>
+                , <<"topic_filters">>
+                , <<"topic">>
+                , <<"qos">>
+                ];
+        'client.unsubscribe' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"auth_result">>
+                , <<"mountpoint">>
+                , <<"peername">>
+                , <<"topic_filters">>
+                , <<"topic">>
+                , <<"qos">>
+                ];
+        RuleType ->
+                error({unknown_rule_type, RuleType})
+        end).

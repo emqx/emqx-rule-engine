@@ -59,25 +59,24 @@ hook_rules(Name, Fun, Env) ->
 %%------------------------------------------------------------------------------
 
 on_client_connected(Credentials = #{client_id := ClientId}, ConnAck, ConnAttrs, #{apply_fun := ApplyRules}) ->
-    ?LOG(debug, "[RuleEngine] Client(~s) connected, connack: ~w, conn_attrs:~p",
-         [ClientId, ConnAck, ConnAttrs]),
-    ApplyRules(maps:merge(Credentials, #{connack => ConnAck, connattrs => ConnAttrs})).
+    ?LOG(debug, "[RuleEngine] Client(~s) connected, connack: ~w", [ClientId, ConnAck]),
+    ApplyRules(maps:merge(Credentials, #{event => 'client.connected', connack => ConnAck, connattrs => ConnAttrs})).
 
 on_client_disconnected(Credentials = #{client_id := ClientId}, ReasonCode, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Client(~s) disconnected, reason_code: ~w",
          [ClientId, ReasonCode]),
-    ApplyRules(maps:merge(Credentials, #{reason_code => ReasonCode})).
+    ApplyRules(maps:merge(Credentials, #{event => 'client.disconnected', reason_code => ReasonCode})).
 
-on_client_subscribe(#{client_id := ClientId}, TopicFilters, #{apply_fun := ApplyRules}) ->
+on_client_subscribe(Credentials = #{client_id := ClientId}, TopicFilters, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Client(~s) will subscribe: ~p",
          [ClientId, TopicFilters]),
-    ApplyRules(#{client_id => ClientId, topic_filters => TopicFilters}),
+    ApplyRules(maps:merge(Credentials, #{event => 'client.subscribe', topic_filters => TopicFilters})),
     {ok, TopicFilters}.
 
-on_client_unsubscribe(#{client_id := ClientId}, TopicFilters, #{apply_fun := ApplyRules}) ->
+on_client_unsubscribe(Credentials = #{client_id := ClientId}, TopicFilters, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Client(~s) unsubscribe ~p",
          [ClientId, TopicFilters]),
-    ApplyRules(#{client_id => ClientId, topic_filters => TopicFilters}),
+    ApplyRules(maps:merge(Credentials, #{event => 'client.unsubscribe', topic_filters => TopicFilters})),
     {ok, TopicFilters}.
 
 on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
@@ -86,7 +85,7 @@ on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
 
 on_message_publish(Message, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Publish ~s", [emqx_message:format(Message)]),
-    ApplyRules(emqx_message:to_map(Message)),
+    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.publish'})),
     {ok, Message}.
 
 on_message_dropped(_, Message = #message{topic = <<"$SYS/", _/binary>>},
@@ -94,21 +93,21 @@ on_message_dropped(_, Message = #message{topic = <<"$SYS/", _/binary>>},
     {ok, Message};
 
 on_message_dropped(#{node := Node}, Message, #{apply_fun := ApplyRules}) ->
-    ?LOG(debug, "[RuleEngine] Message s dropped for no subscription:~s",
+    ?LOG(debug, "[RuleEngine] Message dropped for no subscription: ~s",
          [emqx_message:format(Message)]),
-    ApplyRules(maps:merge(emqx_message:to_map(Message), #{node => Node})),
+    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.dropped', node => Node})),
     {ok, Message}.
 
 on_message_deliver(Credentials = #{client_id := ClientId}, Message, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Deliver message to client(~s): ~s",
          [ClientId, emqx_message:format(Message)]),
-    ApplyRules(maps:merge(Credentials, emqx_message:to_map(Message))),
+    ApplyRules(maps:merge(Credentials#{event => 'message.deliver'}, emqx_message:to_map(Message))),
     {ok, Message}.
 
 on_message_acked(#{client_id := ClientId, username := Username}, Message, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Session(~s) acked message: ~s",
          [ClientId, emqx_message:format(Message)]),
-    ApplyRules(maps:merge(emqx_message:to_map(Message), #{client_id => ClientId, username => Username})),
+    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.acked', client_id => ClientId, username => Username})),
     {ok, Message}.
 
 %%------------------------------------------------------------------------------
@@ -126,34 +125,24 @@ apply_rules([], _Input) ->
     ok;
 apply_rules([#rule{enabled = false}|More], Input) ->
     apply_rules(More, Input);
-apply_rules([Rule = #rule{name = Name, topics = Filters}|More], Input) ->
-    Topic = get_value(topic, Input),
-    try match_topic(Topic, Filters)
-        andalso apply_rule(Rule, Input)
+apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
+    try apply_rule(Rule, Input)
     catch
         _:Error:StkTrace ->
-            ?LOG(error, "Apply the rule ~s error: ~p. Statcktrace:~n~p",
-                 [Name, Error, StkTrace])
+            ?LOG(error, "Apply rule ~s error: ~p. Statcktrace:~n~p",
+                 [RuleID, Error, StkTrace])
     end,
     apply_rules(More, Input).
 
 apply_rule(#rule{selects = Selects,
                  conditions = Conditions,
                  actions = Actions}, Input) ->
-    Output = select_and_transform(Selects, Input),
-    match_conditions(Conditions, Output)
-        andalso take_actions(Actions, Output).
+    Columns = columns(Input),
+    Selected = select_and_transform(Selects, Columns),
+    match_conditions(Conditions, maps:merge(Columns, Selected))
+        andalso take_actions(Actions, Selected, Input).
 
-%% Step1 -> Match topic with filters
-match_topic(_Topic, []) ->
-    true;
-match_topic(Topic, [Filter]) ->
-    emqx_topic:match(Topic, Filter);
-match_topic(Topic, [Filter|More]) ->
-    emqx_topic:match(Topic, Filter)
-        orelse match_topic(Topic, More).
-
-%% Step2 -> Select and transform data
+%% Step1 -> Select and transform data
 select_and_transform(Fields, Input) ->
     select_and_transform(Fields, Input, #{}).
 
@@ -169,43 +158,56 @@ select_and_transform([Field|More], Input, Output) ->
     Alias = alias(Field, Val),
     select_and_transform(More, Input, nested_put(Alias, Val, Output)).
 
-%% Step3 -> Match selected data with conditions
+%% Step2 -> Match selected data with conditions
 match_conditions({'and', L, R}, Data) ->
     match_conditions(L, Data) andalso match_conditions(R, Data);
 match_conditions({'or', L, R}, Data) ->
     match_conditions(L, Data) orelse match_conditions(R, Data);
-match_conditions({'=', L, R}, Data) ->
-    eval(L, Data) == eval(R, Data);
-match_conditions({'>', L, R}, Data) ->
-    eval(L, Data) > eval(R, Data);
-match_conditions({'<', L, R}, Data) ->
-    eval(L, Data) < eval(R, Data);
-match_conditions({'<=', L, R}, Data) ->
-    eval(L, Data) =< eval(R, Data);
-match_conditions({'>=', L, R}, Data) ->
-    eval(L, Data) >= eval(R, Data);
-match_conditions({NotEq, L, R}, Data)
-  when NotEq =:= '<>'; NotEq =:= '!=' ->
-    eval(L, Data) =/= eval(R, Data);
 match_conditions({'not', Var}, Data) ->
     case eval(Var, Data) of
         Bool when is_boolean(Bool) ->
             not Bool;
         _other -> false
     end;
-%%match_conditions({'like', Var, Pattern}, Data) ->
-%%    match_like(eval(Var, Data), Pattern);
 match_conditions({in, Var, {list, Vals}}, Data) ->
     lists:member(eval(Var, Data), [eval(V, Data) || V <- Vals]);
+match_conditions({'fun', Name, Args}, Data) ->
+    apply_func(Name, [eval(Arg, Data) || Arg <- Args], Data);
+match_conditions({Op, L, R}, Data) when ?is_comp(Op) ->
+    compare(Op, eval(L, Data), eval(R, Data));
+%%match_conditions({'like', Var, Pattern}, Data) ->
+%%    match_like(eval(Var, Data), Pattern);
 match_conditions({}, _Data) ->
     true.
 
-%% Step4 -> Take actions
-take_actions(Actions, Data) ->
-    lists:foreach(fun(Action) -> take_action(Action, Data) end, Actions).
+%% comparing numbers against strings
+compare(Op, L, R) when is_number(L), is_binary(R) ->
+    do_compare(Op, L, number(R));
+compare(Op, L, R) when is_binary(L), is_number(R) ->
+    do_compare(Op, number(L), R);
+compare(Op, L, R) ->
+    do_compare(Op, L, R).
 
-take_action(#{apply := Apply}, Data) ->
-    Apply(Data).
+do_compare('=', L, R) -> L == R;
+do_compare('>', L, R) -> L > R;
+do_compare('<', L, R) -> L < R;
+do_compare('<=', L, R) -> L =< R;
+do_compare('>=', L, R) -> L >= R;
+do_compare('<>', L, R) -> L /= R;
+do_compare('!=', L, R) -> L /= R;
+do_compare('=~', T, F) -> emqx_topic:match(T, F).
+
+number(Bin) ->
+    try binary_to_integer(Bin)
+    catch error:badarg -> binary_to_float(Bin)
+    end.
+
+%% Step3 -> Take actions
+take_actions(Actions, Selected, Envs) ->
+    lists:foreach(fun(Action) -> take_action(Action, Selected, Envs) end, Actions).
+
+take_action(#{apply := Apply}, Selected, Envs) ->
+    Apply(Selected, Envs).
 
 eval({var, Var}, Input) -> %% nested
     nested_get(Var, Input);
@@ -276,3 +278,47 @@ stop(_Env) ->
     emqx:unhook('message.deliver', fun ?MODULE:on_message_deliver/3),
     emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3).
 
+%%------------------------------------------------------------------------------
+%% Internal Functions
+%%------------------------------------------------------------------------------
+
+columns(Input) ->
+    columns(Input, #{}).
+columns(Input = #{id := Id}, Result) ->
+    columns(maps:remove(id, Input),
+            Result#{id => emqx_guid:to_hexstr(Id)});
+columns(Input = #{from := From}, Result) ->
+    columns(maps:remove(from, Input),
+            Result#{client_id => From});
+columns(Input = #{headers := Headers}, Result) ->
+    Username = maps:get(username, Headers, null),
+    Peername = peername(maps:get(peername, Headers, undefined)),
+    columns(maps:remove(headers, Input),
+            maps:merge(Result, #{username => Username,
+                                 peername => Peername}));
+columns(Input = #{timestamp := Timestamp}, Result) ->
+    columns(maps:remove(timestamp, Input),
+            Result#{timestamp => emqx_time:now_ms(Timestamp)});
+columns(Input = #{peername := Peername}, Result) ->
+    columns(maps:remove(peername, Input),
+            Result#{peername => peername(Peername)});
+columns(Input = #{connattrs := Conn}, Result) ->
+    ConnAt = maps:get(connected_at, Conn, null),
+    columns(maps:remove(connattrs, Input),
+            maps:merge(Result, #{connected_at => emqx_time:now_ms(ConnAt),
+                                 clean_start => maps:get(clean_start, Conn, null),
+                                 is_bridge => maps:get(is_bridge, Conn, null),
+                                 keepalive => maps:get(keepalive, Conn, null),
+                                 proto_ver => maps:get(proto_ver, Conn, null)
+                                }));
+columns(Input = #{topic_filters := [{Topic, #{qos := QoS}} | _] = Filters}, Result) ->
+    columns(maps:remove(topic_filters, Input),
+            Result#{topic => Topic, qos => QoS,
+                    topic_filters => Filters});
+columns(Input, Result) ->
+    maps:merge(Result, Input).
+
+peername(undefined) ->
+    null;
+peername({IPAddr, Port}) ->
+    list_to_binary(inet:ntoa(IPAddr) ++ ":" ++ integer_to_list(Port)).
