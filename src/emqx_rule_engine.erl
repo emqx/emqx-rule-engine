@@ -18,6 +18,7 @@
 
 -export([ load_providers/0
         , unload_providers/0
+        , re_establish_resources/0
         ]).
 
 -export([ create_rule/1
@@ -72,6 +73,27 @@ load_actions(App) ->
 load_resource_types(App) ->
     ResourceTypes = find_resource_types(App),
     emqx_rule_registry:register_resource_types(ResourceTypes).
+
+%%------------------------------------------------------------------------------
+%% Re-establish resources
+%%------------------------------------------------------------------------------
+
+-spec(re_establish_resources() -> ok).
+re_establish_resources() ->
+    try
+        lists:foreach(
+            fun(Res = #resource{id = ResId, config = Config, type = Type}) ->
+                {ok, #resource_type{on_create = {M, F}}} = emqx_rule_registry:find_resource_type(Type),
+                emqx_rule_registry:add_resource(
+                    Res#resource{params = init_resource(M, F, ResId, Config)})
+            end, emqx_rule_registry:get_resources())
+    catch
+        _:Error:StackTrace ->
+            logger:critical("Can not re-stablish resource: ~p,"
+                            "Fix the issue and establish it manually.\n"
+                            "Stacktrace: ~p",
+                            [Error, StackTrace])
+    end.
 
 -spec(find_actions(App :: atom()) -> list(action())).
 find_actions(App) ->
@@ -144,22 +166,22 @@ prepare_action({Name, Args}) ->
     case emqx_rule_registry:find_action(Name) of
         {ok, #action{module = M, func = F, params = ParamSpec}} ->
             ok = emqx_rule_validator:validate_params(Args, ParamSpec),
-            NewArgs = with_resource_config(Args),
+            NewArgs = with_resource_params(Args),
             #{name => Name, params => NewArgs,
               apply => ?RAISE(M:F(NewArgs), {init_action_failure,{{M,F},_REASON_}})};
         not_found ->
             throw({action_not_found, Name})
     end.
 
-with_resource_config(Args = #{<<"$resource">> := ResId}) ->
+with_resource_params(Args = #{<<"$resource">> := ResId}) ->
     case emqx_rule_registry:find_resource(ResId) of
-        {ok, #resource{config = Config}} ->
-            maps:merge(Args, Config);
+        {ok, #resource{params = Params}} ->
+            maps:merge(Args, Params);
         not_found ->
             throw({resource_not_found, ResId})
     end;
 
-with_resource_config(Args) -> Args.
+with_resource_params(Args) -> Args.
 
 -spec(create_resource(#{}) -> {ok, resource()} | {error, Reason :: term()}).
 create_resource(#{type := Type,
@@ -170,7 +192,8 @@ create_resource(#{type := Type,
             ResId = resource_id(),
             Resource = #resource{id = ResId,
                                  type = Type,
-                                 config = ?RAISE(M:F(ResId, Config), {init_resource_failure,{{M,F},_REASON_}}),
+                                 params = init_resource(M, F, ResId, Config),
+                                 config = Config,
                                  description = iolist_to_binary(maps:get(description, Params, ""))},
             ok = emqx_rule_registry:add_resource(Resource),
             {ok, Resource};
@@ -204,3 +227,7 @@ gen_id(Prefix, TestFun) ->
         not_found -> Id;
         _Res -> gen_id(Prefix, TestFun)
     end.
+
+init_resource(Module, OnCreate, ResId, Config) ->
+    ?RAISE(Module:OnCreate(ResId, Config),
+           {init_resource_failure, {{Module, OnCreate}, _REASON_}}).

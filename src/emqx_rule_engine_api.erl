@@ -292,12 +292,12 @@ record_to_map(#action{name = Name,
 record_to_map(#resource{id = Id,
                         type = Type,
                         config = Config,
-                        attrs = Attrs,
+                        params = Params,
                         description = Descr}) ->
     #{id => Id,
       type => Type,
       config => Config,
-      attrs => Attrs,
+      params => Params,
       description => Descr
      };
 

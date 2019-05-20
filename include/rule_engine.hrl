@@ -53,7 +53,7 @@
         { id :: resource_id()
         , type :: resource_type_name()
         , config :: #{}
-        , attrs :: #{}
+        , params :: #{}
         , description :: binary()
         }).
 
