@@ -223,9 +223,9 @@ format(#action{name = Name,
 format(#resource{id = Id,
                  type = Type,
                  config = Config,
-                 attrs = Attrs,
+                 params = Params,
                  description = Descr}) ->
-    lists:flatten(io_lib:format("resource(id='~s', type='~s', config=~0p, attrs=~0p, description='~s')~n", [Id, Type, Config, Attrs, Descr]));
+    lists:flatten(io_lib:format("resource(id='~s', type='~s', config=~0p, params=~0p, description='~s')~n", [Id, Type, Config, Params, Descr]));
 
 format(#resource_type{name = Name,
                       provider = Provider,
