@@ -233,9 +233,9 @@ alias({var, Var}) ->
 alias({const, Val}) ->
     Val;
 alias({payload, Attr}) when is_binary(Attr) ->
-    [<<"payload">>, Attr];
+    [payload, Attr];
 alias({payload, AttrPath}) when is_list(AttrPath) ->
-    [<<"payload">>|AttrPath];
+    [payload|AttrPath];
 alias(_) -> undefined.
 
 apply_func(Name, Args, Input) when is_atom(Name) ->
