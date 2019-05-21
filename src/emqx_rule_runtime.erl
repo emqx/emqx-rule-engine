@@ -229,7 +229,7 @@ alias(Field, Val) ->
     end.
 
 alias({var, Var}) ->
-    Var;
+    emqx_rule_utils:atom_key(Var);
 alias({const, Val}) ->
     Val;
 alias({payload, Attr}) when is_binary(Attr) ->

@@ -22,6 +22,7 @@
 -export([ str/1
         , bin/1
         , number_to_binary/1
+        , atom_key/1
         ]).
 
 -define(EX_PLACE_HOLDER, "(\\$\\{[a-zA-Z0-9\\._]+\\})").
@@ -51,7 +52,13 @@ proc_tmpl(Tokens, Data) ->
                 ({var, GetVal}) -> GetVal(Data)
             end, Tokens)).
 
-atom_key(Key) ->
+atom_key(Key) when is_atom(Key) ->
+    Key;
+atom_key(Key) when is_list(Key) ->
+    try list_to_existing_atom(Key)
+    catch error:badarg -> error({invalid_key, Key})
+    end;
+atom_key(Key) when is_binary(Key) ->
     try binary_to_existing_atom(Key, utf8)
     catch error:badarg -> error({invalid_key, Key})
     end.
