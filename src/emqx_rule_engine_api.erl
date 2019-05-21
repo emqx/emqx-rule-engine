@@ -285,7 +285,7 @@ record_to_map(#action{name = Name,
       app => App,
       for => Hook,
       type => Type,
-      params => Params,
+      params => sort_spec(Params),
       description => Descr
      };
 
@@ -307,7 +307,7 @@ record_to_map(#resource_type{name = Name,
                              description = Descr}) ->
     #{name => Name,
       provider => Provider,
-      params => Params,
+      params => sort_spec(Params),
       description => Descr
      }.
 
@@ -351,3 +351,64 @@ parse_resource_params([_ | Params], Res) ->
 
 json_term_to_map(List) ->
     jsx:decode(jsx:encode(List), [return_maps]).
+
+sort_spec(Spec) when map_size(Spec) == 0 ->
+    #{};
+sort_spec(Spec) when is_map(Spec) ->
+    sort_spec(maps:to_list(Spec));
+sort_spec(Spec) when is_list(Spec) ->
+    lists:sort(
+        fun({_, SpecA}, {_, SpecB}) ->
+            maps:get(order, SpecA, 0) =< maps:get(order, SpecB, 0)
+        end, [case Spec0 of
+                #{schema := SubSpec} -> {Key, Spec0#{schema => sort_spec(SubSpec)}};
+                _ -> {Key, Spec0}
+              end || {Key, Spec0} <- Spec]).
+
+%% TEST
+-ifdef(EUNIT).
+-include_lib("eunit/include/eunit.hrl").
+
+sort_spec_test_() ->
+    [
+        ?_assertEqual(
+            [{key1,#{type => integer}},
+             {key2,#{type => string}},
+             {key3,#{type => string}}],
+            sort_spec(#{key1 => #{type => integer},
+                        key2 => #{type => string},
+                        key3 => #{type => string}})),
+        ?_assertEqual(
+            [ {key1,#{order => 1,
+                      schema =>
+                          [{key1,#{order => 1,type => string}},
+                           {key2,#{order => 2,type => string}},
+                           {key3,#{order => 3,
+                                   schema =>
+                                        [{key1,#{order => 1,type => string}},
+                                         {key2,#{order => 2,type => object,schema => #{}}},
+                                         {key3,#{order => 3,type => string}}],
+                                   type => object}}],
+                      type => object}},
+              {key2,#{order => 2,type => string}},
+              {key3,#{order => 3,type => string}}],
+            sort_spec(#{key1 =>
+                            #{order => 1,
+                              schema =>
+                                  #{key3 =>
+                                      #{order => 3,
+                                        schema =>
+                                            #{key2 =>
+                                                #{order => 2,schema => #{},
+                                                  type => object},
+                                              key1 => #{order => 1,type => string},
+                                              key3 => #{order => 3,type => string}},
+                                        type => object},
+                                    key2 => #{order => 2,type => string},
+                                    key1 => #{order => 1,type => string}},
+                              type => object},
+                        key3 => #{order => 3,type => string},
+                        key2 => #{order => 2,type => string}}))
+    ].
+
+-endif.
