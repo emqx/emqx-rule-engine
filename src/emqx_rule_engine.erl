@@ -19,6 +19,7 @@
 -export([ load_providers/0
         , unload_providers/0
         , re_establish_resources/0
+        , rebuild_rules/0
         ]).
 
 -export([ create_rule/1
@@ -90,6 +91,26 @@ re_establish_resources() ->
     catch
         _:Error:StackTrace ->
             logger:critical("Can not re-stablish resource: ~p,"
+                            "Fix the issue and establish it manually.\n"
+                            "Stacktrace: ~p",
+                            [Error, StackTrace])
+    end.
+
+-spec(rebuild_rules() -> ok).
+rebuild_rules() ->
+    try
+        lists:foreach(
+            fun(Rule = #rule{actions = Actions}) ->
+                NewRule = Rule#rule{actions =
+                    [begin
+                        {ok, #action{module = M, func = F}} = emqx_rule_registry:find_action(ActName),
+                        Act#{apply => init_action(M, F, Params)}
+                    end ||  Act = #{name := ActName, params := Params} <- Actions]},
+                emqx_rule_registry:add_rule(NewRule)
+            end, emqx_rule_registry:get_rules())
+    catch
+        _:Error:StackTrace ->
+            logger:critical("Can not re-build rule: ~p,"
                             "Fix the issue and establish it manually.\n"
                             "Stacktrace: ~p",
                             [Error, StackTrace])
@@ -168,7 +189,7 @@ prepare_action({Name, Args}) ->
             ok = emqx_rule_validator:validate_params(Args, ParamSpec),
             NewArgs = with_resource_params(Args),
             #{name => Name, params => NewArgs,
-              apply => ?RAISE(M:F(NewArgs), {init_action_failure,{{M,F},_REASON_}})};
+              apply => init_action(M, F, NewArgs)};
         not_found ->
             throw({action_not_found, Name})
     end.
@@ -231,3 +252,6 @@ gen_id(Prefix, TestFun) ->
 init_resource(Module, OnCreate, ResId, Config) ->
     ?RAISE(Module:OnCreate(ResId, Config),
            {init_resource_failure, {{Module, OnCreate}, _REASON_}}).
+
+init_action(Module, OnCreate, Params) ->
+    ?RAISE(Module:OnCreate(Params), {init_action_failure,{{Module,OnCreate},_REASON_}}).
