@@ -42,9 +42,9 @@ ok
 ```shell
 $ ./bin/emqx_ctl rule-actions list
 
-action(name='republish', app='emqx_rule_engine', for='message.publish', type='built_in', params=#{...}, description='Republish a MQTT message to a another topic')
-action(name='inspect', app='emqx_rule_engine', for='$any', type='built_in', params=#{...}, description='Inspect the details of action params for debug purpose')
-action(name='data_to_webserver', app='emqx_web_hook', for='message.publish', type='web_hook', params=#{...}, description='Forward Messages to Web Server')
+action(name='republish', app='emqx_rule_engine', for='message.publish', types=[], params=#{...}, description='Republish a MQTT message to a another topic')
+action(name='inspect', app='emqx_rule_engine', for='$any', types=[], params=#{...}, description='Inspect the details of action params for debug purpose')
+action(name='data_to_webserver', app='emqx_web_hook', for='message.publish', types=[], params=#{...}, description='Forward Messages to Web Server')
 ```
 
 ### show
@@ -52,7 +52,7 @@ action(name='data_to_webserver', app='emqx_web_hook', for='message.publish', typ
 ```shell
 $ ./bin/emqx_ctl rule-actions show 'data_to_webserver'
 
-action(name='data_to_webserver', app='emqx_web_hook', for='message.publish', type='web_hook', params=#{...}, description='Forward Messages to Web Server')
+action(name='data_to_webserver', app='emqx_web_hook', for='message.publish', types=['web_hook'], params=#{...}, description='Forward Messages to Web Server')
 ```
 
 ## Resource

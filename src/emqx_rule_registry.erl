@@ -36,7 +36,6 @@
         , add_actions/1
         , get_actions/0
         , get_actions_for/1
-        , get_actions_by_type/1
         , find_action/1
         , remove_action/1
         , remove_actions/1
@@ -109,7 +108,7 @@ mnesia(boot) ->
     ok = ekka_mnesia:create_table(?ACTION_TAB, [
                 {ram_copies, [node()]},
                 {record_name, action},
-                {index, [#action.for, #action.app, #action.type]},
+                {index, [#action.for, #action.app]},
                 {attributes, record_info(fields, action)},
                 {storage_properties, StoreProps}]),
     %% Resource table
@@ -227,10 +226,6 @@ do_get_actions_for([H | T] = Hooks) when is_list(Hooks) ->
     do_get_actions_for(H) ++ do_get_actions_for(T);
 do_get_actions_for(Hook) when not is_list(Hook) ->
     mnesia:dirty_index_read(?ACTION_TAB, Hook, #action.for).
-
--spec(get_actions_by_type(Type :: resource_type_name()) -> list(emqx_rule_engine:action())).
-get_actions_by_type(Type) ->
-    mnesia:dirty_index_read(?ACTION_TAB, Type, #action.type).
 
 %% @doc Find an action by name.
 -spec(find_action(Name :: action_name()) -> {ok, emqx_rule_engine:action()} | not_found).

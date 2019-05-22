@@ -42,10 +42,11 @@
         { name :: action_name()
         , for :: hook()
         , app :: atom()
-        , type :: maybe(resource_name())
+        , types = [] :: list(resource_name())
         , module :: module()
         , func :: atom()
         , params :: #{atom() => term()}
+        , title :: binary()
         , description :: binary()
         }).
 
@@ -62,6 +63,7 @@
         , provider :: atom()
         , params :: #{}
         , on_create :: fun((map()) -> map())
+        , title :: binary()
         , description :: binary()
         }).
 

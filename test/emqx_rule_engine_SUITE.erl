@@ -133,7 +133,7 @@ init_per_testcase(t_events, Config) ->
     ok = emqx_rule_registry:add_action(
             #action{name = 'hook-metrics-action', app = ?APP,
                     module = ?MODULE, func = hook_metrics_action,
-                    type='built_in', params = #{},
+                    types=[], params = #{},
                     description = <<"Hook metrics action">>}),
     SQL = "SELECT * FROM \"message.publish\", "
                         "\"message.dropped\", "
@@ -279,10 +279,6 @@ t_list_actions_api(_Config) ->
     {ok, [{code, 0}, {data, Actions}]} = emqx_rule_engine_api:list_actions(#{},[]),
     %ct:pal("RList : ~p", [Actions]),
     ?assert(length(Actions) > 0),
-
-    {ok, [{code, 0}, {data, Actions0}]} = emqx_rule_engine_api:list_actions_by_type(#{type => 'built_in'}, []),
-    %ct:pal("RListT : ~p", [Actions0]),
-    ?assert(length(Actions0) > 0),
     ok.
 
 t_show_action_api(_Config) ->
@@ -355,9 +351,6 @@ t_actions_cli(_Config) ->
     RList = emqx_rule_engine_cli:actions(["list"]),
     ?assertMatch({match, _}, re:run(RList, "inspect")),
     %ct:pal("RList : ~p", [RList]),
-    RListT = emqx_rule_engine_cli:actions(["list", "-t", "built_in"]),
-    %ct:pal("RListT : ~p", [RListT]),
-    ?assertMatch({match, _}, re:run(RListT, "inspect")),
 
     RShow = emqx_rule_engine_cli:actions(["show", "inspect"]),
     ?assertMatch({match, _}, re:run(RShow, "inspect")),

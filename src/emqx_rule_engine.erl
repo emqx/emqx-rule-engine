@@ -105,7 +105,7 @@ rebuild_rules() ->
                     [begin
                         {ok, #action{module = M, func = F}} = emqx_rule_registry:find_action(ActName),
                         Act#{apply => init_action(M, F, Params)}
-                    end ||  Act = #{name := ActName, params := Params} <- Actions]},
+                     end ||  Act = #{name := ActName, params := Params} <- Actions]},
                 emqx_rule_registry:add_rule(NewRule)
             end, emqx_rule_registry:get_rules())
     catch
@@ -126,7 +126,7 @@ find_resource_types(App) ->
 
 new_action({App, Mod, #{name := Name,
                         for := Hook,
-                        type := Type,
+                        types := Types,
                         func := Func,
                         params := ParamsSpec} = Params}) ->
     %% Check if the action's function exported
@@ -135,9 +135,10 @@ new_action({App, Mod, #{name := Name,
         false -> error({action_func_not_found, Func})
     end,
     ok = emqx_rule_validator:validate_spec(ParamsSpec),
-    #action{name = Name, for = Hook, app = App, type = Type,
+    #action{name = Name, for = Hook, app = App, types = Types,
             module = Mod, func = Func, params = ParamsSpec,
-            description = iolist_to_binary(maps:get(description, Params, ""))}.
+            title = maps:get(title, Params, ""),
+            description = maps:get(description, Params, "")}.
 
 new_resource_type({App, Mod, #{name := Name,
                                params := ParamsSpec,
@@ -146,7 +147,8 @@ new_resource_type({App, Mod, #{name := Name,
     #resource_type{name = Name, provider = App,
                    params = ParamsSpec,
                    on_create = {Mod, Create},
-                   description = iolist_to_binary(maps:get(description, Params, ""))}.
+                   title = maps:get(title, Params, ""),
+                   description = maps:get(description, Params, "")}.
 
 find_attrs(App, Def) ->
     [{App, Mod, Attr} || {ok, Modules} <- [application:get_key(App, modules)],
@@ -177,7 +179,7 @@ create_rule(Params = #{rawsql := Sql,
                          conditions = emqx_rule_sqlparser:select_where(Select),
                          actions = [prepare_action(Action) || Action <- Actions],
                          enabled = maps:get(enabled, Params, true),
-                         description = iolist_to_binary(maps:get(description, Params, ""))},
+                         description = maps:get(description, Params, "")},
             ok = emqx_rule_registry:add_rule(Rule),
             {ok, Rule};
         Error -> error(Error)

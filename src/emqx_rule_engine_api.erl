@@ -109,13 +109,6 @@
             descr  => "List all resources of a resource type"
            }).
 
--rest_api(#{name   => list_actions_by_type,
-            method => 'GET',
-            path   => "/resource_types/:atom:type/actions",
-            func   => list_actions_by_type,
-            descr  => "List all actions of a resource type"
-           }).
-
 -export([ create_rule/2
         , list_rules/2
         , show_rule/2
@@ -134,7 +127,6 @@
 
 -export([ list_resource_types/2
         , list_resources_by_type/2
-        , list_actions_by_type/2
         , show_resource_type/2
         ]).
 
@@ -218,9 +210,6 @@ list_resources(#{}, _Params) ->
 list_resources_by_type(#{type := Type}, _Params) ->
     return_all(emqx_rule_registry:get_resources_by_type(Type)).
 
-list_actions_by_type(#{type := Type}, _Params) ->
-    return_all(emqx_rule_registry:get_actions_by_type(Type)).
-
 show_resource(#{id := Id}, _Params) ->
     reply_with(fun emqx_rule_registry:find_resource/1, Id).
 
@@ -278,14 +267,16 @@ record_to_map(#rule{id = Id,
 record_to_map(#action{name = Name,
                       app = App,
                       for = Hook,
-                      type = Type,
+                      types = Types,
                       params = Params,
+                      title = Title,
                       description = Descr}) ->
     #{name => Name,
       app => App,
       for => Hook,
-      type => Type,
+      types => Types,
       params => sort_spec(Params),
+      title => Title,
       description => Descr
      };
 
@@ -304,10 +295,12 @@ record_to_map(#resource{id = Id,
 record_to_map(#resource_type{name = Name,
                              provider = Provider,
                              params = Params,
+                             title = Title,
                              description = Descr}) ->
     #{name => Name,
       provider => Provider,
       params => sort_spec(Params),
+      title => Title,
       description => Descr
      }.
 
