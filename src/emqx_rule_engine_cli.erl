@@ -217,7 +217,7 @@ format(#action{name = Name,
                params = Params,
                title = #{en := Title},
                description = #{en := Descr}}) ->
-    lists:flatten(io_lib:format("action(name='~s', app='~s', for='~s', types=~p, params=~0p, title ='~s', description='~s')~n", [Name, App, Hook, Types, Params, Title, Descr]));
+    lists:flatten(io_lib:format("action(name='~s', app='~s', for='~s', types=~0p, params=~0p, title ='~s', description='~s')~n", [Name, App, Hook, Types, Params, Title, Descr]));
 
 format(#resource{id = Id,
                  type = Type,

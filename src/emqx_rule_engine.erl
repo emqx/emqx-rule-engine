@@ -137,7 +137,7 @@ new_action({App, Mod, #{name := Name,
     ok = emqx_rule_validator:validate_spec(ParamsSpec),
     #action{name = Name, for = Hook, app = App, types = Types,
             module = Mod, func = Func, params = ParamsSpec,
-            title = maps:get(title, Params, ""),
+            title = maps:get(title, Params, #{en => <<"">>, zh => <<"">>}),
             description = maps:get(description, Params, "")}.
 
 new_resource_type({App, Mod, #{name := Name,
@@ -147,7 +147,7 @@ new_resource_type({App, Mod, #{name := Name,
     #resource_type{name = Name, provider = App,
                    params = ParamsSpec,
                    on_create = {Mod, Create},
-                   title = maps:get(title, Params, ""),
+                   title = maps:get(title, Params, #{en => <<"">>, zh => <<"">>}),
                    description = maps:get(description, Params, "")}.
 
 find_attrs(App, Def) ->

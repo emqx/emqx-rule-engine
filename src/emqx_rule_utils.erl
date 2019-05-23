@@ -21,6 +21,8 @@
 %% type converting
 -export([ str/1
         , bin/1
+        , utf8_bin/1
+        , utf8_str/1
         , number_to_binary/1
         , atom_key/1
         ]).
@@ -79,3 +81,8 @@ number_to_binary(Int) when is_integer(Int) ->
     integer_to_binary(Int);
 number_to_binary(Float) when is_float(Float) ->
     float_to_binary(Float).
+
+utf8_bin(Str) ->
+    unicode:characters_to_binary(Str).
+utf8_str(Str) ->
+    unicode:characters_to_list(Str).
