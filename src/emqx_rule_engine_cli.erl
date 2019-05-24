@@ -32,7 +32,7 @@
 -define(OPTSPEC_RESOURCE_TYPE,
         [{type, $t, "type", {atom, undefined}, "Resource Type"}]).
 -define(OPTSPEC_ACTION_TYPE,
-        [ {hook, $k, "hook", {atom, undefined}, "Hook Type"}
+        [ {hook, $k, "hook", {atom, undefined}, "Event Type"}
         ]).
 
 -define(OPTSPEC_RESOURCES_CREATE,

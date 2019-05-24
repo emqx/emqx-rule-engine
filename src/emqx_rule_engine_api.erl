@@ -15,8 +15,9 @@
 -module(emqx_rule_engine_api).
 
 -include("rule_engine.hrl").
+-include("rule_events.hrl").
 
--import(minirest,  [return/0, return/1]).
+-import(minirest,  [return/1]).
 
 -rest_api(#{name   => create_rule,
             method => 'POST',
@@ -132,7 +133,7 @@
 
 -define(ERR_NO_ACTION(NAME), list_to_binary(io_lib:format("Action ~s Not Found", [(NAME)]))).
 -define(ERR_NO_RESOURCE(RESID), list_to_binary(io_lib:format("Resource ~s Not Found", [(RESID)]))).
--define(ERR_NO_HOOK(HOOK), list_to_binary(io_lib:format("Hook ~s Not Found", [(HOOK)]))).
+-define(ERR_NO_HOOK(HOOK), list_to_binary(io_lib:format("Event ~s Not Found", [(HOOK)]))).
 -define(ERR_NO_RESOURCE_TYPE(TYPE), list_to_binary(io_lib:format("Resource Type ~s Not Found", [(TYPE)]))).
 -define(ERR_BADARGS(REASON),
         begin
@@ -143,8 +144,25 @@
 %%------------------------------------------------------------------------------
 %% Rules API
 %%------------------------------------------------------------------------------
-
 create_rule(_Bindings, Params) ->
+    case proplists:get_value(<<"test">>, Params) of
+        true ->
+            test_rule_sql(Params);
+        _ ->
+            do_create_rule(Params)
+    end.
+
+test_rule_sql(Params) ->
+    try rule_sql_test(jsx:decode(jsx:encode(Params), [return_maps])) of
+        Result -> return({ok, Result})
+    catch
+        throw:{invalid_hook, Hook} ->
+            return({error, 400, ?ERR_NO_HOOK(Hook)});
+        _Error:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)})
+    end.
+
+do_create_rule(Params) ->
     try emqx_rule_engine:create_rule(parse_rule_params(Params)) of
         {ok, Rule} ->
             return({ok, record_to_map(Rule)});
@@ -334,6 +352,53 @@ parse_action(Actions) ->
             {binary_to_existing_atom(maps:get(<<"name">>, Actions), utf8),
              Params}
     end.
+
+-spec(rule_sql_test(#{}) -> {ok, Result::map()} | no_return()).
+rule_sql_test(#{<<"rawsql">> := Sql, <<"ctx">> := Context}) ->
+    case emqx_rule_sqlparser:parse_select(Sql) of
+        {ok, Select} ->
+            Event = emqx_rule_sqlparser:select_from(Select),
+            Rule = #rule{rawsql = Sql,
+                         for = Event,
+                         selects = emqx_rule_sqlparser:select_fields(Select),
+                         conditions = emqx_rule_sqlparser:select_where(Select),
+                         actions = [#{name => test_rule_sql,
+                                      apply => feedback_action()}]},
+            FullContext = fill_default_values(hd(Event), emqx_rule_maps:atom_key_map(Context)),
+            emqx_rule_runtime:apply_rule(Rule, FullContext),
+            wait_feedback();
+        Error -> error(Error)
+    end.
+
+feedback_action() ->
+    fun(Data, _Envs) ->
+        erlang:put(rule_sql_test_result, Data)
+    end.
+
+wait_feedback() ->
+    case erlang:get(rule_sql_test_result) of
+        undefined -> #{};
+        Data -> Data
+    end.
+
+fill_default_values(Event, #{<<"topic_filters">> := TopicFilters} = Context) ->
+    do_fill_default_values(Event, Context#{
+        <<"topic_filters">> => parse_topic_filters(TopicFilters)});
+fill_default_values(Event, Context) ->
+    do_fill_default_values(Event, Context).
+
+do_fill_default_values(Event, Context) ->
+    maps:merge(?EG_ENVS(Event), Context).
+
+parse_topic_filters(TopicFilters) ->
+    [ case TpcFtl of
+        #{<<"topic">> := Topic, <<"qos">> := QoS} ->
+            {Topic, #{qos => QoS}};
+        #{<<"topic">> := Topic} ->
+            {Topic, #{}};
+        Topic ->
+            {Topic, #{}}
+      end || TpcFtl <- jsx:decode(TopicFilters, [return_maps])].
 
 parse_resource_params(Params) ->
     parse_resource_params(Params, #{config => #{}, description => <<"">>}).

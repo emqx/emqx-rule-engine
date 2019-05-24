@@ -172,8 +172,7 @@ module_attributes(Module) ->
 %%------------------------------------------------------------------------------
 
 -spec(create_rule(#{}) -> {ok, rule()} | no_return()).
-create_rule(Params = #{rawsql := Sql,
-                       actions := Actions}) ->
+create_rule(Params = #{rawsql := Sql, actions := Actions}) ->
     case emqx_rule_sqlparser:parse_select(Sql) of
         {ok, Select} ->
             Rule = #rule{id = rule_id(),

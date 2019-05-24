@@ -17,6 +17,7 @@
 -behaviour(gen_server).
 
 -include("rule_engine.hrl").
+-include("rule_events.hrl").
 -include_lib("emqx/include/logger.hrl").
 
 -export([start_link/0]).

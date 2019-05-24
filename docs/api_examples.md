@@ -6,6 +6,12 @@ APPSECRET="88ebdd6569afc:Mjg3MzUyNTI2Mjk2NTcyOTEwMDEwMDMzMTE2NTM1MTkzNjA"
 
 ## Rules
 
+### test sql
+$ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules?test' -d \
+'{"rawsql":"select * from \"message.publish\" where topic=\"t/a\"","ctx":{}}'
+
+
+
 ### create
 ```shell
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules' -d \
