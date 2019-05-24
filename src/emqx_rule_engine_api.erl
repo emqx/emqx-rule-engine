@@ -376,7 +376,7 @@ feedback_action() ->
     end.
 
 wait_feedback() ->
-    case erlang:get(rule_sql_test_result) of
+    case erlang:erase(rule_sql_test_result) of
         undefined -> #{};
         Data -> Data
     end.
