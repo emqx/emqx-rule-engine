@@ -167,7 +167,7 @@ show_rule(#{id := Id}, _Params) ->
 
 delete_rule(#{id := Id}, _Params) ->
     ok = emqx_rule_registry:remove_rule(Id),
-    return().
+    return(ok).
 
 %%------------------------------------------------------------------------------
 %% Actions API
@@ -190,9 +190,18 @@ show_action(#{name := Name}, _Params) ->
 %%------------------------------------------------------------------------------
 %% Resources API
 %%------------------------------------------------------------------------------
-
 create_resource(#{}, Params) ->
-    try emqx_rule_engine:create_resource(parse_resource_params(Params)) of
+    case proplists:get_value(<<"test">>, Params) of
+        true ->
+            do_create_resource(test_resource, Params);
+        _ ->
+            do_create_resource(create_resource, Params)
+    end.
+
+do_create_resource(Create, Params) ->
+    try emqx_rule_engine:Create(parse_resource_params(Params)) of
+        ok ->
+            return(ok);
         {ok, Resource} ->
             return({ok, record_to_map(Resource)});
         {error, {resource_type_not_found, Type}} ->
@@ -216,7 +225,7 @@ show_resource(#{id := Id}, _Params) ->
 delete_resource(#{id := Id}, _Params) ->
     try
         ok = emqx_rule_engine:delete_resource(Id),
-        return()
+        return(ok)
     catch
         _Error:{throw, Reason} ->
             return({error, 400, ?ERR_BADARGS(Reason)});

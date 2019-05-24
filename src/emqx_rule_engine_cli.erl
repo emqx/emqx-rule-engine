@@ -142,10 +142,13 @@ resources(["create" | Params]) ->
 
 resources(["test" | Params]) ->
     with_opts(fun({Opts, _}) ->
-                case emqx_rule_engine:test_resource(make_resource(Opts)) of
+                try emqx_rule_engine:test_resource(make_resource(Opts)) of
                     ok ->
                         emqx_cli:print("Test creating resource successfully (dry-run)~n");
                     {error, Reason} ->
+                        emqx_cli:print("Test creating resource failed: ~0p~n", [Reason])
+                catch
+                    throw:Reason ->
                         emqx_cli:print("Test creating resource failed: ~0p~n", [Reason])
                 end
               end, Params, ?OPTSPEC_RESOURCES_CREATE, {?FUNCTION_NAME, test});
