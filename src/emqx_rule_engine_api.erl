@@ -215,7 +215,7 @@ show_resource(#{id := Id}, _Params) ->
 
 delete_resource(#{id := Id}, _Params) ->
     try
-        ok = emqx_rule_registry:remove_resource(Id),
+        ok = emqx_rule_engine:delete_resource(Id),
         return()
     catch
         _Error:{throw, Reason} ->

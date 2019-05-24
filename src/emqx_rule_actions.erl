@@ -30,15 +30,6 @@
             }
         }).
 
--resource_type(#{name => built_in,
-                 create => on_resource_create,
-                 params => #{},
-                 title => #{en => <<"Built-In Resource Type (debug)">>,
-                            zh => <<"内置资源类型 (调试)"/utf8>>},
-                 description => #{en => <<"The built in resource type for debug purpose">>,
-                                  zh => <<"为调试而设的内置资源类型"/utf8>>}
-                }).
-
 -rule_action(#{name => inspect,
                for => '$any',
                types => [],

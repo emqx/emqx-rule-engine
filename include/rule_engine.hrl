@@ -25,6 +25,8 @@
 -type(action_name() :: atom()).
 -type(resource_type_name() :: atom()).
 
+-type(descr() :: #{en := binary(), zh => binary()}).
+
 -type(hook() :: atom() | 'any').
 
 -record(rule,
@@ -46,8 +48,8 @@
         , module :: module()
         , func :: atom()
         , params :: #{atom() => term()}
-        , title :: binary()
-        , description :: binary()
+        , title :: descr()
+        , description :: descr()
         }).
 
 -record(resource,
@@ -62,9 +64,10 @@
         { name :: resource_type_name()
         , provider :: atom()
         , params :: #{}
-        , on_create :: fun((map()) -> map())
-        , title :: binary()
-        , description :: binary()
+        , on_create :: {Module::atom(), Fun::atom()}
+        , on_destroy :: {Module::atom(), Fun::atom()}
+        , title :: descr()
+        , description :: descr()
         }).
 
 -record(rule_hooks,

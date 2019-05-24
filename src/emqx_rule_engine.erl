@@ -24,6 +24,8 @@
 
 -export([ create_rule/1
         , create_resource/1
+        , test_resource/1
+        , delete_resource/1
         ]).
 
 -type(rule() :: #rule{}).
@@ -142,11 +144,13 @@ new_action({App, Mod, #{name := Name,
 
 new_resource_type({App, Mod, #{name := Name,
                                params := ParamsSpec,
-                               create := Create} = Params}) ->
+                               create := Create,
+                               destroy := Destroy} = Params}) ->
     ok = emqx_rule_validator:validate_spec(ParamsSpec),
     #resource_type{name = Name, provider = App,
                    params = ParamsSpec,
                    on_create = {Mod, Create},
+                   on_destroy = {Mod, Destroy},
                    title = maps:get(title, Params, #{en => <<"">>, zh => <<"">>}),
                    description = maps:get(description, Params, "")}.
 
@@ -207,8 +211,7 @@ with_resource_params(Args = #{<<"$resource">> := ResId}) ->
 with_resource_params(Args) -> Args.
 
 -spec(create_resource(#{}) -> {ok, resource()} | {error, Reason :: term()}).
-create_resource(#{type := Type,
-                  config := Config} = Params) ->
+create_resource(#{type := Type, config := Config} = Params) ->
     case emqx_rule_registry:find_resource_type(Type) of
         {ok, #resource_type{on_create = {M, F}, params = ParamSpec}} ->
             ok = emqx_rule_validator:validate_params(Config, ParamSpec),
@@ -222,6 +225,40 @@ create_resource(#{type := Type,
             {ok, Resource};
         not_found ->
             {error, {resource_type_not_found, Type}}
+    end.
+
+-spec(test_resource(#{}) -> ok | {error, Reason :: term()}).
+test_resource(#{type := Type, config := Config}) ->
+    case emqx_rule_registry:find_resource_type(Type) of
+        {ok, #resource_type{on_create = {ModC,Create}, on_destroy = {ModD,Destroy}, params = ParamSpec}} ->
+            try
+                ok = emqx_rule_validator:validate_params(Config, ParamSpec),
+                ResId = resource_id(),
+                Params = init_resource(ModC, Create, ResId, Config),
+                clear_resource(ModD, Destroy, ResId, Params),
+                ok
+            catch Error:Reason ->
+                {error, {Error, Reason}}
+            end;
+        not_found ->
+            {error, {resource_type_not_found, Type}}
+    end.
+
+-spec(delete_resource(resource_id()) -> ok | {error, Reason :: term()}).
+delete_resource(ResId) ->
+    case emqx_rule_registry:find_resource(ResId) of
+        {ok, #resource{type = ResType, params = Params}} ->
+            try
+                {ok, #resource_type{on_destroy = {ModD,Destroy}}}
+                    = emqx_rule_registry:find_resource_type(ResType),
+                clear_resource(ModD, Destroy, ResId, Params),
+                ok = emqx_rule_registry:remove_resource(ResId)
+            catch
+                Error:Reason ->
+                    {error, {Error,Reason}}
+            end;
+        not_found ->
+            {error, {resource_not_found, ResId}}
     end.
 
 %%------------------------------------------------------------------------------
@@ -257,3 +294,7 @@ init_resource(Module, OnCreate, ResId, Config) ->
 
 init_action(Module, OnCreate, Params) ->
     ?RAISE(Module:OnCreate(Params), {init_action_failure,{{Module,OnCreate},_REASON_}}).
+
+clear_resource(Module, Destroy, ResId, Params) ->
+    ?RAISE(Module:Destroy(ResId, Params),
+           {destroy_resource_failure, {{Module, Destroy}, _REASON_}}).

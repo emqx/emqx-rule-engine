@@ -140,6 +140,16 @@ resources(["create" | Params]) ->
                 end
               end, Params, ?OPTSPEC_RESOURCES_CREATE, {?FUNCTION_NAME, create});
 
+resources(["test" | Params]) ->
+    with_opts(fun({Opts, _}) ->
+                case emqx_rule_engine:test_resource(make_resource(Opts)) of
+                    ok ->
+                        emqx_cli:print("Test creating resource successfully (dry-run)~n");
+                    {error, Reason} ->
+                        emqx_cli:print("Test creating resource failed: ~0p~n", [Reason])
+                end
+              end, Params, ?OPTSPEC_RESOURCES_CREATE, {?FUNCTION_NAME, test});
+
 resources(["list"]) ->
     print_all(emqx_rule_registry:get_resources());
 
@@ -154,7 +164,7 @@ resources(["show", ResourceId]) ->
 
 resources(["delete", ResourceId]) ->
     try
-        ok = emqx_rule_registry:remove_resource(list_to_binary(ResourceId)),
+        ok = emqx_rule_engine:delete_resource(list_to_binary(ResourceId)),
         emqx_cli:print("ok~n")
     catch
         _Error:Reason ->
