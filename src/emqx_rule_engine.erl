@@ -39,6 +39,8 @@
              , resource_type/0
              ]).
 
+-define(descr, #{en => <<"">>, zh => <<"">>}).
+
 %%------------------------------------------------------------------------------
 %% Load resource/action providers from all available applications
 %%------------------------------------------------------------------------------
@@ -139,8 +141,8 @@ new_action({App, Mod, #{name := Name,
     ok = emqx_rule_validator:validate_spec(ParamsSpec),
     #action{name = Name, for = Hook, app = App, types = Types,
             module = Mod, func = Func, params = ParamsSpec,
-            title = maps:get(title, Params, #{en => <<"">>, zh => <<"">>}),
-            description = maps:get(description, Params, "")}.
+            title = maps:get(title, Params, ?descr),
+            description = maps:get(description, Params, ?descr)}.
 
 new_resource_type({App, Mod, #{name := Name,
                                params := ParamsSpec,
@@ -151,8 +153,8 @@ new_resource_type({App, Mod, #{name := Name,
                    params = ParamsSpec,
                    on_create = {Mod, Create},
                    on_destroy = {Mod, Destroy},
-                   title = maps:get(title, Params, #{en => <<"">>, zh => <<"">>}),
-                   description = maps:get(description, Params, "")}.
+                   title = maps:get(title, Params, ?descr),
+                   description = maps:get(description, Params, ?descr)}.
 
 find_attrs(App, Def) ->
     [{App, Mod, Attr} || {ok, Modules} <- [application:get_key(App, modules)],

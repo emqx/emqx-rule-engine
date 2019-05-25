@@ -206,7 +206,7 @@ number(Bin) ->
 
 %% Step3 -> Take actions
 take_actions(Actions, Selected, Envs) ->
-    lists:map(fun(Action) -> take_action(Action, Selected, Envs) end, Actions).
+    lists:foreach(fun(Action) -> take_action(Action, Selected, Envs) end, Actions).
 
 take_action(#{apply := Apply}, Selected, Envs) ->
     Apply(Selected, Envs).
