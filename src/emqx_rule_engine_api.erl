@@ -135,6 +135,7 @@
 -define(ERR_NO_RESOURCE(RESID), list_to_binary(io_lib:format("Resource ~s Not Found", [(RESID)]))).
 -define(ERR_NO_HOOK(HOOK), list_to_binary(io_lib:format("Event ~s Not Found", [(HOOK)]))).
 -define(ERR_NO_RESOURCE_TYPE(TYPE), list_to_binary(io_lib:format("Resource Type ~s Not Found", [(TYPE)]))).
+-define(ERR_UNKNOWN_COLUMN(COLUMN), list_to_binary(io_lib:format("Unknown Column: ~s", [(COLUMN)]))).
 -define(ERR_BADARGS(REASON),
         begin
             R0 = list_to_binary(io_lib:format("~0p", [REASON])),
@@ -154,10 +155,13 @@ create_rule(_Bindings, Params) ->
 
 test_rule_sql(Params) ->
     try rule_sql_test(jsx:decode(jsx:encode(Params), [return_maps])) of
-        Result -> return({ok, Result})
+        {ok, Result} -> return({ok, Result});
+        {error, nomatch} -> return({error, 404, <<"SQL Not Match">>})
     catch
         throw:{invalid_hook, Hook} ->
             return({error, 400, ?ERR_NO_HOOK(Hook)});
+        _:{parse_error,{unknown_column, Column}} ->
+            return({error, 400, ?ERR_UNKNOWN_COLUMN(Column)});
         _Error:Reason ->
             return({error, 400, ?ERR_BADARGS(Reason)})
     end.
@@ -173,6 +177,8 @@ do_create_rule(Params) ->
             return({error, 400, ?ERR_NO_RESOURCE(ResId)});
         throw:{invalid_hook, Hook} ->
             return({error, 400, ?ERR_NO_HOOK(Hook)});
+        _:{parse_error,{unknown_column, Column}} ->
+            return({error, 400, ?ERR_UNKNOWN_COLUMN(Column)});
         _Error:Reason ->
             return({error, 400, ?ERR_BADARGS(Reason)})
     end.
@@ -377,8 +383,8 @@ feedback_action() ->
 
 wait_feedback() ->
     case erlang:erase(rule_sql_test_result) of
-        undefined -> #{};
-        Data -> Data
+        undefined -> {error, nomatch};
+        Data -> {ok, Data}
     end.
 
 fill_default_values(Event, #{<<"topic_filters">> := TopicFilters} = Context) ->
