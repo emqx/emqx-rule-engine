@@ -146,12 +146,9 @@
 %% Rules API
 %%------------------------------------------------------------------------------
 create_rule(_Bindings, Params) ->
-    case proplists:get_value(<<"test">>, Params) of
-        true ->
-            test_rule_sql(Params);
-        _ ->
-            do_create_rule(Params)
-    end.
+    if_test(fun() -> test_rule_sql(Params) end,
+            fun() -> do_create_rule(Params) end,
+            Params).
 
 test_rule_sql(Params) ->
     try rule_sql_test(jsx:decode(jsx:encode(Params), [return_maps])) of
@@ -217,12 +214,9 @@ show_action(#{name := Name}, _Params) ->
 %% Resources API
 %%------------------------------------------------------------------------------
 create_resource(#{}, Params) ->
-    case proplists:get_value(<<"test">>, Params) of
-        true ->
-            do_create_resource(test_resource, Params);
-        _ ->
-            do_create_resource(create_resource, Params)
-    end.
+    if_test(fun() -> do_create_resource(test_resource, Params) end,
+            fun() -> do_create_resource(create_resource, Params) end,
+            Params).
 
 do_create_resource(Create, Params) ->
     try emqx_rule_engine:Create(parse_resource_params(Params)) of
@@ -274,6 +268,14 @@ show_resource_type(#{name := Name}, _Params) ->
 %%------------------------------------------------------------------------------
 %% Internal functions
 %%------------------------------------------------------------------------------
+
+if_test(True, False, Params) ->
+    case proplists:get_value(<<"test">>, Params) of
+        Test when Test =:= true; Test =:= <<"true">> ->
+            True();
+        _ ->
+            False()
+    end.
 
 return_all(Records) ->
     Data = lists:map(fun record_to_map/1, Records),
