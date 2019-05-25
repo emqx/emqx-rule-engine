@@ -376,7 +376,7 @@ rule_sql_test(#{<<"rawsql">> := Sql, <<"ctx">> := Context}) ->
                          conditions = emqx_rule_sqlparser:select_where(Select),
                          actions = [#{name => test_rule_sql,
                                       apply => feedback_action()}]},
-            FullContext = fill_default_values(hd(Event), emqx_rule_maps:atom_key_map(Context)),
+            FullContext = fill_default_values(hd(Event), emqx_rule_maps:atom_key_map(Context), #{}),
             emqx_rule_runtime:apply_rule(Rule, FullContext),
             wait_feedback();
         Error -> error(Error)
@@ -393,14 +393,26 @@ wait_feedback() ->
         Data -> {ok, Data}
     end.
 
-fill_default_values(Event, #{topic_filters := TopicFilters} = Context) ->
-    do_fill_default_values(Event, Context#{
-        topic_filters => parse_topic_filters(TopicFilters)});
-fill_default_values(Event, Context) ->
-    do_fill_default_values(Event, Context).
+fill_default_values(Event, #{topic_filters := TopicFilters} = Context, Result) ->
+    fill_default_values(Event, maps:remove(topic_filters, Context),
+                        Result#{topic_filters => parse_topic_filters(TopicFilters)});
+fill_default_values(Event, #{peername := Peername} = Context, Result) ->
+    fill_default_values(Event, maps:remove(peername, Context),
+                        Result#{peername => parse_peername(Peername)});
+fill_default_values(Event, Context, Acc) ->
+    maps:merge(?EG_ENVS(Event), maps:merge(Context, Acc)).
 
-do_fill_default_values(Event, Context) ->
-    maps:merge(?EG_ENVS(Event), Context).
+parse_peername(Peername) ->
+    case string:split(Peername, [$:]) of
+        [IPAddrStr, PortStr] ->
+            IPAddr = case inet:parse_address("127.0.0.1") of
+                        {ok, IPAddr0} -> IPAddr0;
+                        {error, Error} -> error({Error, IPAddrStr})
+                     end,
+            {IPAddr, binary_to_integer(PortStr)};
+        [IPAddrStr] ->
+            error({invalid_ip_port, IPAddrStr})
+    end.
 
 parse_topic_filters(TopicFilters) ->
     [ case TpcFtl of
