@@ -192,9 +192,15 @@ prepare_action({Name, Args}) ->
     case emqx_rule_registry:find_action(Name) of
         {ok, #action{module = M, func = F, params = ParamSpec}} ->
             ok = emqx_rule_validator:validate_params(Args, ParamSpec),
-            NewArgs = with_resource_params(Args),
-            #{name => Name, params => NewArgs,
-              apply => init_action(M, F, NewArgs)};
+            Params = with_resource_params(Args),
+            case init_action(M, F, Params) of
+                {ActionInstance, NewParams} ->
+                    #{name => Name, params => NewParams,
+                      apply => ActionInstance};
+                ActionInstance ->
+                    #{name => Name, params => Params,
+                      apply => ActionInstance}
+            end;
         not_found ->
             throw({action_not_found, Name})
     end.

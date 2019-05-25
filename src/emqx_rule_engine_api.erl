@@ -393,9 +393,9 @@ wait_feedback() ->
         Data -> {ok, Data}
     end.
 
-fill_default_values(Event, #{<<"topic_filters">> := TopicFilters} = Context) ->
+fill_default_values(Event, #{topic_filters := TopicFilters} = Context) ->
     do_fill_default_values(Event, Context#{
-        <<"topic_filters">> => parse_topic_filters(TopicFilters)});
+        topic_filters => parse_topic_filters(TopicFilters)});
 fill_default_values(Event, Context) ->
     do_fill_default_values(Event, Context).
 
