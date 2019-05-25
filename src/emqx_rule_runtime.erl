@@ -30,6 +30,8 @@
         , on_message_acked/3
         ]).
 
+-export([apply_rule/2]).
+
 -import(emqx_rule_maps,
         [ get_value/2
         , get_value/3
@@ -229,13 +231,13 @@ alias(Field, Val) ->
     end.
 
 alias({var, Var}) ->
-    Var;
+    emqx_rule_utils:atom_key(Var);
 alias({const, Val}) ->
     Val;
 alias({payload, Attr}) when is_binary(Attr) ->
-    [<<"payload">>, Attr];
+    [payload, Attr];
 alias({payload, AttrPath}) when is_list(AttrPath) ->
-    [<<"payload">>|AttrPath];
+    [payload|AttrPath];
 alias(_) -> undefined.
 
 apply_func(Name, Args, Input) when is_atom(Name) ->
@@ -302,6 +304,9 @@ columns(Input = #{timestamp := Timestamp}, Result) ->
 columns(Input = #{peername := Peername}, Result) ->
     columns(maps:remove(peername, Input),
             Result#{peername => peername(Peername)});
+columns(Input = #{sockname := Peername}, Result) ->
+    columns(maps:remove(sockname, Input),
+            Result#{sockname => peername(Peername)});
 columns(Input = #{connattrs := Conn}, Result) ->
     ConnAt = maps:get(connected_at, Conn, null),
     columns(maps:remove(connattrs, Input),
@@ -311,10 +316,13 @@ columns(Input = #{connattrs := Conn}, Result) ->
                                  keepalive => maps:get(keepalive, Conn, null),
                                  proto_ver => maps:get(proto_ver, Conn, null)
                                 }));
-columns(Input = #{topic_filters := [{Topic, #{qos := QoS}} | _] = Filters}, Result) ->
+columns(Input = #{topic_filters := [{Topic, Opts} | _] = Filters}, Result) ->
+    Rusult1 = case maps:find(qos, Opts) of
+                  {ok, QoS} -> Result#{qos => QoS};
+                  error -> Result
+              end,
     columns(maps:remove(topic_filters, Input),
-            Result#{topic => Topic, qos => QoS,
-                    topic_filters => Filters});
+            Rusult1#{topic => Topic, topic_filters => Filters});
 columns(Input, Result) ->
     maps:merge(Result, Input).
 

@@ -99,6 +99,8 @@ end_per_suite(_Config) ->
     stop_apps(),
     ok.
 
+on_resource_create(_id, _) -> #{}.
+on_resource_destroy(_id, _) -> ok.
 
 %%------------------------------------------------------------------------------
 %% Group specific setup/teardown
@@ -133,8 +135,9 @@ init_per_testcase(t_events, Config) ->
     ok = emqx_rule_registry:add_action(
             #action{name = 'hook-metrics-action', app = ?APP,
                     module = ?MODULE, func = hook_metrics_action,
-                    type='built_in', params = #{},
-                    description = <<"Hook metrics action">>}),
+                    types=[], params = #{},
+                    title = #{en => <<"Hook metrics action">>},
+                    description = #{en => <<"Hook metrics action">>}}),
     SQL = "SELECT * FROM \"message.publish\", "
                         "\"message.dropped\", "
                         "\"message.deliver\", "
@@ -150,12 +153,22 @@ init_per_testcase(t_events, Config) ->
                       description => <<"Debug rule">>}),
     [{hook_points_rules, Rule} | Config];
 init_per_testcase(_TestCase, Config) ->
+    ok = emqx_rule_registry:register_resource_types(
+            [#resource_type{
+                name = built_in,
+                provider = ?APP,
+                params = #{},
+                on_create = {?MODULE, on_resource_create},
+                on_destroy = {?MODULE, on_resource_destroy},
+                title = #{en => <<"Built-In Resource Type (debug)">>},
+                description = #{en => <<"The built in resource type for debug purpose">>}}]),
+    %ct:pal("============ ~p", [ets:tab2list(emqx_resource_type)]),
     Config.
 
 end_per_testcase(t_events, Config) ->
     ets:delete(?HOOK_METRICS_TAB),
     ok = emqx_rule_registry:remove_rule(?config(hook_points_rules, Config)),
-    ok = emqx_rule_registry:remove_action('built_in:hook-metrics-action');
+    ok = emqx_rule_registry:remove_action('hook-metrics-action');
 end_per_testcase(_TestCase, _Config) ->
     ok.
 
@@ -279,10 +292,6 @@ t_list_actions_api(_Config) ->
     {ok, [{code, 0}, {data, Actions}]} = emqx_rule_engine_api:list_actions(#{},[]),
     %ct:pal("RList : ~p", [Actions]),
     ?assert(length(Actions) > 0),
-
-    {ok, [{code, 0}, {data, Actions0}]} = emqx_rule_engine_api:list_actions_by_type(#{type => 'built_in'}, []),
-    %ct:pal("RListT : ~p", [Actions0]),
-    ?assert(length(Actions0) > 0),
     ok.
 
 t_show_action_api(_Config) ->
@@ -355,9 +364,6 @@ t_actions_cli(_Config) ->
     RList = emqx_rule_engine_cli:actions(["list"]),
     ?assertMatch({match, _}, re:run(RList, "inspect")),
     %ct:pal("RList : ~p", [RList]),
-    RListT = emqx_rule_engine_cli:actions(["list", "-t", "built_in"]),
-    %ct:pal("RListT : ~p", [RListT]),
-    ?assertMatch({match, _}, re:run(RListT, "inspect")),
 
     RShow = emqx_rule_engine_cli:actions(["show", "inspect"]),
     ?assertMatch({match, _}, re:run(RShow, "inspect")),
@@ -663,11 +669,13 @@ create_simple_repub_rule(TargetTopic, SQL) ->
 make_simple_action(ActionName) when is_atom(ActionName) ->
     #action{name = ActionName, app = ?APP,
             module = ?MODULE, func = simple_action_inspect, params = #{},
-            description = <<"Simple inspect action">>}.
+            title = #{en => <<"Simple inspect action">>},
+            description = #{en => <<"Simple inspect action">>}}.
 make_simple_action(ActionName, Hook) when is_atom(ActionName) ->
     #action{name = ActionName, app = ?APP, for = Hook,
             module = ?MODULE, func = simple_action_inspect, params = #{},
-            description = <<"Simple inspect action with hook">>}.
+            title = #{en => <<"Simple inspect action">>},
+            description = #{en => <<"Simple inspect action with hook">>}}.
 
 simple_action_inspect(Params) ->
     fun(Data) ->
@@ -684,9 +692,10 @@ make_simple_resource_type(ResTypeName) ->
     #resource_type{name = ResTypeName, provider = ?APP,
                    params = #{},
                    on_create = {?MODULE, on_simple_resource_type_create},
-                   description = <<"Simple Resource Type">>}.
+                   title = #{en => <<"Simple Resource Type">>},
+                   description = #{en => <<"Simple Resource Type">>}}.
 
-on_simple_resource_type_create(#{}) ->
+on_simple_resource_type_create(_Id, #{}) ->
     #{}.
 
 hook_metrics_action(_Params) ->

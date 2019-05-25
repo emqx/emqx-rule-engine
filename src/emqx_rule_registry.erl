@@ -17,6 +17,7 @@
 -behaviour(gen_server).
 
 -include("rule_engine.hrl").
+-include("rule_events.hrl").
 -include_lib("emqx/include/logger.hrl").
 
 -export([start_link/0]).
@@ -36,7 +37,6 @@
         , add_actions/1
         , get_actions/0
         , get_actions_for/1
-        , get_actions_by_type/1
         , find_action/1
         , remove_action/1
         , remove_actions/1
@@ -109,7 +109,7 @@ mnesia(boot) ->
     ok = ekka_mnesia:create_table(?ACTION_TAB, [
                 {ram_copies, [node()]},
                 {record_name, action},
-                {index, [#action.for, #action.app, #action.type]},
+                {index, [#action.for, #action.app]},
                 {attributes, record_info(fields, action)},
                 {storage_properties, StoreProps}]),
     %% Resource table
@@ -228,10 +228,6 @@ do_get_actions_for([H | T] = Hooks) when is_list(Hooks) ->
 do_get_actions_for(Hook) when not is_list(Hook) ->
     mnesia:dirty_index_read(?ACTION_TAB, Hook, #action.for).
 
--spec(get_actions_by_type(Type :: resource_type_name()) -> list(emqx_rule_engine:action())).
-get_actions_by_type(Type) ->
-    mnesia:dirty_index_read(?ACTION_TAB, Type, #action.type).
-
 %% @doc Find an action by name.
 -spec(find_action(Name :: action_name()) -> {ok, emqx_rule_engine:action()} | not_found).
 find_action(Name) ->
@@ -308,15 +304,10 @@ remove_resource(ResId) when is_binary(ResId) ->
 
 %% @private
 delete_resource(ResId) ->
-    try
-        [[?RAISE(not_found = find_resource(ResId1), {exists, Id})
-            || #{params := #{<<"$resource">> := ResId1}} <- Actions]
-                || #rule{id = Id, actions = Actions} <- get_rules()],
-        mnesia:delete(?RES_TAB, ResId, write)
-    catch
-        throw:{exists, Id} ->
-            throw({dependency_exists, {rule, Id}})
-    end.
+    [[ResId =:= ResId1 andalso throw({dependency_exists, {rule, Id}})
+        || #{params := #{<<"$resource">> := ResId1}} <- Actions]
+            || #rule{id = Id, actions = Actions} <- get_rules()],
+    mnesia:delete(?RES_TAB, ResId, write).
 
 %% @private
 insert_resource(Resource) ->

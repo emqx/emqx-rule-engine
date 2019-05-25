@@ -25,6 +25,8 @@
 -type(action_name() :: atom()).
 -type(resource_type_name() :: atom()).
 
+-type(descr() :: #{en := binary(), zh => binary()}).
+
 -type(hook() :: atom() | 'any').
 
 -record(rule,
@@ -42,18 +44,19 @@
         { name :: action_name()
         , for :: hook()
         , app :: atom()
-        , type :: maybe(resource_name())
+        , types = [] :: list(resource_name())
         , module :: module()
         , func :: atom()
         , params :: #{atom() => term()}
-        , description :: binary()
+        , title :: descr()
+        , description :: descr()
         }).
 
 -record(resource,
         { id :: resource_id()
         , type :: resource_type_name()
         , config :: #{}
-        , attrs :: #{}
+        , params :: #{}
         , description :: binary()
         }).
 
@@ -61,8 +64,10 @@
         { name :: resource_type_name()
         , provider :: atom()
         , params :: #{}
-        , on_create :: fun((map()) -> map())
-        , description :: binary()
+        , on_create :: {Module::atom(), Fun::atom()}
+        , on_destroy :: {Module::atom(), Fun::atom()}
+        , title :: descr()
+        , description :: descr()
         }).
 
 -record(rule_hooks,
@@ -93,127 +98,4 @@
 -define(RAISE(_EXP_, _ERROR_),
         begin
             try (_EXP_) catch _:_REASON_ -> throw(_ERROR_) end
-        end).
-
--define(EVENT_ALIAS(ALIAS),
-        case ALIAS of
-           '$message' ->
-                [ '$message'
-                , '$any'
-                , 'message.publish'
-                , 'message.deliver'
-                , 'message.acked'
-                , 'message.dropped'
-                ];
-           '$client' ->
-                [ '$client'
-                , '$any'
-                , 'client.connected'
-                , 'client.disconnected'
-                , 'client.subscribe'
-                , 'client.unsubscribe'
-                ];
-           _ -> ['$any', ALIAS]
-        end).
-
--define(COLUMNS(EVENT),
-        case EVENT of
-        'message.publish' ->
-                [ <<"client_id">>
-                , <<"username">>
-                , <<"event">>
-                , <<"flags">>
-                , <<"id">>
-                , <<"payload">>
-                , <<"peername">>
-                , <<"qos">>
-                , <<"timestamp">>
-                , <<"topic">>
-                ];
-        'message.deliver' ->
-                [ <<"client_id">>
-                , <<"username">>
-                , <<"event">>
-                , <<"auth_result">>
-                , <<"mountpoint">>
-                , <<"flags">>
-                , <<"id">>
-                , <<"payload">>
-                , <<"peername">>
-                , <<"topic">>
-                , <<"qos">>
-                , <<"timestamp">>
-                ];
-        'message.acked' ->
-                [ <<"client_id">>
-                , <<"username">>
-                , <<"event">>
-                , <<"flags">>
-                , <<"id">>
-                , <<"payload">>
-                , <<"peername">>
-                , <<"topic">>
-                , <<"qos">>
-                , <<"timestamp">>
-                ];
-        'message.dropped' ->
-                [ <<"client_id">>
-                , <<"username">>
-                , <<"event">>
-                , <<"flags">>
-                , <<"id">>
-                , <<"node">>
-                , <<"payload">>
-                , <<"peername">>
-                , <<"qos">>
-                , <<"timestamp">>
-                , <<"topic">>
-                ];
-        'client.connected' ->
-                [ <<"client_id">>
-                , <<"username">>
-                , <<"event">>
-                , <<"auth_result">>
-                , <<"clean_start">>
-                , <<"connack">>
-                , <<"connected_at">>
-                , <<"is_bridge">>
-                , <<"keepalive">>
-                , <<"mountpoint">>
-                , <<"peername">>
-                , <<"proto_ver">>
-                ];
-        'client.disconnected' ->
-                [ <<"client_id">>
-                , <<"username">>
-                , <<"event">>
-                , <<"auth_result">>
-                , <<"mountpoint">>
-                , <<"peername">>
-                , <<"reason_code">>
-                ];
-        'client.subscribe' ->
-                [ <<"client_id">>
-                , <<"username">>
-                , <<"event">>
-                , <<"auth_result">>
-                , <<"mountpoint">>
-                , <<"peername">>
-                , <<"topic_filters">>
-                , <<"topic">>
-                , <<"qos">>
-                ];
-        'client.unsubscribe' ->
-                [ <<"client_id">>
-                , <<"username">>
-                , <<"event">>
-                , <<"auth_result">>
-                , <<"mountpoint">>
-                , <<"peername">>
-                , <<"topic_filters">>
-                , <<"topic">>
-                , <<"qos">>
-                ];
-        RuleType ->
-                error({unknown_rule_type, RuleType})
         end).

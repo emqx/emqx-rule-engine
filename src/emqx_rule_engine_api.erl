@@ -15,8 +15,9 @@
 -module(emqx_rule_engine_api).
 
 -include("rule_engine.hrl").
+-include("rule_events.hrl").
 
--import(minirest,  [return/0, return/1]).
+-import(minirest,  [return/1]).
 
 -rest_api(#{name   => create_rule,
             method => 'POST',
@@ -109,13 +110,6 @@
             descr  => "List all resources of a resource type"
            }).
 
--rest_api(#{name   => list_actions_by_type,
-            method => 'GET',
-            path   => "/resource_types/:atom:type/actions",
-            func   => list_actions_by_type,
-            descr  => "List all actions of a resource type"
-           }).
-
 -export([ create_rule/2
         , list_rules/2
         , show_rule/2
@@ -134,14 +128,14 @@
 
 -export([ list_resource_types/2
         , list_resources_by_type/2
-        , list_actions_by_type/2
         , show_resource_type/2
         ]).
 
 -define(ERR_NO_ACTION(NAME), list_to_binary(io_lib:format("Action ~s Not Found", [(NAME)]))).
 -define(ERR_NO_RESOURCE(RESID), list_to_binary(io_lib:format("Resource ~s Not Found", [(RESID)]))).
--define(ERR_NO_HOOK(HOOK), list_to_binary(io_lib:format("Hook ~s Not Found", [(HOOK)]))).
+-define(ERR_NO_HOOK(HOOK), list_to_binary(io_lib:format("Event ~s Not Found", [(HOOK)]))).
 -define(ERR_NO_RESOURCE_TYPE(TYPE), list_to_binary(io_lib:format("Resource Type ~s Not Found", [(TYPE)]))).
+-define(ERR_UNKNOWN_COLUMN(COLUMN), list_to_binary(io_lib:format("Unknown Column: ~s", [(COLUMN)]))).
 -define(ERR_BADARGS(REASON),
         begin
             R0 = list_to_binary(io_lib:format("~0p", [REASON])),
@@ -151,8 +145,25 @@
 %%------------------------------------------------------------------------------
 %% Rules API
 %%------------------------------------------------------------------------------
-
 create_rule(_Bindings, Params) ->
+    if_test(fun() -> test_rule_sql(Params) end,
+            fun() -> do_create_rule(Params) end,
+            Params).
+
+test_rule_sql(Params) ->
+    try rule_sql_test(jsx:decode(jsx:encode(Params), [return_maps])) of
+        {ok, Result} -> return({ok, Result});
+        {error, nomatch} -> return({error, 404, <<"SQL Not Match">>})
+    catch
+        throw:{invalid_hook, Hook} ->
+            return({error, 400, ?ERR_NO_HOOK(Hook)});
+        _:{parse_error,{unknown_column, Column}} ->
+            return({error, 400, ?ERR_UNKNOWN_COLUMN(Column)});
+        _Error:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)})
+    end.
+
+do_create_rule(Params) ->
     try emqx_rule_engine:create_rule(parse_rule_params(Params)) of
         {ok, Rule} ->
             return({ok, record_to_map(Rule)});
@@ -163,6 +174,8 @@ create_rule(_Bindings, Params) ->
             return({error, 400, ?ERR_NO_RESOURCE(ResId)});
         throw:{invalid_hook, Hook} ->
             return({error, 400, ?ERR_NO_HOOK(Hook)});
+        _:{parse_error,{unknown_column, Column}} ->
+            return({error, 400, ?ERR_UNKNOWN_COLUMN(Column)});
         _Error:Reason ->
             return({error, 400, ?ERR_BADARGS(Reason)})
     end.
@@ -175,7 +188,7 @@ show_rule(#{id := Id}, _Params) ->
 
 delete_rule(#{id := Id}, _Params) ->
     ok = emqx_rule_registry:remove_rule(Id),
-    return().
+    return(ok).
 
 %%------------------------------------------------------------------------------
 %% Actions API
@@ -187,7 +200,9 @@ list_actions(#{}, Params) ->
             return_all(emqx_rule_registry:get_actions());
         Hook ->
             try binary_to_existing_atom(Hook, utf8) of
-                Hook0 -> return_all(emqx_rule_registry:get_actions_for(Hook0))
+                Hook0 -> return_all(
+                            sort_by_title(action,
+                                emqx_rule_registry:get_actions_for(Hook0)))
             catch _:badarg -> return({error, 400, ?ERR_NO_HOOK(Hook)})
             end
     end.
@@ -198,9 +213,15 @@ show_action(#{name := Name}, _Params) ->
 %%------------------------------------------------------------------------------
 %% Resources API
 %%------------------------------------------------------------------------------
-
 create_resource(#{}, Params) ->
-    try emqx_rule_engine:create_resource(parse_resource_params(Params)) of
+    if_test(fun() -> do_create_resource(test_resource, Params) end,
+            fun() -> do_create_resource(create_resource, Params) end,
+            Params).
+
+do_create_resource(Create, Params) ->
+    try emqx_rule_engine:Create(parse_resource_params(Params)) of
+        ok ->
+            return(ok);
         {ok, Resource} ->
             return({ok, record_to_map(Resource)});
         {error, {resource_type_not_found, Type}} ->
@@ -218,16 +239,13 @@ list_resources(#{}, _Params) ->
 list_resources_by_type(#{type := Type}, _Params) ->
     return_all(emqx_rule_registry:get_resources_by_type(Type)).
 
-list_actions_by_type(#{type := Type}, _Params) ->
-    return_all(emqx_rule_registry:get_actions_by_type(Type)).
-
 show_resource(#{id := Id}, _Params) ->
     reply_with(fun emqx_rule_registry:find_resource/1, Id).
 
 delete_resource(#{id := Id}, _Params) ->
     try
-        ok = emqx_rule_registry:remove_resource(Id),
-        return()
+        ok = emqx_rule_engine:delete_resource(Id),
+        return(ok)
     catch
         _Error:{throw, Reason} ->
             return({error, 400, ?ERR_BADARGS(Reason)});
@@ -240,7 +258,9 @@ delete_resource(#{id := Id}, _Params) ->
 %%------------------------------------------------------------------------------
 
 list_resource_types(#{}, _Params) ->
-    return_all(emqx_rule_registry:get_resource_types()).
+    return_all(
+        sort_by_title(resource_type,
+            emqx_rule_registry:get_resource_types())).
 
 show_resource_type(#{name := Name}, _Params) ->
     reply_with(fun emqx_rule_registry:find_resource_type/1, Name).
@@ -248,6 +268,14 @@ show_resource_type(#{name := Name}, _Params) ->
 %%------------------------------------------------------------------------------
 %% Internal functions
 %%------------------------------------------------------------------------------
+
+if_test(True, False, Params) ->
+    case proplists:get_value(<<"test">>, Params) of
+        Test when Test =:= true; Test =:= <<"true">> ->
+            True();
+        _ ->
+            False()
+    end.
 
 return_all(Records) ->
     Data = lists:map(fun record_to_map/1, Records),
@@ -278,36 +306,40 @@ record_to_map(#rule{id = Id,
 record_to_map(#action{name = Name,
                       app = App,
                       for = Hook,
-                      type = Type,
+                      types = Types,
                       params = Params,
+                      title = Title,
                       description = Descr}) ->
     #{name => Name,
       app => App,
       for => Hook,
-      type => Type,
-      params => Params,
+      types => Types,
+      params => sort_spec(Params),
+      title => Title,
       description => Descr
      };
 
 record_to_map(#resource{id = Id,
                         type = Type,
                         config = Config,
-                        attrs = Attrs,
+                        params = Params,
                         description = Descr}) ->
     #{id => Id,
       type => Type,
       config => Config,
-      attrs => Attrs,
+      params => Params,
       description => Descr
      };
 
 record_to_map(#resource_type{name = Name,
                              provider = Provider,
                              params = Params,
+                             title = Title,
                              description = Descr}) ->
     #{name => Name,
       provider => Provider,
-      params => Params,
+      params => sort_spec(Params),
+      title => Title,
       description => Descr
      }.
 
@@ -333,6 +365,65 @@ parse_action(Actions) ->
              Params}
     end.
 
+-spec(rule_sql_test(#{}) -> {ok, Result::map()} | no_return()).
+rule_sql_test(#{<<"rawsql">> := Sql, <<"ctx">> := Context}) ->
+    case emqx_rule_sqlparser:parse_select(Sql) of
+        {ok, Select} ->
+            Event = emqx_rule_sqlparser:select_from(Select),
+            Rule = #rule{rawsql = Sql,
+                         for = Event,
+                         selects = emqx_rule_sqlparser:select_fields(Select),
+                         conditions = emqx_rule_sqlparser:select_where(Select),
+                         actions = [#{name => test_rule_sql,
+                                      apply => feedback_action()}]},
+            FullContext = fill_default_values(hd(Event), emqx_rule_maps:atom_key_map(Context), #{}),
+            emqx_rule_runtime:apply_rule(Rule, FullContext),
+            wait_feedback();
+        Error -> error(Error)
+    end.
+
+feedback_action() ->
+    fun(Data, _Envs) ->
+        erlang:put(rule_sql_test_result, Data)
+    end.
+
+wait_feedback() ->
+    case erlang:erase(rule_sql_test_result) of
+        undefined -> {error, nomatch};
+        Data -> {ok, Data}
+    end.
+
+fill_default_values(Event, #{topic_filters := TopicFilters} = Context, Result) ->
+    fill_default_values(Event, maps:remove(topic_filters, Context),
+                        Result#{topic_filters => parse_topic_filters(TopicFilters)});
+fill_default_values(Event, #{peername := Peername} = Context, Result) ->
+    fill_default_values(Event, maps:remove(peername, Context),
+                        Result#{peername => parse_peername(Peername)});
+fill_default_values(Event, Context, Acc) ->
+    maps:merge(?EG_ENVS(Event), maps:merge(Context, Acc)).
+
+parse_peername(Peername) ->
+    case string:split(Peername, [$:]) of
+        [IPAddrStr, PortStr] ->
+            IPAddr = case inet:parse_address("127.0.0.1") of
+                        {ok, IPAddr0} -> IPAddr0;
+                        {error, Error} -> error({Error, IPAddrStr})
+                     end,
+            {IPAddr, binary_to_integer(PortStr)};
+        [IPAddrStr] ->
+            error({invalid_ip_port, IPAddrStr})
+    end.
+
+parse_topic_filters(TopicFilters) ->
+    [ case TpcFtl of
+        #{<<"topic">> := Topic, <<"qos">> := QoS} ->
+            {Topic, #{qos => QoS}};
+        #{<<"topic">> := Topic} ->
+            {Topic, #{}};
+        Topic ->
+            {Topic, #{}}
+      end || TpcFtl <- jsx:decode(TopicFilters, [return_maps])].
+
 parse_resource_params(Params) ->
     parse_resource_params(Params, #{config => #{}, description => <<"">>}).
 parse_resource_params([], Res) ->
@@ -351,3 +442,76 @@ parse_resource_params([_ | Params], Res) ->
 
 json_term_to_map(List) ->
     jsx:decode(jsx:encode(List), [return_maps]).
+
+sort_by_title(action, Actions) ->
+    sort_by(#action.title, Actions);
+sort_by_title(resource_type, ResourceTypes) ->
+    sort_by(#resource_type.title, ResourceTypes).
+
+sort_by(Pos, TplList) ->
+    lists:sort(
+        fun(RecA, RecB) ->
+            maps:get(en, element(Pos, RecA), 0)
+            =< maps:get(en, element(Pos, RecB), 0)
+        end, TplList).
+
+sort_spec(Spec) when map_size(Spec) == 0 ->
+    #{};
+sort_spec(Spec) when is_map(Spec) ->
+    sort_spec(maps:to_list(Spec));
+sort_spec(Spec) when is_list(Spec) ->
+    lists:sort(
+        fun({_, SpecA}, {_, SpecB}) ->
+            maps:get(order, SpecA, 0) =< maps:get(order, SpecB, 0)
+        end, [case Spec0 of
+                #{schema := SubSpec} -> {Key, Spec0#{schema => sort_spec(SubSpec)}};
+                _ -> {Key, Spec0}
+              end || {Key, Spec0} <- Spec]).
+
+%% TEST
+-ifdef(EUNIT).
+-include_lib("eunit/include/eunit.hrl").
+
+sort_spec_test_() ->
+    [
+        ?_assertEqual(
+            [{key1,#{type => integer}},
+             {key2,#{type => string}},
+             {key3,#{type => string}}],
+            sort_spec(#{key1 => #{type => integer},
+                        key2 => #{type => string},
+                        key3 => #{type => string}})),
+        ?_assertEqual(
+            [ {key1,#{order => 1,
+                      schema =>
+                          [{key1,#{order => 1,type => string}},
+                           {key2,#{order => 2,type => string}},
+                           {key3,#{order => 3,
+                                   schema =>
+                                        [{key1,#{order => 1,type => string}},
+                                         {key2,#{order => 2,type => object,schema => #{}}},
+                                         {key3,#{order => 3,type => string}}],
+                                   type => object}}],
+                      type => object}},
+              {key2,#{order => 2,type => string}},
+              {key3,#{order => 3,type => string}}],
+            sort_spec(#{key1 =>
+                            #{order => 1,
+                              schema =>
+                                  #{key3 =>
+                                      #{order => 3,
+                                        schema =>
+                                            #{key2 =>
+                                                #{order => 2,schema => #{},
+                                                  type => object},
+                                              key1 => #{order => 1,type => string},
+                                              key3 => #{order => 3,type => string}},
+                                        type => object},
+                                    key2 => #{order => 2,type => string},
+                                    key1 => #{order => 1,type => string}},
+                              type => object},
+                        key3 => #{order => 3,type => string},
+                        key2 => #{order => 2,type => string}}))
+    ].
+
+-endif.

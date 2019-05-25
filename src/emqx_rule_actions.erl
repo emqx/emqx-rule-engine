@@ -23,34 +23,33 @@
                 type => string,
                 format => topic,
                 required => true,
-                title => <<"To Which Topic">>,
-                description => <<"Repubilsh the message to which topic">>
+                title => #{en => <<"Target Topic">>,
+                           zh => <<"目的主题"/utf8>>},
+                description => #{en => <<"Repubilsh the message to which topic">>,
+                                 zh => <<"重新发布消息到哪个主题"/utf8>>}
             }
         }).
 
--resource_type(#{name => built_in,
-                 create => on_resource_create,
-                 params => #{},
-                 title => <<"Built-In Resource Type">>,
-                 description => "The built in resource type for debug purpose"
-                }).
-
 -rule_action(#{name => inspect,
                for => '$any',
-               type => built_in,
+               types => [],
                func => inspect,
                params => #{},
-               title => <<"Inspect Action">>,
-               description => <<"Inspect the details of action params for debug purpose">>
+               title => #{en => <<"Inspect (debug)">>,
+                          zh => <<"检查 (调试)"/utf8>>},
+               description => #{en => <<"Inspect the details of action params for debug purpose">>,
+                                zh => <<"检查动作参数 (用以调试)"/utf8>>}
               }).
 
 -rule_action(#{name => republish,
                for => 'message.publish',
-               type => built_in,
+               types => [],
                func => republish,
                params => ?REPUBLISH_PARAMS_SPEC,
-               title => <<"Republish Action">>,
-               description => "Republish a MQTT message to a another topic"
+               title => #{en => <<"Republish">>,
+                          zh => <<"消息重新发布"/utf8>>},
+               description => #{en => <<"Republish a MQTT message to a another topic">>,
+                                zh => <<"重新发布消息到另一个主题"/utf8>>}
               }).
 
 -type(action_fun() :: fun((SelectedData::map(), Envs::map()) -> Result::any())).

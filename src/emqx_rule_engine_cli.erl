@@ -32,8 +32,7 @@
 -define(OPTSPEC_RESOURCE_TYPE,
         [{type, $t, "type", {atom, undefined}, "Resource Type"}]).
 -define(OPTSPEC_ACTION_TYPE,
-        [ {type, $t, "type", {atom, undefined}, "Resource Type"}
-        , {hook, $k, "hook", {atom, undefined}, "Hook Type"}
+        [ {hook, $k, "hook", {atom, undefined}, "Event Type"}
         ]).
 
 -define(OPTSPEC_RESOURCES_CREATE,
@@ -114,7 +113,7 @@ rules(_usage) ->
 
 actions(["list" | Params]) ->
     with_opts(fun({Opts, _}) ->
-            print_all(get_actions(get_value(type, Opts), get_value(hook, Opts)))
+            print_all(get_actions(get_value(hook, Opts)))
         end, Params, ?OPTSPEC_ACTION_TYPE, {'rule-actions', list});
 
 actions(["show", ActionId]) ->
@@ -141,6 +140,19 @@ resources(["create" | Params]) ->
                 end
               end, Params, ?OPTSPEC_RESOURCES_CREATE, {?FUNCTION_NAME, create});
 
+resources(["test" | Params]) ->
+    with_opts(fun({Opts, _}) ->
+                try emqx_rule_engine:test_resource(make_resource(Opts)) of
+                    ok ->
+                        emqx_cli:print("Test creating resource successfully (dry-run)~n");
+                    {error, Reason} ->
+                        emqx_cli:print("Test creating resource failed: ~0p~n", [Reason])
+                catch
+                    throw:Reason ->
+                        emqx_cli:print("Test creating resource failed: ~0p~n", [Reason])
+                end
+              end, Params, ?OPTSPEC_RESOURCES_CREATE, {?FUNCTION_NAME, test});
+
 resources(["list"]) ->
     print_all(emqx_rule_registry:get_resources());
 
@@ -155,7 +167,7 @@ resources(["show", ResourceId]) ->
 
 resources(["delete", ResourceId]) ->
     try
-        ok = emqx_rule_registry:remove_resource(list_to_binary(ResourceId)),
+        ok = emqx_rule_engine:delete_resource(list_to_binary(ResourceId)),
         emqx_cli:print("ok~n")
     catch
         _Error:Reason ->
@@ -214,24 +226,25 @@ format(#rule{id = Id,
 format(#action{name = Name,
                for = Hook,
                app = App,
-               type = Type,
+               types = Types,
                params = Params,
-               description = Descr}) ->
-    lists:flatten(io_lib:format("action(name='~s', app='~s', for='~s', type='~s', params=~0p, description='~s')~n",
-                                [Name, App, Hook, Type, Params, Descr]));
+               title = #{en := Title},
+               description = #{en := Descr}}) ->
+    lists:flatten(io_lib:format("action(name='~s', app='~s', for='~s', types=~0p, params=~0p, title ='~s', description='~s')~n", [Name, App, Hook, Types, Params, Title, Descr]));
 
 format(#resource{id = Id,
                  type = Type,
                  config = Config,
-                 attrs = Attrs,
+                 params = Params,
                  description = Descr}) ->
-    lists:flatten(io_lib:format("resource(id='~s', type='~s', config=~0p, attrs=~0p, description='~s')~n", [Id, Type, Config, Attrs, Descr]));
+    lists:flatten(io_lib:format("resource(id='~s', type='~s', config=~0p, params=~0p, description='~s')~n", [Id, Type, Config, Params, Descr]));
 
 format(#resource_type{name = Name,
                       provider = Provider,
                       params = Params,
-                      description = Descr}) ->
-    lists:flatten(io_lib:format("resource_type(name='~s', provider='~s', params=~0p, description='~s')~n", [Name, Provider, Params, Descr])).
+                      title = #{en := Title},
+                      description = #{en := Descr}}) ->
+    lists:flatten(io_lib:format("resource_type(name='~s', provider='~s', params=~0p, title ='~s', description='~s')~n", [Name, Provider, Params, Title, Descr])).
 
 make_rule(Opts) ->
     Actions = get_value(actions, Opts),
@@ -269,14 +282,8 @@ parse_action_params(Actions) ->
             end, jsx:decode(Actions, [return_maps])),
         {invalid_action_params, _REASON_}).
 
-get_actions(undefined, undefined) ->
+get_actions(undefined) ->
     emqx_rule_registry:get_actions();
-get_actions(Type, undefined) ->
-    emqx_rule_registry:get_actions_by_type(Type);
-get_actions(undefined, Hook) ->
-    emqx_rule_registry:get_actions_for(Hook);
-get_actions(Type, Hook) ->
-    ActionsByType = emqx_rule_registry:get_actions_by_type(Type),
-    ActionsByHook = emqx_rule_registry:get_actions_for(Hook),
-    [ActT || ActT <- ActionsByType,
-             ActH <- ActionsByHook, ActT =:= ActH].
+get_actions(Hook) ->
+    emqx_rule_registry:get_actions_for(Hook).
+

@@ -15,12 +15,17 @@
 -module(emqx_rule_sqlparser).
 
 -include("rule_engine.hrl").
+-include("rule_events.hrl").
 
 -export([parse_select/1]).
 
 -export([ select_fields/1
         , select_from/1
         , select_where/1
+        ]).
+
+-export([ hook/1
+        , unquote/1
         ]).
 
 -record(select, {fields, from, where}).
@@ -185,4 +190,4 @@ hook(<<"message.acked">>) ->
 hook(<<"message.dropped">>) ->
     'message.dropped';
 hook(_) ->
-    error(unknown_hook_type).
+    error(unknown_event_type).
