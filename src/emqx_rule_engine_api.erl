@@ -203,7 +203,9 @@ list_actions(#{}, Params) ->
             return_all(emqx_rule_registry:get_actions());
         Hook ->
             try binary_to_existing_atom(Hook, utf8) of
-                Hook0 -> return_all(emqx_rule_registry:get_actions_for(Hook0))
+                Hook0 -> return_all(
+                            sort_by_title(action,
+                                emqx_rule_registry:get_actions_for(Hook0)))
             catch _:badarg -> return({error, 400, ?ERR_NO_HOOK(Hook)})
             end
     end.
@@ -262,7 +264,9 @@ delete_resource(#{id := Id}, _Params) ->
 %%------------------------------------------------------------------------------
 
 list_resource_types(#{}, _Params) ->
-    return_all(emqx_rule_registry:get_resource_types()).
+    return_all(
+        sort_by_title(resource_type,
+            emqx_rule_registry:get_resource_types())).
 
 show_resource_type(#{name := Name}, _Params) ->
     reply_with(fun emqx_rule_registry:find_resource_type/1, Name).
@@ -424,6 +428,18 @@ parse_resource_params([_ | Params], Res) ->
 
 json_term_to_map(List) ->
     jsx:decode(jsx:encode(List), [return_maps]).
+
+sort_by_title(action, Actions) ->
+    sort_by(#action.title, Actions);
+sort_by_title(resource_type, ResourceTypes) ->
+    sort_by(#resource_type.title, ResourceTypes).
+
+sort_by(Pos, TplList) ->
+    lists:sort(
+        fun(RecA, RecB) ->
+            maps:get(en, element(Pos, RecA), 0)
+            =< maps:get(en, element(Pos, RecB), 0)
+        end, TplList).
 
 sort_spec(Spec) when map_size(Spec) == 0 ->
     #{};
