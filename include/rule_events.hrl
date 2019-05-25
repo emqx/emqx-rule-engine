@@ -147,7 +147,7 @@
                     username => <<"u_emqx">>},
               id => <<0,5,137,164,41,233,87,47,180,75,0,0,5,124,0,1>>,
               payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,qos => 1,
-              timestamp => {1558,713054,353201},
+              timestamp => erlang:timestamp(),
               topic => <<"t1">>};
         'message.deliver' ->
             #{anonymous => true,auth_result => success,
@@ -165,7 +165,7 @@
               peername => {{127,0,0,1},50891},
               qos => 1,
               sockname => {{127,0,0,1},1883},
-              timestamp => {1558,713054,353201},
+              timestamp => erlang:timestamp(),
               topic => <<"t1">>,username => <<"u_emqx">>,
               ws_cookie => undefined,zone => external};
         'message.acked' ->
@@ -179,7 +179,7 @@
                     username => <<"u_emqx">>},
               id => <<0,5,137,164,41,233,87,47,180,75,0,0,5,124,0,1>>,
               payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,qos => 1,
-              timestamp => {1558,713054,353201},
+              timestamp => erlang:timestamp(),
               topic => <<"t1">>,username => <<"u_emqx">>};
         'message.dropped' ->
             #{event => 'message.dropped',
@@ -192,7 +192,7 @@
               id => <<0,5,137,164,41,236,124,3,180,75,0,0,5,124,0,2>>,
               node => nonode@nohost,
               payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,qos => 1,
-              timestamp => {1558,713054,559236},
+              timestamp => erlang:timestamp(),
               topic => <<"t1">>};
         'client.connected' ->
             #{anonymous => true,auth_result => success,
@@ -202,7 +202,7 @@
                   #{clean_start => true,
                     client_id => <<"c_emqx">>,
                     conn_mod => emqx_connection,
-                    connected_at => {1558,713054,248245},
+                    connected_at => erlang:timestamp(),
                     credentials =>
                         #{anonymous => true,auth_result => success,
                           client_id =>
@@ -250,5 +250,5 @@
               username => <<"u_emqx">>,ws_cookie => undefined,
               zone => external};
         RuleType ->
-                error({unknown_rule_type, RuleType})
+                error({unknown_event_type, RuleType})
         end).

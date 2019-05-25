@@ -190,4 +190,4 @@ hook(<<"message.acked">>) ->
 hook(<<"message.dropped">>) ->
     'message.dropped';
 hook(_) ->
-    error(unknown_hook_type).
+    error(unknown_event_type).
