@@ -12,15 +12,27 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
+-define(APP, emqx_rule_engine).
+
+-type(maybe(T) :: T | undefined).
+
 -type(rule_id() :: binary()).
+-type(rule_name() :: binary()).
+
 -type(resource_id() :: binary()).
+-type(resource_name() :: binary()).
+
+-type(action_name() :: atom()).
+-type(resource_type_name() :: atom()).
+
+-type(descr() :: #{en := binary(), zh => binary()}).
+
+-type(hook() :: atom() | 'any').
 
 -record(rule,
         { id :: rule_id()
-        , name :: binary()
-        , for :: atom()
+        , for :: hook()
         , rawsql :: binary()
-        , topics :: [binary()] | undefined
         , selects :: list()
         , conditions :: tuple()
         , actions :: list()
@@ -29,35 +41,38 @@
         }).
 
 -record(action,
-        { name :: atom()
-        , for :: atom()
+        { name :: action_name()
+        , for :: hook()
         , app :: atom()
+        , types = [] :: list(resource_name())
         , module :: module()
         , func :: atom()
         , params :: #{atom() => term()}
-        , description :: binary()
+        , title :: descr()
+        , description :: descr()
         }).
 
 -record(resource,
         { id :: resource_id()
-        , type :: atom()
+        , type :: resource_type_name()
         , config :: #{}
-        , attrs :: #{}
+        , params :: #{}
         , description :: binary()
-        }).
-
--record(resource_instance,
-        { id :: {binary(), node()}
-        , conns :: list(pid()) | undefined
-        , created_at :: erlang:timestamp()
         }).
 
 -record(resource_type,
-        { name :: atom()
+        { name :: resource_type_name()
         , provider :: atom()
         , params :: #{}
-        , on_create :: fun((map()) -> map())
-        , description :: binary()
+        , on_create :: {Module::atom(), Fun::atom()}
+        , on_destroy :: {Module::atom(), Fun::atom()}
+        , title :: descr()
+        , description :: descr()
+        }).
+
+-record(rule_hooks,
+        { hook :: atom()
+        , rule_id :: rule_id()
         }).
 
 %% Arithmetic operators
@@ -69,6 +84,7 @@
 
 %% Compare operators
 -define(is_comp(Op), (Op =:= '=' orelse
+                      Op =:= '=~' orelse
                       Op =:= '>' orelse
                       Op =:= '<' orelse
                       Op =:= '<=' orelse
@@ -79,3 +95,7 @@
 %% Logical operators
 -define(is_logical(Op), (Op =:= 'and' orelse Op =:= 'or')).
 
+-define(RAISE(_EXP_, _ERROR_),
+        begin
+            try (_EXP_) catch _:_REASON_ -> throw(_ERROR_) end
+        end).

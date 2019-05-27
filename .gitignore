@@ -20,3 +20,4 @@ test/ct.cover.spec
 rebar.lock
 cover/
 eunit.coverdata
+rebar3.crashdump

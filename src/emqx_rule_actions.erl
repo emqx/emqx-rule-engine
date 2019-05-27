@@ -16,35 +16,50 @@
 -module(emqx_rule_actions).
 
 -include_lib("emqx/include/emqx.hrl").
+-include_lib("emqx/include/logger.hrl").
 
--resource_type(#{name => default_resource,
-                 schema => "emqx_rule_engine",
-                 create => on_resource_create,
-                 description => "Default resource"
-                }).
+-define(REPUBLISH_PARAMS_SPEC, #{
+            target_topic => #{
+                type => string,
+                format => topic,
+                required => true,
+                title => #{en => <<"Target Topic">>,
+                           zh => <<"目的主题"/utf8>>},
+                description => #{en => <<"Repubilsh the message to which topic">>,
+                                 zh => <<"重新发布消息到哪个主题"/utf8>>}
+            }
+        }).
 
--rule_action(#{name => debug_action,
-               for => any,
-               func => debug_action,
+-rule_action(#{name => inspect,
+               for => '$any',
+               types => [],
+               func => inspect,
                params => #{},
-               description => "Debug Action"
+               title => #{en => <<"Inspect (debug)">>,
+                          zh => <<"检查 (调试)"/utf8>>},
+               description => #{en => <<"Inspect the details of action params for debug purpose">>,
+                                zh => <<"检查动作参数 (用以调试)"/utf8>>}
               }).
 
--rule_action(#{name => republish_message,
+-rule_action(#{name => republish,
                for => 'message.publish',
-               func => republish_action,
-               params => #{from => topic, to => topic},
-               description => "Republish a MQTT message"
+               types => [],
+               func => republish,
+               params => ?REPUBLISH_PARAMS_SPEC,
+               title => #{en => <<"Republish">>,
+                          zh => <<"消息重新发布"/utf8>>},
+               description => #{en => <<"Republish a MQTT message to a another topic">>,
+                                zh => <<"重新发布消息到另一个主题"/utf8>>}
               }).
 
--type(action_fun() :: fun((Data :: map()) -> Result :: any())).
+-type(action_fun() :: fun((SelectedData::map(), Envs::map()) -> Result::any())).
 
 -export_type([action_fun/0]).
 
 -export([on_resource_create/2]).
 
--export([ debug_action/1
-        , republish_action/1
+-export([ inspect/1
+        , republish/1
         ]).
 
 %%------------------------------------------------------------------------------
@@ -55,22 +70,40 @@
 on_resource_create(_Name, Conf) ->
     Conf.
 
--spec(debug_action(Params :: map()) -> action_fun()).
-debug_action(Params) ->
-    fun(Data) ->
-        io:format("Action input data: ~p~nAction init params: ~p~n", [Data, Params])
+-spec(inspect(Params :: map()) -> action_fun()).
+inspect(Params) ->
+    fun(Selected, Envs) ->
+        io:format("[inspect]~n"
+                  "\tSelected Data: ~p~n"
+                  "\tEnvs: ~p~n"
+                  "\tAction Init Params: ~p~n", [Selected, Envs, Params])
     end.
 
 %% A Demo Action.
--spec(republish_action(#{from := emqx_topic:topic(),
-                         to := emqx_topic:topic()})
+-spec(republish(#{binary() := emqx_topic:topic()})
       -> action_fun()).
-republish_action(#{from := From, to := To}) ->
-    fun(#{message := Msg = #message{topic = Origin}}) ->
-            case emqx_topic:match(Origin, From) of
-                true ->
-                    emqx_broker:safe_publish(Msg#message{topic = To});
-                false -> ok
-            end
+republish(#{<<"target_topic">> := TargetTopic}) ->
+    fun(Selected, #{qos := QoS, from := Client,
+                    flags := Flags, headers := Headers}) ->
+        ?LOG(debug, "[republish] republish to: ~p, Payload: ~p",
+                        [TargetTopic, Selected]),
+        emqx_broker:safe_publish(
+            #message{
+                id = emqx_guid:gen(),
+                qos = QoS,
+                from = republish_from(Client),
+                flags = Flags,
+                headers = Headers,
+                topic = TargetTopic,
+                payload = jsx:encode(Selected),
+                timestamp = erlang:timestamp()
+            })
     end.
 
+republish_from(Client) ->
+    C = bin(Client), <<"built_in:republish:", C/binary>>.
+
+bin(Bin) when is_binary(Bin) -> Bin;
+bin(Atom) when is_atom(Atom) ->
+    list_to_binary(atom_to_list(Atom));
+bin(Str) when is_list(Str) -> list_to_binary(Str).

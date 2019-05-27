@@ -30,6 +30,10 @@
         , payload/0
         , payload/1
         , timestamp/0
+        , contains_topic/2
+        , contains_topic/3
+        , contains_topic_match/2
+        , contains_topic_match/3
         ]).
 
 %% Arithmetic Funcs
@@ -188,6 +192,45 @@ timestamp() ->
     fun(#{timestamp := Ts}) ->
             emqx_time:now_ms(Ts);
        (_) -> emqx_time:now_ms()
+    end.
+
+%% @doc Check if a topic_filter contains a specific topic
+%% TopicFilters = [{<<"t/a">>, #{qos => 0}].
+-spec(contains_topic(emqx_mqtt_types:topic_filters(), emqx_types:topic())
+        -> true | false).
+contains_topic(TopicFilters, Topic) ->
+    case proplists:get_value(Topic, TopicFilters) of
+        undefined -> false;
+        _ -> true
+    end.
+contains_topic(TopicFilters, Topic, QoS) ->
+    case proplists:get_value(Topic, TopicFilters) of
+        #{qos := QoS} -> true;
+        undefined -> false
+    end.
+
+-spec(contains_topic_match(emqx_mqtt_types:topic_filters(), emqx_types:topic())
+        -> true | false).
+contains_topic_match(TopicFilters, Topic) ->
+    case find_topic_filter(Topic, TopicFilters) of
+        not_found -> false;
+        _ -> true
+    end.
+contains_topic_match(TopicFilters, Topic, QoS) ->
+    case find_topic_filter(Topic, TopicFilters) of
+        {_, #{qos := QoS}} -> true;
+        _ -> false
+    end.
+
+find_topic_filter(Filter, TopicFilters) ->
+    try
+        [case emqx_topic:match(Topic, Filter) of
+            true -> throw(Result);
+            false -> ok
+         end || Result = {Topic, _Opts} <- TopicFilters],
+        not_found
+    catch
+        throw:Result -> Result
     end.
 
 %%------------------------------------------------------------------------------
