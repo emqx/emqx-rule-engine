@@ -394,7 +394,7 @@ rule_sql_test(#{<<"rawsql">> := Sql, <<"ctx">> := Context}) ->
                                                 apply = feedback_action()}),
                 emqx_rule_runtime:apply_rule(Rule, FullContext)
             after
-                ok = emqx_rule_registry:delete_action_instance_params(ActInstId)
+                ok = emqx_rule_registry:remove_action_instance_params(ActInstId)
             end,
             wait_feedback();
         Error -> error(Error)

@@ -43,7 +43,7 @@
         , remove_actions_of/1
         , add_action_instance_params/1
         , get_action_instance_params/1
-        , delete_action_instance_params/1
+        , remove_action_instance_params/1
         ]).
 
 %% Resource Management
@@ -54,6 +54,7 @@
         , find_resource_params/1
         , get_resources_by_type/1
         , remove_resource/1
+        , remove_resource_params/1
         ]).
 
 %% Resource Types
@@ -297,8 +298,8 @@ get_action_instance_params(ActionInstId) ->
     end.
 
 %% @doc Delete an action instance params.
--spec(delete_action_instance_params(action_instance_id()) -> ok).
-delete_action_instance_params(ActionInstId) ->
+-spec(remove_action_instance_params(action_instance_id()) -> ok).
+remove_action_instance_params(ActionInstId) ->
     ets:delete(?ACTION_INST_PARAMS_TAB, ActionInstId),
     ok.
 
@@ -334,16 +335,20 @@ find_resource_params(Id) ->
         [] -> not_found
     end.
 
--spec(remove_resource(emqx_rule_engine:resource() | binary()) -> ok).
+-spec(remove_resource(emqx_rule_engine:resource() | emqx_rule_engine:resource_id()) -> ok).
 remove_resource(Resource) when is_record(Resource, resource) ->
     trans(fun delete_resource/1, [Resource#resource.id]);
 
 remove_resource(ResId) when is_binary(ResId) ->
     trans(fun delete_resource/1, [ResId]).
 
+-spec(remove_resource_params(emqx_rule_engine:resource_id()) -> ok).
+remove_resource_params(ResId) ->
+    ets:delete(?RES_PARAMS_TAB, ResId),
+    ok.
+
 %% @private
 delete_resource(ResId) ->
-    ets:delete(?RES_PARAMS_TAB, ResId),
     [[ResId =:= ResId1 andalso throw({dependency_exists, {rule, Id}})
         || #{params := #{<<"$resource">> := ResId1}} <- Actions]
             || #rule{id = Id, actions = Actions} <- get_rules()],
