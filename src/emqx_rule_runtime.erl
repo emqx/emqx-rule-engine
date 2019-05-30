@@ -208,7 +208,9 @@ number(Bin) ->
 take_actions(Actions, Selected, Envs) ->
     lists:foreach(fun(Action) -> take_action(Action, Selected, Envs) end, Actions).
 
-take_action(#{apply := Apply}, Selected, Envs) ->
+take_action(#action_instance{id = Id}, Selected, Envs) ->
+    {ok, #action_instance_params{apply = Apply}}
+        = emqx_rule_registry:get_action_instance_params(Id),
     Apply(Selected, Envs).
 
 eval({var, Var}, Input) -> %% nested
