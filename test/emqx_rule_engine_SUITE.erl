@@ -134,8 +134,8 @@ init_per_testcase(t_events, Config) ->
                          ]),
     ok = emqx_rule_registry:add_action(
             #action{name = 'hook-metrics-action', app = ?APP,
-                    module = ?MODULE, func = hook_metrics_action,
-                    types=[], params = #{},
+                    module = ?MODULE, on_create = hook_metrics_action,
+                    types=[], params_spec = #{},
                     title = #{en => <<"Hook metrics action">>},
                     description = #{en => <<"Hook metrics action">>}}),
     SQL = "SELECT * FROM \"message.publish\", "
@@ -157,7 +157,7 @@ init_per_testcase(_TestCase, Config) ->
             [#resource_type{
                 name = built_in,
                 provider = ?APP,
-                params = #{},
+                params_spec = #{},
                 on_create = {?MODULE, on_resource_create},
                 on_destroy = {?MODULE, on_resource_destroy},
                 title = #{en => <<"Built-In Resource Type (debug)">>},
@@ -338,7 +338,7 @@ t_rules_cli(_Config) ->
                                           "select * from \"message.publish\" where topic='t1'",
                                           "[{\"name\":\"inspect\", \"params\": {\"arg1\": 1}}]",
                                           "-d", "Debug Rule"]),
-    ct:pal("Result : ~p", [RCreate]),
+    %ct:pal("Result : ~p", [RCreate]),
     ?assertMatch({match, _}, re:run(RCreate, "created")),
 
     RuleId = re:replace(re:replace(RCreate, "Rule\s", "", [{return, list}]), "\screated\n", "", [{return, list}]),
@@ -346,6 +346,7 @@ t_rules_cli(_Config) ->
     RList = emqx_rule_engine_cli:rules(["list"]),
     ?assertMatch({match, _}, re:run(RList, RuleId)),
     %ct:pal("RList : ~p", [RList]),
+    %ct:pal("table action params: ~p", [ets:tab2list(emqx_action_instance_params)]),
 
     RShow = emqx_rule_engine_cli:rules(["show", RuleId]),
     ?assertMatch({match, _}, re:run(RShow, RuleId)),
@@ -354,6 +355,7 @@ t_rules_cli(_Config) ->
     RDelete = emqx_rule_engine_cli:rules(["delete", RuleId]),
     ?assertEqual("\"ok~n\"", RDelete),
     %ct:pal("RDelete : ~p", [RDelete]),
+    %ct:pal("table action params after deleted: ~p", [ets:tab2list(emqx_action_instance_params)]),
 
     RShow2 = emqx_rule_engine_cli:rules(["show", RuleId]),
     ?assertMatch({match, _}, re:run(RShow2, "Cannot found")),
@@ -668,12 +670,12 @@ create_simple_repub_rule(TargetTopic, SQL) ->
 
 make_simple_action(ActionName) when is_atom(ActionName) ->
     #action{name = ActionName, app = ?APP,
-            module = ?MODULE, func = simple_action_inspect, params = #{},
+            module = ?MODULE, on_create = simple_action_inspect, params_spec = #{},
             title = #{en => <<"Simple inspect action">>},
             description = #{en => <<"Simple inspect action">>}}.
 make_simple_action(ActionName, Hook) when is_atom(ActionName) ->
     #action{name = ActionName, app = ?APP, for = Hook,
-            module = ?MODULE, func = simple_action_inspect, params = #{},
+            module = ?MODULE, on_create = simple_action_inspect, params_spec = #{},
             title = #{en => <<"Simple inspect action">>},
             description = #{en => <<"Simple inspect action with hook">>}}.
 
@@ -690,7 +692,7 @@ make_simple_resource(ResId) ->
 
 make_simple_resource_type(ResTypeName) ->
     #resource_type{name = ResTypeName, provider = ?APP,
-                   params = #{},
+                   params_spec = #{},
                    on_create = {?MODULE, on_simple_resource_type_create},
                    title = #{en => <<"Simple Resource Type">>},
                    description = #{en => <<"Simple Resource Type">>}}.

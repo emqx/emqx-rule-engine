@@ -33,7 +33,7 @@
 -rule_action(#{name => inspect,
                for => '$any',
                types => [],
-               func => inspect,
+               create => on_action_create_inspect,
                params => #{},
                title => #{en => <<"Inspect (debug)">>,
                           zh => <<"检查 (调试)"/utf8>>},
@@ -44,7 +44,7 @@
 -rule_action(#{name => republish,
                for => 'message.publish',
                types => [],
-               func => republish,
+               create => on_action_create_republish,
                params => ?REPUBLISH_PARAMS_SPEC,
                title => #{en => <<"Republish">>,
                           zh => <<"消息重新发布"/utf8>>},
@@ -58,8 +58,8 @@
 
 -export([on_resource_create/2]).
 
--export([ inspect/1
-        , republish/1
+-export([ on_action_create_inspect/1
+        , on_action_create_republish/1
         ]).
 
 %%------------------------------------------------------------------------------
@@ -70,8 +70,8 @@
 on_resource_create(_Name, Conf) ->
     Conf.
 
--spec(inspect(Params :: map()) -> action_fun()).
-inspect(Params) ->
+-spec(on_action_create_inspect(Params :: map()) -> action_fun()).
+on_action_create_inspect(Params) ->
     fun(Selected, Envs) ->
         io:format("[inspect]~n"
                   "\tSelected Data: ~p~n"
@@ -80,9 +80,9 @@ inspect(Params) ->
     end.
 
 %% A Demo Action.
--spec(republish(#{binary() := emqx_topic:topic()})
+-spec(on_action_create_republish(#{binary() := emqx_topic:topic()})
       -> action_fun()).
-republish(#{<<"target_topic">> := TargetTopic}) ->
+on_action_create_republish(#{<<"target_topic">> := TargetTopic}) ->
     fun(Selected, #{qos := QoS, from := Client,
                     flags := Flags, headers := Headers}) ->
         ?LOG(debug, "[republish] republish to: ~p, Payload: ~p",
@@ -101,7 +101,7 @@ republish(#{<<"target_topic">> := TargetTopic}) ->
     end.
 
 republish_from(Client) ->
-    C = bin(Client), <<"built_in:republish:", C/binary>>.
+    C = bin(Client), <<"action:republish:", C/binary>>.
 
 bin(Bin) when is_binary(Bin) -> Bin;
 bin(Atom) when is_atom(Atom) ->

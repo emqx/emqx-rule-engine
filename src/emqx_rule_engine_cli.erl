@@ -97,7 +97,7 @@ rules(["create" | Params]) ->
               end, Params, ?OPTSPEC_RULES_CREATE, {?FUNCTION_NAME, create});
 
 rules(["delete", RuleId]) ->
-    ok = emqx_rule_registry:remove_rule(list_to_binary(RuleId)),
+    ok = emqx_rule_engine:delete_rule(list_to_binary(RuleId)),
     emqx_cli:print("ok~n");
 
 rules(_usage) ->
@@ -227,24 +227,21 @@ format(#action{name = Name,
                for = Hook,
                app = App,
                types = Types,
-               params = Params,
                title = #{en := Title},
                description = #{en := Descr}}) ->
-    lists:flatten(io_lib:format("action(name='~s', app='~s', for='~s', types=~0p, params=~0p, title ='~s', description='~s')~n", [Name, App, Hook, Types, Params, Title, Descr]));
+    lists:flatten(io_lib:format("action(name='~s', app='~s', for='~s', types=~0p, title ='~s', description='~s')~n", [Name, App, Hook, Types, Title, Descr]));
 
 format(#resource{id = Id,
                  type = Type,
                  config = Config,
-                 params = Params,
                  description = Descr}) ->
-    lists:flatten(io_lib:format("resource(id='~s', type='~s', config=~0p, params=~0p, description='~s')~n", [Id, Type, Config, Params, Descr]));
+    lists:flatten(io_lib:format("resource(id='~s', type='~s', config=~0p, description='~s')~n", [Id, Type, Config, Descr]));
 
 format(#resource_type{name = Name,
                       provider = Provider,
-                      params = Params,
                       title = #{en := Title},
                       description = #{en := Descr}}) ->
-    lists:flatten(io_lib:format("resource_type(name='~s', provider='~s', params=~0p, title ='~s', description='~s')~n", [Name, Provider, Params, Title, Descr])).
+    lists:flatten(io_lib:format("resource_type(name='~s', provider='~s', title ='~s', description='~s')~n", [Name, Provider, Title, Descr])).
 
 make_rule(Opts) ->
     Actions = get_value(actions, Opts),
@@ -259,7 +256,8 @@ make_resource(Opts) ->
       description => get_value(descr, Opts)}.
 
 printable_actions(Actions) when is_list(Actions) ->
-    jsx:encode([maps:remove(apply, Act) || Act <- Actions]).
+    jsx:encode([#{name => Name, args => Args}
+                || #action_instance{name = Name, args = Args} <- Actions]).
 
 with_opts(Action, RawParams, OptSpecList, {CmdObject, CmdName}) ->
     case getopt:parse_and_check(OptSpecList, RawParams) of

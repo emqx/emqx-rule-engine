@@ -187,7 +187,7 @@ show_rule(#{id := Id}, _Params) ->
     reply_with(fun emqx_rule_registry:get_rule/1, Id).
 
 delete_rule(#{id := Id}, _Params) ->
-    ok = emqx_rule_registry:remove_rule(Id),
+    ok = emqx_rule_engine:delete_rule(Id),
     return(ok).
 
 %%------------------------------------------------------------------------------
@@ -298,7 +298,7 @@ record_to_map(#rule{id = Id,
     #{id => Id,
       for => Hook,
       rawsql => RawSQL,
-      actions => [maps:remove(apply, Act) || Act <- Actions],
+      actions => printable_actions(Actions),
       enabled => Enabled,
       description => Descr
      };
@@ -307,7 +307,7 @@ record_to_map(#action{name = Name,
                       app = App,
                       for = Hook,
                       types = Types,
-                      params = Params,
+                      params_spec = Params,
                       title = Title,
                       description = Descr}) ->
     #{name => Name,
@@ -322,18 +322,16 @@ record_to_map(#action{name = Name,
 record_to_map(#resource{id = Id,
                         type = Type,
                         config = Config,
-                        params = Params,
                         description = Descr}) ->
     #{id => Id,
       type => Type,
       config => Config,
-      params => Params,
       description => Descr
      };
 
 record_to_map(#resource_type{name = Name,
                              provider = Provider,
-                             params = Params,
+                             params_spec = Params,
                              title = Title,
                              description = Descr}) ->
     #{name => Name,
@@ -342,6 +340,10 @@ record_to_map(#resource_type{name = Name,
       title => Title,
       description => Descr
      }.
+
+printable_actions(Actions) ->
+    [#{name => Name, args => Args}
+     || #action_instance{name = Name, args = Args} <- Actions].
 
 parse_rule_params(Params) ->
     parse_rule_params(Params, #{description => <<"">>}).
