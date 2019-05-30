@@ -331,6 +331,6 @@ clear_action(_Module, undefined, ActionInstId) ->
 clear_action(Module, Destroy, ActionInstId) ->
     {ok, #action_instance_params{params = Params}}
         = emqx_rule_registry:get_action_instance_params(ActionInstId),
+    ok = emqx_rule_registry:delete_action_instance_params(ActionInstId),
     ?RAISE(Module:Destroy(ActionInstId, Params),
-           {destroy_action_failure, {{Module, Destroy}, _REASON_}}),
-    ok = emqx_rule_registry:delete_action_instance_params(ActionInstId).
+           {destroy_action_failure, {{Module, Destroy}, _REASON_}}).
