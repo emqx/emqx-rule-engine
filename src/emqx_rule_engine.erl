@@ -352,8 +352,11 @@ clear_resource(Module, Destroy, ResId) ->
 clear_action(_Module, undefined, ActionInstId) ->
     ok = emqx_rule_registry:remove_action_instance_params(ActionInstId);
 clear_action(Module, Destroy, ActionInstId) ->
-    {ok, #action_instance_params{params = Params}}
-        = emqx_rule_registry:get_action_instance_params(ActionInstId),
-    ok = emqx_rule_registry:remove_action_instance_params(ActionInstId),
-    ?RAISE(Module:Destroy(Params),
-           {{destroy_action_failure, node()}, {{Module, Destroy}, _REASON_}}).
+    case emqx_rule_registry:get_action_instance_params(ActionInstId) of
+        {ok, #action_instance_params{params = Params}} ->
+            ?RAISE(Module:Destroy(Params),{{destroy_action_failure, node()},
+                                           {{Module, Destroy}, _REASON_}}),
+            ok = emqx_rule_registry:remove_action_instance_params(ActionInstId);
+        not_found ->
+            ok
+    end.
