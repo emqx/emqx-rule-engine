@@ -71,12 +71,15 @@ preproc_sql(Sql, ReplaceWith) ->
         {match, PlaceHolders} ->
             {repalce_with(Sql, ReplaceWith),
              fun(Data) ->
-                [maps:get(atom_key(Key), Data, undefined)
-                 || Key <- [var(hd(PH)) || PH <- PlaceHolders]]
+                get_phld(Data, PlaceHolders)
              end};
         nomatch ->
             {Sql, fun(_) -> [] end}
     end.
+
+get_phld(Data, PlaceHolders) ->
+    [maps:get(atom_key(Key), Data, undefined)
+     || Key <- [var(hd(PH)) || PH <- PlaceHolders]].
 
 repalce_with(Tmpl, '?') ->
     re:replace(Tmpl, ?EX_PLACE_HOLDER, "?", [{return, binary}, global]);
@@ -94,9 +97,9 @@ repalce_with(Tmpl, '$n') ->
 
 atom_key(Key) when is_atom(Key) ->
     Key;
-atom_key(Key) when is_list(Key) ->
-    try list_to_existing_atom(Key)
-    catch error:badarg -> error({invalid_key, Key})
+atom_key(Keys = [Key | SubKeys]) when is_binary(Key) -> %% nested keys
+    try [binary_to_existing_atom(Key, utf8) | SubKeys]
+    catch error:badarg -> error({invalid_key, Keys})
     end;
 atom_key(Key) when is_binary(Key) ->
     try binary_to_existing_atom(Key, utf8)
