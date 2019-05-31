@@ -64,6 +64,9 @@
         , unregister_resource_types_of/1
         ]).
 
+%% for debug purposes
+-export([dump/0]).
+
 %% gen_server Callbacks
 -export([ init/1
         , handle_call/3
@@ -153,6 +156,18 @@ mnesia(copy) ->
     ok = ekka_mnesia:copy_table(?RES_TYPE_TAB),
     %% Copy hook_name -> rule_id table
     ok = ekka_mnesia:copy_table(?RULE_HOOKS).
+
+dump() ->
+    io:format("Rules: ~p~n"
+              "ActionInstParams: ~p~n"
+              "Resources: ~p~n"
+              "ResourceParams: ~p~n"
+              "Rule-Hook Mapping: ~p~n",
+            [ets:tab2list(?RULE_TAB),
+             ets:tab2list(?ACTION_INST_PARAMS_TAB),
+             ets:tab2list(?RES_TAB),
+             ets:tab2list(?RES_PARAMS_TAB),
+             ets:tab2list(?RULE_HOOKS)]).
 
 %%------------------------------------------------------------------------------
 %% Start the registry
@@ -350,7 +365,7 @@ remove_resource_params(ResId) ->
 %% @private
 delete_resource(ResId) ->
     [[ResId =:= ResId1 andalso throw({dependency_exists, {rule, Id}})
-        || #{params := #{<<"$resource">> := ResId1}} <- Actions]
+        || #action_instance{args = #{<<"$resource">> := ResId1}} <- Actions]
             || #rule{id = Id, actions = Actions} <- get_rules()],
     mnesia:delete(?RES_TAB, ResId, write).
 

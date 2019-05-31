@@ -244,15 +244,10 @@ test_resource(#{type := Type, config := Config}) ->
 delete_resource(ResId) ->
     case emqx_rule_registry:find_resource(ResId) of
         {ok, #resource{type = ResType}} ->
-            try
-                {ok, #resource_type{on_destroy = {ModD,Destroy}}}
-                    = emqx_rule_registry:find_resource_type(ResType),
-                cluster_call(clear_resource, [ModD, Destroy, ResId]),
-                ok = emqx_rule_registry:remove_resource(ResId)
-            catch
-                Error:Reason ->
-                    {error, {Error,Reason}}
-            end;
+            {ok, #resource_type{on_destroy = {ModD,Destroy}}}
+                = emqx_rule_registry:find_resource_type(ResType),
+            cluster_call(clear_resource, [ModD, Destroy, ResId]),
+            ok = emqx_rule_registry:remove_resource(ResId);
         not_found ->
             {error, {resource_not_found, ResId}}
     end.

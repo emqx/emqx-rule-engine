@@ -158,6 +158,8 @@ test_rule_sql(Params) ->
     catch
         throw:{invalid_hook, Hook} ->
             return({error, 400, ?ERR_NO_HOOK(Hook)});
+        throw:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)});
         _:{parse_error,{unknown_column, Column}} ->
             return({error, 400, ?ERR_UNKNOWN_COLUMN(Column)});
         _Error:Reason:StackT ->
@@ -176,6 +178,8 @@ do_create_rule(Params) ->
             return({error, 400, ?ERR_NO_RESOURCE(ResId)});
         throw:{invalid_hook, Hook} ->
             return({error, 400, ?ERR_NO_HOOK(Hook)});
+        throw:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)});
         _:{parse_error,{unknown_column, Column}} ->
             return({error, 400, ?ERR_UNKNOWN_COLUMN(Column)});
         _Error:Reason:StackT ->
@@ -232,6 +236,8 @@ do_create_resource(Create, Params) ->
     catch
         throw:{resource_type_not_found, Type} ->
             return({error, 400, ?ERR_NO_RESOURCE_TYPE(Type)});
+        throw:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)});
         _Error:Reason:StackT ->
             ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
             return({error, 400, ?ERR_BADARGS(Reason)})
@@ -248,11 +254,12 @@ show_resource(#{id := Id}, _Params) ->
 
 delete_resource(#{id := Id}, _Params) ->
     try
-        ok = emqx_rule_engine:delete_resource(Id),
+        emqx_rule_engine:delete_resource(Id),
         return(ok)
     catch
         _Error:{throw,Reason} ->
-            ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, Reason]),
+            return({error, 400, ?ERR_BADARGS(Reason)});
+        throw:Reason ->
             return({error, 400, ?ERR_BADARGS(Reason)});
         _Error:Reason:StackT ->
             ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
