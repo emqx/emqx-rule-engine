@@ -256,7 +256,7 @@ make_resource(Opts) ->
       description => get_value(descr, Opts)}.
 
 printable_actions(Actions) when is_list(Actions) ->
-    jsx:encode([#{name => Name, args => Args}
+    jsx:encode([#{name => Name, params => Args}
                 || #action_instance{name = Name, args = Args} <- Actions]).
 
 with_opts(Action, RawParams, OptSpecList, {CmdObject, CmdName}) ->

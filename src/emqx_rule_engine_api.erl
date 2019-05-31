@@ -355,7 +355,7 @@ record_to_map(#resource_type{name = Name,
      }.
 
 printable_actions(Actions) ->
-    [#{name => Name, args => Args}
+    [#{name => Name, params => Args}
      || #action_instance{name = Name, args = Args} <- Actions].
 
 parse_rule_params(Params) ->
