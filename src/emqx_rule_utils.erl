@@ -65,32 +65,32 @@ proc_tmpl(Tokens, Data) ->
 preproc_sql(Sql) ->
     preproc_sql(Sql, '?').
 
--spec(preproc_sql(Sql::binary(), '?' | '$n') -> {prepare_statement(), prepare_params()}).
+-spec(preproc_sql(Sql::binary(), ReplaceWith :: '?' | '$n') -> {prepare_statement(), prepare_params()}).
 preproc_sql(Sql, ReplaceWith) ->
     case re:run(Sql, ?EX_PLACE_HOLDER, [{capture, all_but_first, binary}, global]) of
         {match, PlaceHolders} ->
-            NewSql = 
-                case ReplaceWith of
-                    '?' ->
-                        re:replace(Sql, ?EX_PLACE_HOLDER, "?", [{return, binary}, global]);
-                    '$n' ->
-                        Parts = re:split(Sql, ?EX_PLACE_HOLDER, [{return,binary}, trim, group]),
-                        {Sql1, _} = 
-                            lists:foldl(fun([Tkn, _Phld], {Acc, Seq}) ->
-                                            Seq1 = erlang:integer_to_binary(Seq),
-                                            {<<Acc/binary, Tkn/binary, "$", Seq1/binary>>, Seq + 1};
-                                        ([Tkn], {Acc, Seq}) ->
-                                            {<<Acc/binary, Tkn/binary>>, Seq}
-                                        end, {<<>>, 1}, Parts),
-                        binary_to_list(Sql1)
-                end,
-            {NewSql, fun(Data) ->
-                         [maps:get(atom_key(Key), Data, undefined)
-                          || Key <- [var(hd(PH)) || PH <- PlaceHolders]]
-                     end};
+            {repalce_with(Sql, ReplaceWith),
+             fun(Data) ->
+                [maps:get(atom_key(Key), Data, undefined)
+                 || Key <- [var(hd(PH)) || PH <- PlaceHolders]]
+             end};
         nomatch ->
-            {Sql, []}
+            {Sql, fun(_) -> [] end}
     end.
+
+repalce_with(Tmpl, '?') ->
+    re:replace(Tmpl, ?EX_PLACE_HOLDER, "?", [{return, binary}, global]);
+repalce_with(Tmpl, '$n') ->
+    Parts = re:split(Tmpl, ?EX_PLACE_HOLDER, [{return, binary}, trim, group]),
+    {Res, _} =
+        lists:foldl(
+            fun([Tkn, _Phld], {Acc, Seq}) ->
+                    Seq1 = erlang:integer_to_binary(Seq),
+                    {<<Acc/binary, Tkn/binary, "$", Seq1/binary>>, Seq + 1};
+                ([Tkn], {Acc, Seq}) ->
+                    {<<Acc/binary, Tkn/binary>>, Seq}
+            end, {<<>>, 1}, Parts),
+    Res.
 
 atom_key(Key) when is_atom(Key) ->
     Key;

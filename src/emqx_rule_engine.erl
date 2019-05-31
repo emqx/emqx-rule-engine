@@ -335,11 +335,11 @@ clear_resource(_Module, undefined, ResId) ->
     ok = emqx_rule_registry:remove_resource_params(ResId),
     ok;
 clear_resource(Module, Destroy, ResId) ->
-    ok = emqx_rule_registry:remove_resource_params(ResId),
     case emqx_rule_registry:find_resource_params(ResId) of
         {ok, #resource_params{params = Params}} ->
             ?RAISE(Module:Destroy(ResId, Params),
-                   {{destroy_resource_failure, node()}, {{Module, Destroy}, _REASON_}});
+                   {{destroy_resource_failure, node()}, {{Module, Destroy}, _REASON_}}),
+            ok = emqx_rule_registry:remove_resource_params(ResId);
         not_found ->
             ok
     end.
