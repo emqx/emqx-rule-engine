@@ -95,9 +95,9 @@
 
 %% Statistics
 -define(STATS,
-        [ {?RULE_TAB, 'rules/count', 'rules/max'}
-        , {?ACTION_TAB, 'actions/count', 'actions/max'}
-        , {?RES_TAB, 'resources/count', 'resources/max'}
+        [ {?RULE_TAB, 'rules.count', 'rules.max'}
+        , {?ACTION_TAB, 'actions.count', 'actions.max'}
+        , {?RES_TAB, 'resources.count', 'resources.max'}
         ]).
 
 %%------------------------------------------------------------------------------
