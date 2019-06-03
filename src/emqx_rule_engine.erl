@@ -19,14 +19,15 @@
 
 -export([ load_providers/0
         , unload_providers/0
-        , re_establish_resources/0
-        , rebuild_rules/0
+        , refresh_resources/0
+        , refresh_rules/0
         ]).
 
 -export([ create_rule/1
         , delete_rule/1
         , create_resource/1
         , test_resource/1
+        , start_resource/1
         , delete_resource/1
         ]).
 
@@ -88,44 +89,6 @@ load_actions(App) ->
 load_resource_types(App) ->
     ResourceTypes = find_resource_types(App),
     emqx_rule_registry:register_resource_types(ResourceTypes).
-
-%%------------------------------------------------------------------------------
-%% Re-establish resources
-%%------------------------------------------------------------------------------
-
--spec(re_establish_resources() -> ok).
-re_establish_resources() ->
-    try
-        lists:foreach(
-            fun(#resource{id = ResId, config = Config, type = Type}) ->
-                {ok, #resource_type{on_create = {M, F}}} = emqx_rule_registry:find_resource_type(Type),
-                cluster_call(init_resource, [M, F, ResId, Config])
-            end, emqx_rule_registry:get_resources())
-    catch
-        _:Error:StackTrace ->
-            logger:critical("Can not re-stablish resource: ~p,"
-                            "Fix the issue and establish it manually.\n"
-                            "Stacktrace: ~p",
-                            [Error, StackTrace])
-    end.
-
--spec(rebuild_rules() -> ok).
-rebuild_rules() ->
-    try
-        [lists:foreach(
-            fun(#action_instance{id = Id, name = ActName, args = Args}) ->
-                {ok, #action{module = Mod, on_create = Create}} = emqx_rule_registry:find_action(ActName),
-                cluster_call(init_action, [Mod, Create, Id, with_resource_params(Args)])
-            end, Actions)
-        || #rule{actions = Actions} <- emqx_rule_registry:get_rules()],
-        ok
-    catch
-        _:Error:StackTrace ->
-            logger:critical("Can not re-build rule: ~p,"
-                            "Fix the issue and establish it manually.\n"
-                            "Stacktrace: ~p",
-                            [Error, StackTrace])
-    end.
 
 -spec(find_actions(App :: atom()) -> list(action())).
 find_actions(App) ->
@@ -212,30 +175,39 @@ create_resource(#{type := Type, config := Config} = Params) ->
         {ok, #resource_type{on_create = {M, F}, params_spec = ParamSpec}} ->
             ok = emqx_rule_validator:validate_params(Config, ParamSpec),
             ResId = resource_id(),
-            cluster_call(init_resource, [M, F, ResId, Config]),
             Resource = #resource{id = ResId,
                                  type = Type,
                                  config = Config,
                                  description = iolist_to_binary(maps:get(description, Params, ""))},
             ok = emqx_rule_registry:add_resource(Resource),
+            cluster_call(init_resource, [M, F, ResId, Config]),
             {ok, Resource};
         not_found ->
             {error, {resource_type_not_found, Type}}
+    end.
+
+-spec(start_resource(resource_id()) -> ok | {error, Reason :: term()}).
+start_resource(ResId) ->
+    case emqx_rule_registry:find_resource(ResId) of
+        {ok, #resource{type = ResType, config = Config}} ->
+            {ok, #resource_type{on_create = {Mod, Create}}}
+                = emqx_rule_registry:find_resource_type(ResType),
+            init_resource(Mod, Create, ResId, Config),
+            refresh_actions_of_a_resource(ResId),
+            ok;
+        not_found ->
+            {error, {resource_not_found, ResId}}
     end.
 
 -spec(test_resource(#{}) -> ok | {error, Reason :: term()}).
 test_resource(#{type := Type, config := Config}) ->
     case emqx_rule_registry:find_resource_type(Type) of
         {ok, #resource_type{on_create = {ModC,Create}, on_destroy = {ModD,Destroy}, params_spec = ParamSpec}} ->
-            try
-                ok = emqx_rule_validator:validate_params(Config, ParamSpec),
-                ResId = resource_id(),
-                cluster_call(init_resource, [ModC, Create, ResId, Config]),
-                cluster_call(clear_resource, [ModD, Destroy, ResId]),
-                ok
-            catch Error:Reason ->
-                {error, {Error, Reason}}
-            end;
+            ok = emqx_rule_validator:validate_params(Config, ParamSpec),
+            ResId = resource_id(),
+            cluster_call(init_resource, [ModC, Create, ResId, Config]),
+            cluster_call(clear_resource, [ModD, Destroy, ResId]),
+            ok;
         not_found ->
             {error, {resource_type_not_found, Type}}
     end.
@@ -250,6 +222,44 @@ delete_resource(ResId) ->
             ok = emqx_rule_registry:remove_resource(ResId);
         not_found ->
             {error, {resource_not_found, ResId}}
+    end.
+
+%%------------------------------------------------------------------------------
+%% Re-establish resources
+%%------------------------------------------------------------------------------
+
+-spec(refresh_resources() -> ok).
+refresh_resources() ->
+    try
+        lists:foreach(
+            fun(#resource{id = ResId, config = Config, type = Type}) ->
+                {ok, #resource_type{on_create = {M, F}}} = emqx_rule_registry:find_resource_type(Type),
+                cluster_call(init_resource, [M, F, ResId, Config])
+            end, emqx_rule_registry:get_resources())
+    catch
+        _:Error:StackTrace ->
+            logger:critical("Can not re-stablish resource: ~p,"
+                            "Fix the issue and establish it manually.\n"
+                            "Stacktrace: ~p",
+                            [Error, StackTrace])
+    end.
+
+-spec(refresh_rules() -> ok).
+refresh_rules() ->
+    try
+        [lists:foreach(
+            fun(#action_instance{id = Id, name = ActName, args = Args}) ->
+                {ok, #action{module = Mod, on_create = Create}} = emqx_rule_registry:find_action(ActName),
+                cluster_call(init_action, [Mod, Create, Id, with_resource_params(Args)])
+            end, Actions)
+        || #rule{actions = Actions} <- emqx_rule_registry:get_rules()],
+        ok
+    catch
+        _:Error:StackTrace ->
+            logger:critical("Can not re-build rule: ~p,"
+                            "Fix the issue and establish it manually.\n"
+                            "Stacktrace: ~p",
+                            [Error, StackTrace])
     end.
 
 %%------------------------------------------------------------------------------
@@ -309,11 +319,11 @@ cluster_call(Func, Args) ->
                 [] -> ok;
                 ErrL ->
                     ?LOG(error, "cluster_call error found, ResL: ~p", [ResL]),
-                    throw({cluster_call_failed, ErrL})
+                    throw({func_fail(Func), ErrL})
             end;
         {ResL, BadNodes} ->
             ?LOG(error, "cluster_call bad nodes found: ~p, ResL: ~p", [BadNodes, ResL]),
-            throw({cluster_call_failed, {nodes_not_exist, BadNodes}})
+            throw({func_fail(Func), {nodes_not_exist, BadNodes}})
    end.
 
 init_resource(Module, OnCreate, ResId, Config) ->
@@ -355,3 +365,18 @@ clear_action(Module, Destroy, ActionInstId) ->
         not_found ->
             ok
     end.
+
+refresh_actions_of_a_resource(ResId) ->
+    [lists:foreach(
+        fun(#action_instance{args = Args = #{<<"$resource">> := ResId0},
+                             id = Id, name = ActName}) when ResId0 =:= ResId ->
+                {ok, #action{module = Mod, on_create = Create}}
+                    = emqx_rule_registry:find_action(ActName),
+                init_action(Mod, Create, Id, with_resource_params(Args));
+            (#action_instance{}) ->
+                ok
+        end, Actions)
+    || #rule{actions = Actions} <- emqx_rule_registry:get_rules()].
+
+func_fail(Func) when is_atom(Func) ->
+    list_to_atom(atom_to_list(Func) ++ "_failure").

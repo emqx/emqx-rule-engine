@@ -83,6 +83,13 @@
             descr  => "Show a resource"
            }).
 
+-rest_api(#{name   => start_resource,
+            method => 'POST',
+            path   => "/resources/:bin:id",
+            func   => start_resource,
+            descr  => "Start a resource"
+           }).
+
 -rest_api(#{name   => delete_resource,
             method => 'DELETE',
             path   => "/resources/:bin:id",
@@ -124,6 +131,7 @@
 -export([ create_resource/2
         , list_resources/2
         , show_resource/2
+        , start_resource/2
         , delete_resource/2
         ]).
 
@@ -137,6 +145,7 @@
 -define(ERR_NO_HOOK(HOOK), list_to_binary(io_lib:format("Event ~s Not Found", [(HOOK)]))).
 -define(ERR_NO_RESOURCE_TYPE(TYPE), list_to_binary(io_lib:format("Resource Type ~s Not Found", [(TYPE)]))).
 -define(ERR_UNKNOWN_COLUMN(COLUMN), list_to_binary(io_lib:format("Unknown Column: ~s", [(COLUMN)]))).
+-define(ERR_START_RESOURCE(RESID), list_to_binary(io_lib:format("Start Resource ~s Failed", [(RESID)]))).
 -define(ERR_BADARGS(REASON),
         begin
             R0 = list_to_binary(io_lib:format("~0p", [REASON])),
@@ -236,6 +245,11 @@ do_create_resource(Create, Params) ->
     catch
         throw:{resource_type_not_found, Type} ->
             return({error, 400, ?ERR_NO_RESOURCE_TYPE(Type)});
+        throw:{init_resource_failure, Reason} ->
+            %% Note that we will return OK in case of resource creation failure,
+            %% users can always re-start the resource later.
+            ?LOG(error, "[RuleEngineAPI] init_resource_failure: ~p", [Reason]),
+            return(ok);
         throw:Reason ->
             return({error, 400, ?ERR_BADARGS(Reason)});
         _Error:Reason:StackT ->
@@ -251,6 +265,23 @@ list_resources_by_type(#{type := Type}, _Params) ->
 
 show_resource(#{id := Id}, _Params) ->
     reply_with(fun emqx_rule_registry:find_resource/1, Id).
+
+start_resource(#{id := Id}, _Params) ->
+    try emqx_rule_engine:start_resource(Id) of
+        ok ->
+            return(ok);
+        {error, {resource_not_found, ResId}} ->
+            return({error, 400, ?ERR_NO_RESOURCE(ResId)})
+    catch
+        throw:{{init_resource_failure, _}, Reason} ->
+            ?LOG(error, "[RuleEngineAPI] init_resource_failure: ~p", [Reason]),
+            return({error, 400, ?ERR_START_RESOURCE(Id)});
+        throw:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)});
+        _Error:Reason:StackT ->
+            ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
+            return({error, 400, ?ERR_BADARGS(Reason)})
+    end.
 
 delete_resource(#{id := Id}, _Params) ->
     try
