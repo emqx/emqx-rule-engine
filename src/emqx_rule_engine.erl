@@ -105,7 +105,8 @@ new_action({App, Mod, #{name := Name,
                         params := ParamsSpec} = Params}) ->
     ok = emqx_rule_validator:validate_spec(ParamsSpec),
     #action{name = Name, for = Hook, app = App, types = Types,
-            module = Mod, on_create = Create, on_destroy = maps:get(destroy, Params, undefined),
+            module = Mod, on_create = Create,
+            on_destroy = maps:get(destroy, Params, undefined),
             params_spec = ParamsSpec,
             title = maps:get(title, Params, ?descr),
             description = maps:get(description, Params, ?descr)}.
@@ -117,6 +118,7 @@ new_resource_type({App, Mod, #{name := Name,
     #resource_type{name = Name, provider = App,
                    params_spec = ParamsSpec,
                    on_create = {Mod, Create},
+                   on_status = {Mod, maps:get(status, Params, undefined)},
                    on_destroy = {Mod, maps:get(destroy, Params, undefined)},
                    title = maps:get(title, Params, ?descr),
                    description = maps:get(description, Params, ?descr)}.
@@ -210,6 +212,18 @@ test_resource(#{type := Type, config := Config}) ->
             ok;
         not_found ->
             {error, {resource_type_not_found, Type}}
+    end.
+
+-spec(get_resource_status(resource_id()) -> {ok, resource_status()} | {error, Reason :: term()}).
+get_resource_status(ResId) ->
+    case emqx_rule_registry:find_resource(ResId) of
+        {ok, #resource{type = ResType}} ->
+            {ok, #resource_type{on_status = {Mod, Status}}}
+                = emqx_rule_registry:find_resource_type(ResType),
+            Status = fetch_resource_status(Mod, Status, ResId),
+            {ok, Status};
+        not_found ->
+            {error, {resource_not_found, ResId}}
     end.
 
 -spec(delete_resource(resource_id()) -> ok | {error, Reason :: term()}).
@@ -364,6 +378,20 @@ clear_action(Module, Destroy, ActionInstId) ->
             ok = emqx_rule_registry:remove_action_instance_params(ActionInstId);
         not_found ->
             ok
+    end.
+
+fetch_resource_status(Module, Status, ResId) ->
+    case emqx_rule_registry:find_resource_params(ResId) of
+        {ok, #resource_params{params = Params}} ->
+            Status =
+                try Module:Status(ResId, Params)
+                catch _Error:Reason:STrace ->
+                    ?LOG(error, "get resource status for ~p failed: ~0p", [ResId, {Reason, STrace}]),
+                    #{is_alive => false}
+                end,
+            Status;
+        not_found ->
+            #{is_alive => false}
     end.
 
 refresh_actions_of_a_resource(ResId) ->

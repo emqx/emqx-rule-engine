@@ -31,6 +31,10 @@
 
 -type(hook() :: atom() | 'any').
 
+-type(resource_status() :: #{ alive := boolean()
+                            , atom() => binary() | atom() | list(binary()|atom())
+                            }).
+
 -define(descr, #{en => <<>>, zh => <<>>}).
 
 -record(action,
@@ -67,6 +71,7 @@
         { id :: resource_id()
         , type :: resource_type_name()
         , config :: #{} %% the configs got from API for initializing resource
+        , created_at :: erlang:timestamp()
         , description :: binary()
         }).
 
@@ -75,6 +80,7 @@
         , provider :: atom()
         , params_spec :: #{atom() => term()} %% params specs
         , on_create :: mf()
+        , on_status :: mf()
         , on_destroy :: mf()
         , title = ?descr :: descr()
         , description = ?descr :: descr()
