@@ -83,6 +83,13 @@
             descr  => "Show a resource"
            }).
 
+-rest_api(#{name   => get_resource_status,
+            method => 'GET',
+            path   => "/resource_status/:bin:id",
+            func   => get_resource_status,
+            descr  => "Get status of a resource"
+           }).
+
 -rest_api(#{name   => start_resource,
             method => 'POST',
             path   => "/resources/:bin:id",
@@ -131,6 +138,7 @@
 -export([ create_resource/2
         , list_resources/2
         , show_resource/2
+        , get_resource_status/2
         , start_resource/2
         , delete_resource/2
         ]).
@@ -265,6 +273,14 @@ list_resources_by_type(#{type := Type}, _Params) ->
 
 show_resource(#{id := Id}, _Params) ->
     reply_with(fun emqx_rule_registry:find_resource/1, Id).
+
+get_resource_status(#{id := Id}, _Params) ->
+    case emqx_rule_engine:get_resource_status(Id) of
+        {ok, Status} ->
+            return({ok, Status});
+        {error, {resource_not_found, ResId}} ->
+            return({error, 400, ?ERR_NO_RESOURCE(ResId)})
+    end.
 
 start_resource(#{id := Id}, _Params) ->
     try emqx_rule_engine:start_resource(Id) of
