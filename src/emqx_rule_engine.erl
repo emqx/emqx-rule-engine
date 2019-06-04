@@ -28,6 +28,7 @@
         , create_resource/1
         , test_resource/1
         , start_resource/1
+        , get_resource_status/1
         , delete_resource/1
         ]).
 
@@ -218,9 +219,9 @@ test_resource(#{type := Type, config := Config}) ->
 get_resource_status(ResId) ->
     case emqx_rule_registry:find_resource(ResId) of
         {ok, #resource{type = ResType}} ->
-            {ok, #resource_type{on_status = {Mod, Status}}}
+            {ok, #resource_type{on_status = {Mod, OnStatus}}}
                 = emqx_rule_registry:find_resource_type(ResType),
-            Status = fetch_resource_status(Mod, Status, ResId),
+            Status = fetch_resource_status(Mod, OnStatus, ResId),
             {ok, Status};
         not_found ->
             {error, {resource_not_found, ResId}}
@@ -380,11 +381,11 @@ clear_action(Module, Destroy, ActionInstId) ->
             ok
     end.
 
-fetch_resource_status(Module, Status, ResId) ->
+fetch_resource_status(Module, OnStatus, ResId) ->
     case emqx_rule_registry:find_resource_params(ResId) of
         {ok, #resource_params{params = Params}} ->
             Status =
-                try Module:Status(ResId, Params)
+                try Module:OnStatus(ResId, Params)
                 catch _Error:Reason:STrace ->
                     ?LOG(error, "get resource status for ~p failed: ~0p", [ResId, {Reason, STrace}]),
                     #{is_alive => false}
