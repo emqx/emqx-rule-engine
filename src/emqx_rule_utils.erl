@@ -29,7 +29,14 @@
         , atom_key/1
         ]).
 
+%% connectivity check
+-export([ http_connectivity/1,
+          tcp_connectivity/2
+        ]).
+
 -define(EX_PLACE_HOLDER, "(\\$\\{[a-zA-Z0-9\\._]+\\})").
+
+-type(uri_string() :: iodata()).
 
 -type(tmpl_token() :: list({var, fun()} | {str, binary()})).
 
@@ -105,6 +112,31 @@ atom_key(Key) when is_binary(Key) ->
     try binary_to_existing_atom(Key, utf8)
     catch error:badarg -> error({invalid_key, Key})
     end.
+
+-spec(http_connectivity(uri_string()) -> ok | {error, Reason :: term()}).
+http_connectivity(Url) ->
+    case uri_string:parse(uri_string:normalize(Url)) of
+        {error, Reason, _} ->
+            {error, Reason};
+        #{host := Host, port := Port} ->
+            tcp_connectivity(str(Host), Port);
+        #{host := Host, scheme := Scheme} ->
+            tcp_connectivity(str(Host), default_port(Scheme));
+        _ ->
+            {error, {invalid_url, Url}}
+    end.
+
+-spec(tcp_connectivity(Host :: inet:socket_address() | inet:hostname(),
+                       Port :: inet:port_number())
+        -> ok | {error, Reason :: term()}).
+tcp_connectivity(Host, Port) ->
+    case gen_tcp:connect(Host, Port, [], 3000) of
+        {ok, Sock} -> gen_tcp:close(Sock), ok;
+        {error, Reason} -> {error, Reason}
+    end.
+
+default_port(http) -> 80;
+default_port(https) -> 443.
 
 var(<<"${", Val/binary>>) ->
     binary:part(Val, {0, byte_size(Val)-1}).

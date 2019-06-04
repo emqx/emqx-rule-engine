@@ -124,6 +124,14 @@ $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resources' -d \
 {"code":0,"data":{"attrs":"undefined","config":{"a":1},"description":"test-resource","id":"resource:71df3086","type":"built_in"}}
 ```
 
+### start
+
+```shell
+$ curl -XPOST -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resources/resource:71df3086'
+
+{"code":0}
+```
+
 ### list
 
 ```shell
@@ -138,6 +146,14 @@ $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resources'
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resources/resource:71df3086'
 
 {"code":0,"data":{"attrs":"undefined","config":{"a":1},"description":"test-resource","id":"resource:71df3086","type":"built_in"}}
+```
+
+### get resource status
+
+```shell
+curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resource_status/resource:71df3086'
+
+{"code":0,"data":{"is_alive":true}}
 ```
 
 ### delete
