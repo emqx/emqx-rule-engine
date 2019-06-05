@@ -233,8 +233,8 @@ delete_resource(ResId) ->
         {ok, #resource{type = ResType}} ->
             {ok, #resource_type{on_destroy = {ModD,Destroy}}}
                 = emqx_rule_registry:find_resource_type(ResType),
-            cluster_call(clear_resource, [ModD, Destroy, ResId]),
-            ok = emqx_rule_registry:remove_resource(ResId);
+            ok = emqx_rule_registry:remove_resource(ResId),
+            cluster_call(clear_resource, [ModD, Destroy, ResId]);
         not_found ->
             {error, {resource_not_found, ResId}}
     end.
