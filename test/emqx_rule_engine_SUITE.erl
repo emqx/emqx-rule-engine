@@ -702,7 +702,7 @@ make_simple_resource_type(ResTypeName) ->
 on_simple_resource_type_create(_Id, #{}) ->
     #{}.
 
-hook_metrics_action(_Params) ->
+hook_metrics_action(_Id, _Params) ->
     fun(_Data = #{event := Hookpoint}, _Events) ->
         ets:update_counter(?HOOK_METRICS_TAB, Hookpoint, 1, {Hookpoint, 1})
     end.

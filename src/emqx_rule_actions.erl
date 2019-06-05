@@ -15,6 +15,7 @@
 %% Define the default actions.
 -module(emqx_rule_actions).
 
+-include("rule_engine.hrl").
 -include_lib("emqx/include/emqx.hrl").
 -include_lib("emqx/include/logger.hrl").
 
@@ -58,8 +59,8 @@
 
 -export([on_resource_create/2]).
 
--export([ on_action_create_inspect/1
-        , on_action_create_republish/1
+-export([ on_action_create_inspect/2
+        , on_action_create_republish/2
         ]).
 
 %%------------------------------------------------------------------------------
@@ -70,8 +71,8 @@
 on_resource_create(_Name, Conf) ->
     Conf.
 
--spec(on_action_create_inspect(Params :: map()) -> action_fun()).
-on_action_create_inspect(Params) ->
+-spec(on_action_create_inspect(action_instance_id(), Params :: map()) -> action_fun()).
+on_action_create_inspect(_Id, Params) ->
     fun(Selected, Envs) ->
         io:format("[inspect]~n"
                   "\tSelected Data: ~p~n"
@@ -80,9 +81,9 @@ on_action_create_inspect(Params) ->
     end.
 
 %% A Demo Action.
--spec(on_action_create_republish(#{binary() := emqx_topic:topic()})
+-spec(on_action_create_republish(action_instance_id(), #{binary() := emqx_topic:topic()})
       -> action_fun()).
-on_action_create_republish(#{<<"target_topic">> := TargetTopic}) ->
+on_action_create_republish(_Id, #{<<"target_topic">> := TargetTopic}) ->
     fun(Selected, #{qos := QoS, from := Client,
                     flags := Flags, headers := Headers}) ->
         ?LOG(debug, "[republish] republish to: ~p, Payload: ~p",
