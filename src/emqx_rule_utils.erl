@@ -27,6 +27,7 @@
         , utf8_str/1
         , number_to_binary/1
         , atom_key/1
+        , unsafe_atom_key/1
         ]).
 
 %% connectivity check
@@ -54,7 +55,7 @@ preproc_tmpl([], Acc) ->
     lists:reverse(Acc);
 preproc_tmpl([[Tkn, Phld]| Tokens], Acc) ->
     preproc_tmpl(Tokens,
-        [{var, fun(Data) -> bin(maps:get(atom_key(var(Phld)), Data, undefined)) end},
+        [{var, fun(Data) -> bin(get_phld_var(Phld, Data)) end},
          {str, Tkn} | Acc]);
 preproc_tmpl([[Tkn]| Tokens], Acc) ->
     preproc_tmpl(Tokens, [{str, Tkn} | Acc]).
@@ -78,15 +79,15 @@ preproc_sql(Sql, ReplaceWith) ->
         {match, PlaceHolders} ->
             {repalce_with(Sql, ReplaceWith),
              fun(Data) ->
-                get_phld(Data, PlaceHolders)
+                [get_phld_var(Phld, Data)
+                 || Phld <- [hd(PH) || PH <- PlaceHolders]]
              end};
         nomatch ->
             {Sql, fun(_) -> [] end}
     end.
 
-get_phld(Data, PlaceHolders) ->
-    [maps:get(atom_key(Key), Data, undefined)
-     || Key <- [var(hd(PH)) || PH <- PlaceHolders]].
+get_phld_var(Phld, Data) ->
+    maps:get(atom_key(unwrap(Phld)), Data, undefined).
 
 repalce_with(Tmpl, '?') ->
     re:replace(Tmpl, ?EX_PLACE_HOLDER, "?", [{return, binary}, global]);
@@ -101,6 +102,13 @@ repalce_with(Tmpl, '$n') ->
                     {<<Acc/binary, Tkn/binary>>, Seq}
             end, {<<>>, 1}, Parts),
     Res.
+
+unsafe_atom_key(Key) when is_atom(Key) ->
+    Key;
+unsafe_atom_key(Keys = [Key | SubKeys]) when is_binary(Key) ->
+    [binary_to_atom(Key, utf8) | SubKeys];
+unsafe_atom_key(Key) when is_binary(Key) ->
+    binary_to_atom(Key, utf8).
 
 atom_key(Key) when is_atom(Key) ->
     Key;
@@ -138,7 +146,7 @@ tcp_connectivity(Host, Port) ->
 default_port(http) -> 80;
 default_port(https) -> 443.
 
-var(<<"${", Val/binary>>) ->
+unwrap(<<"${", Val/binary>>) ->
     binary:part(Val, {0, byte_size(Val)-1}).
 
 str(List) when is_list(List) -> List;
