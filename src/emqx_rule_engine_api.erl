@@ -389,9 +389,11 @@ record_to_map(#resource{id = Id,
                         type = Type,
                         config = Config,
                         description = Descr}) ->
+    {ok, Status} = emqx_rule_engine:get_resource_status(Id),
     #{id => Id,
       type => Type,
       config => Config,
+      status => Status,
       description => Descr
      };
 

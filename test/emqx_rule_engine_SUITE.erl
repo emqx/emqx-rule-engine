@@ -101,6 +101,7 @@ end_per_suite(_Config) ->
 
 on_resource_create(_id, _) -> #{}.
 on_resource_destroy(_id, _) -> ok.
+on_get_resource_status(_id, _) -> #{}.
 
 %%------------------------------------------------------------------------------
 %% Group specific setup/teardown
@@ -160,6 +161,7 @@ init_per_testcase(_TestCase, Config) ->
                 params_spec = #{},
                 on_create = {?MODULE, on_resource_create},
                 on_destroy = {?MODULE, on_resource_destroy},
+                on_status = {?MODULE, on_get_resource_status},
                 title = #{en => <<"Built-In Resource Type (debug)">>},
                 description = #{en => <<"The built in resource type for debug purpose">>}}]),
     %ct:pal("============ ~p", [ets:tab2list(emqx_resource_type)]),

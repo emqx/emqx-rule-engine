@@ -79,7 +79,7 @@ preproc_sql(Sql, ReplaceWith) ->
         {match, PlaceHolders} ->
             {repalce_with(Sql, ReplaceWith),
              fun(Data) ->
-                [get_phld_var(Phld, Data)
+                [sql_data(get_phld_var(Phld, Data))
                  || Phld <- [hd(PH) || PH <- PlaceHolders]]
              end};
         nomatch ->
@@ -105,7 +105,7 @@ repalce_with(Tmpl, '$n') ->
 
 unsafe_atom_key(Key) when is_atom(Key) ->
     Key;
-unsafe_atom_key(Keys = [Key | SubKeys]) when is_binary(Key) ->
+unsafe_atom_key(_Keys = [Key | SubKeys]) when is_binary(Key) ->
     [binary_to_atom(Key, utf8) | SubKeys];
 unsafe_atom_key(Key) when is_binary(Key) ->
     binary_to_atom(Key, utf8).
@@ -157,6 +157,11 @@ bin(List) when is_list(List) -> list_to_binary(List);
 bin(Bin) when is_binary(Bin) -> Bin;
 bin(Num) when is_number(Num) -> number_to_binary(Num);
 bin(Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8).
+
+sql_data(List) when is_list(List) -> List;
+sql_data(Bin) when is_binary(Bin) -> Bin;
+sql_data(Num) when is_number(Num) -> Num;
+sql_data(Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8).
 
 number_to_binary(Int) when is_integer(Int) ->
     integer_to_binary(Int);

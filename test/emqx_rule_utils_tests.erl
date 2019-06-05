@@ -44,4 +44,4 @@ preproc_sql2_test() ->
 preproc_sql3_test() ->
     {Tk, GetV} = emqx_rule_utils:preproc_sql(<<"v1: ${a}, v2: ${b}">>, '$n'),
     ?_assertEqual(<<"v1: $1, v2: $2">>, Tk),
-    ?assertEqual([hello, <<"yes">>], GetV(#{a => hello, b => <<"yes">> })).
+    ?assertEqual([<<"hello">>, <<"yes">>], GetV(#{a => hello, b => <<"yes">> })).
