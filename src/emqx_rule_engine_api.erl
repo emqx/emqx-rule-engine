@@ -16,6 +16,7 @@
 
 -include("rule_engine.hrl").
 -include("rule_events.hrl").
+-include_lib("emqx/include/logger.hrl").
 
 -import(minirest,  [return/1]).
 
@@ -82,6 +83,20 @@
             descr  => "Show a resource"
            }).
 
+-rest_api(#{name   => get_resource_status,
+            method => 'GET',
+            path   => "/resource_status/:bin:id",
+            func   => get_resource_status,
+            descr  => "Get status of a resource"
+           }).
+
+-rest_api(#{name   => start_resource,
+            method => 'POST',
+            path   => "/resources/:bin:id",
+            func   => start_resource,
+            descr  => "Start a resource"
+           }).
+
 -rest_api(#{name   => delete_resource,
             method => 'DELETE',
             path   => "/resources/:bin:id",
@@ -123,6 +138,8 @@
 -export([ create_resource/2
         , list_resources/2
         , show_resource/2
+        , get_resource_status/2
+        , start_resource/2
         , delete_resource/2
         ]).
 
@@ -136,6 +153,7 @@
 -define(ERR_NO_HOOK(HOOK), list_to_binary(io_lib:format("Event ~s Not Found", [(HOOK)]))).
 -define(ERR_NO_RESOURCE_TYPE(TYPE), list_to_binary(io_lib:format("Resource Type ~s Not Found", [(TYPE)]))).
 -define(ERR_UNKNOWN_COLUMN(COLUMN), list_to_binary(io_lib:format("Unknown Column: ~s", [(COLUMN)]))).
+-define(ERR_START_RESOURCE(RESID), list_to_binary(io_lib:format("Start Resource ~s Failed", [(RESID)]))).
 -define(ERR_BADARGS(REASON),
         begin
             R0 = list_to_binary(io_lib:format("~0p", [REASON])),
@@ -157,9 +175,12 @@ test_rule_sql(Params) ->
     catch
         throw:{invalid_hook, Hook} ->
             return({error, 400, ?ERR_NO_HOOK(Hook)});
+        throw:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)});
         _:{parse_error,{unknown_column, Column}} ->
             return({error, 400, ?ERR_UNKNOWN_COLUMN(Column)});
-        _Error:Reason ->
+        _Error:Reason:StackT ->
+            ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
             return({error, 400, ?ERR_BADARGS(Reason)})
     end.
 
@@ -174,9 +195,12 @@ do_create_rule(Params) ->
             return({error, 400, ?ERR_NO_RESOURCE(ResId)});
         throw:{invalid_hook, Hook} ->
             return({error, 400, ?ERR_NO_HOOK(Hook)});
+        throw:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)});
         _:{parse_error,{unknown_column, Column}} ->
             return({error, 400, ?ERR_UNKNOWN_COLUMN(Column)});
-        _Error:Reason ->
+        _Error:Reason:StackT ->
+            ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
             return({error, 400, ?ERR_BADARGS(Reason)})
     end.
 
@@ -187,7 +211,7 @@ show_rule(#{id := Id}, _Params) ->
     reply_with(fun emqx_rule_registry:get_rule/1, Id).
 
 delete_rule(#{id := Id}, _Params) ->
-    ok = emqx_rule_registry:remove_rule(Id),
+    ok = emqx_rule_engine:delete_rule(Id),
     return(ok).
 
 %%------------------------------------------------------------------------------
@@ -229,7 +253,21 @@ do_create_resource(Create, Params) ->
     catch
         throw:{resource_type_not_found, Type} ->
             return({error, 400, ?ERR_NO_RESOURCE_TYPE(Type)});
-        _Error:Reason ->
+        throw:{init_resource_failure, Reason} ->
+            %% Note that we will return OK in case of resource creation failure,
+            %% users can always re-start the resource later.
+            case Create of
+                create_resource ->
+                    ?LOG(error, "[RuleEngineAPI] init_resource_failure: ~p", [Reason]),
+                    return(ok);
+                test_resource ->
+                    ?LOG(error, "[RuleEngineAPI] test_resource_failure: ~p", [Reason]),
+                    return({error, 500, <<"Test Creating Resource Failed">>})
+            end;
+        throw:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)});
+        _Error:Reason:StackT ->
+            ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
             return({error, 400, ?ERR_BADARGS(Reason)})
     end.
 
@@ -242,14 +280,42 @@ list_resources_by_type(#{type := Type}, _Params) ->
 show_resource(#{id := Id}, _Params) ->
     reply_with(fun emqx_rule_registry:find_resource/1, Id).
 
+get_resource_status(#{id := Id}, _Params) ->
+    case emqx_rule_engine:get_resource_status(Id) of
+        {ok, Status} ->
+            return({ok, Status});
+        {error, {resource_not_found, ResId}} ->
+            return({error, 400, ?ERR_NO_RESOURCE(ResId)})
+    end.
+
+start_resource(#{id := Id}, _Params) ->
+    try emqx_rule_engine:start_resource(Id) of
+        ok ->
+            return(ok);
+        {error, {resource_not_found, ResId}} ->
+            return({error, 400, ?ERR_NO_RESOURCE(ResId)})
+    catch
+        throw:{{init_resource_failure, _}, Reason} ->
+            ?LOG(error, "[RuleEngineAPI] init_resource_failure: ~p", [Reason]),
+            return({error, 400, ?ERR_START_RESOURCE(Id)});
+        throw:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)});
+        _Error:Reason:StackT ->
+            ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
+            return({error, 400, ?ERR_BADARGS(Reason)})
+    end.
+
 delete_resource(#{id := Id}, _Params) ->
     try
-        ok = emqx_rule_engine:delete_resource(Id),
+        emqx_rule_engine:delete_resource(Id),
         return(ok)
     catch
-        _Error:{throw, Reason} ->
+        _Error:{throw,Reason} ->
             return({error, 400, ?ERR_BADARGS(Reason)});
-        _Error:Reason ->
+        throw:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)});
+        _Error:Reason:StackT ->
+            ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
             return({error, 400, ?ERR_BADARGS(Reason)})
     end.
 
@@ -298,7 +364,7 @@ record_to_map(#rule{id = Id,
     #{id => Id,
       for => Hook,
       rawsql => RawSQL,
-      actions => [maps:remove(apply, Act) || Act <- Actions],
+      actions => printable_actions(Actions),
       enabled => Enabled,
       description => Descr
      };
@@ -307,7 +373,7 @@ record_to_map(#action{name = Name,
                       app = App,
                       for = Hook,
                       types = Types,
-                      params = Params,
+                      params_spec = Params,
                       title = Title,
                       description = Descr}) ->
     #{name => Name,
@@ -322,18 +388,18 @@ record_to_map(#action{name = Name,
 record_to_map(#resource{id = Id,
                         type = Type,
                         config = Config,
-                        params = Params,
                         description = Descr}) ->
+    {ok, Status} = emqx_rule_engine:get_resource_status(Id),
     #{id => Id,
       type => Type,
       config => Config,
-      params => Params,
+      status => Status,
       description => Descr
      };
 
 record_to_map(#resource_type{name = Name,
                              provider = Provider,
-                             params = Params,
+                             params_spec = Params,
                              title = Title,
                              description = Descr}) ->
     #{name => Name,
@@ -342,6 +408,10 @@ record_to_map(#resource_type{name = Name,
       title => Title,
       description => Descr
      }.
+
+printable_actions(Actions) ->
+    [#{name => Name, params => Args}
+     || #action_instance{name = Name, args = Args} <- Actions].
 
 parse_rule_params(Params) ->
     parse_rule_params(Params, #{description => <<"">>}).
@@ -370,14 +440,24 @@ rule_sql_test(#{<<"rawsql">> := Sql, <<"ctx">> := Context}) ->
     case emqx_rule_sqlparser:parse_select(Sql) of
         {ok, Select} ->
             Event = emqx_rule_sqlparser:select_from(Select),
+            ActInstId = {test_rule_sql, self()},
             Rule = #rule{rawsql = Sql,
                          for = Event,
                          selects = emqx_rule_sqlparser:select_fields(Select),
                          conditions = emqx_rule_sqlparser:select_where(Select),
-                         actions = [#{name => test_rule_sql,
-                                      apply => feedback_action()}]},
+                         actions = [#action_instance{
+                                        id = ActInstId,
+                                        name = test_rule_sql}]},
             FullContext = fill_default_values(hd(Event), emqx_rule_maps:atom_key_map(Context), #{}),
-            emqx_rule_runtime:apply_rule(Rule, FullContext),
+            try
+                ok = emqx_rule_registry:add_action_instance_params(
+                        #action_instance_params{id = ActInstId,
+                                                params = #{},
+                                                apply = feedback_action()}),
+                emqx_rule_runtime:apply_rule(Rule, FullContext)
+            after
+                ok = emqx_rule_registry:remove_action_instance_params(ActInstId)
+            end,
             wait_feedback();
         Error -> error(Error)
     end.

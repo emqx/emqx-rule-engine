@@ -154,7 +154,8 @@ select_and_transform(['*'|More], Input, Output) ->
     select_and_transform(More, Input, maps:merge(Output, Input));
 select_and_transform([{as, Field, Alias}|More], Input, Output) ->
     Val = eval(Field, Input),
-    select_and_transform(More, Input, nested_put(Alias, Val, Output));
+    select_and_transform(More, Input,
+        nested_put(emqx_rule_utils:unsafe_atom_key(Alias), Val, Output));
 select_and_transform([Field|More], Input, Output) ->
     Val = eval(Field, Input),
     Alias = alias(Field, Val),
@@ -208,11 +209,13 @@ number(Bin) ->
 take_actions(Actions, Selected, Envs) ->
     lists:foreach(fun(Action) -> take_action(Action, Selected, Envs) end, Actions).
 
-take_action(#{apply := Apply}, Selected, Envs) ->
+take_action(#action_instance{id = Id}, Selected, Envs) ->
+    {ok, #action_instance_params{apply = Apply}}
+        = emqx_rule_registry:get_action_instance_params(Id),
     Apply(Selected, Envs).
 
 eval({var, Var}, Input) -> %% nested
-    nested_get(Var, Input);
+    nested_get(emqx_rule_utils:atom_key(Var), Input);
 eval({const, Val}, _Input) ->
     Val;
 eval({payload, Attr}, Input) when is_binary(Attr) ->
