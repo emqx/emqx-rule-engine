@@ -30,3 +30,18 @@ proc_tmpl_test_() ->
     [ ?_assertEqual(<<"key: greet, value: hello.">>, emqx_rule_utils:proc_tmpl(Tokens0, #{k => greet, v => hello}))
     , ?_assertEqual(<<"str = greet:hello:greet.">>, emqx_rule_utils:proc_tmpl(Tokens1, #{k => greet, v => hello}))
     ].
+
+preproc_sql1_test() ->
+    {Tk, GetV} = emqx_rule_utils:preproc_sql(<<"value: a">>, '?'),
+    ?_assertEqual(<<"value: a">>, Tk),
+    ?assertEqual([], GetV(#{k => v})).
+
+preproc_sql2_test() ->
+    {Tk, GetV} = emqx_rule_utils:preproc_sql(<<"v1: ${a}, v2: ${b}">>, '?'),
+    ?_assertEqual(<<"v1: ?, v2: ?">>, Tk),
+    ?assertEqual([1, 2], GetV(#{a => 1, b => 2})).
+
+preproc_sql3_test() ->
+    {Tk, GetV} = emqx_rule_utils:preproc_sql(<<"v1: ${a}, v2: ${b}">>, '$n'),
+    ?_assertEqual(<<"v1: $1, v2: $2">>, Tk),
+    ?assertEqual([<<"hello">>, <<"yes">>], GetV(#{a => hello, b => <<"yes">> })).

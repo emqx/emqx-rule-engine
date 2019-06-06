@@ -20,14 +20,41 @@
 -type(rule_name() :: binary()).
 
 -type(resource_id() :: binary()).
--type(resource_name() :: binary()).
+-type(action_instance_id() :: binary()).
 
 -type(action_name() :: atom()).
 -type(resource_type_name() :: atom()).
 
 -type(descr() :: #{en := binary(), zh => binary()}).
 
+-type(mf() :: {Module::atom(), Fun::atom()}).
+
 -type(hook() :: atom() | 'any').
+
+-type(resource_status() :: #{ alive := boolean()
+                            , atom() => binary() | atom() | list(binary()|atom())
+                            }).
+
+-define(descr, #{en => <<>>, zh => <<>>}).
+
+-record(action,
+        { name :: action_name()
+        , for :: hook()
+        , app :: atom()
+        , types = [] :: list(resource_type_name())
+        , module :: module()
+        , on_create :: mf()
+        , on_destroy :: maybe(mf())
+        , params_spec :: #{atom() => term()} %% params specs
+        , title = ?descr :: descr()
+        , description = ?descr :: descr()
+        }).
+
+-record(action_instance,
+        { id :: action_instance_id()
+        , name :: action_name()
+        , args :: #{atom() => term()} %% the args got from API for initializing action_instance
+        }).
 
 -record(rule,
         { id :: rule_id()
@@ -35,44 +62,44 @@
         , rawsql :: binary()
         , selects :: list()
         , conditions :: tuple()
-        , actions :: list()
+        , actions :: list(#action_instance{})
         , enabled :: boolean()
         , description :: binary()
-        }).
-
--record(action,
-        { name :: action_name()
-        , for :: hook()
-        , app :: atom()
-        , types = [] :: list(resource_name())
-        , module :: module()
-        , func :: atom()
-        , params :: #{atom() => term()}
-        , title :: descr()
-        , description :: descr()
         }).
 
 -record(resource,
         { id :: resource_id()
         , type :: resource_type_name()
-        , config :: #{}
-        , params :: #{}
+        , config :: #{} %% the configs got from API for initializing resource
+        , created_at :: erlang:timestamp()
         , description :: binary()
         }).
 
 -record(resource_type,
         { name :: resource_type_name()
         , provider :: atom()
-        , params :: #{}
-        , on_create :: {Module::atom(), Fun::atom()}
-        , on_destroy :: {Module::atom(), Fun::atom()}
-        , title :: descr()
-        , description :: descr()
+        , params_spec :: #{atom() => term()} %% params specs
+        , on_create :: mf()
+        , on_status :: mf()
+        , on_destroy :: mf()
+        , title = ?descr :: descr()
+        , description = ?descr :: descr()
         }).
 
 -record(rule_hooks,
         { hook :: atom()
         , rule_id :: rule_id()
+        }).
+
+-record(resource_params,
+        { id :: resource_id()
+        , params :: #{} %% the params got after initializing the resource
+        }).
+
+-record(action_instance_params,
+        { id :: action_instance_id()
+        , params :: #{} %% the params got after initializing the action
+        , apply :: fun((Data::map(), Envs::map()) -> any()) %% the func got after initializing the action
         }).
 
 %% Arithmetic operators

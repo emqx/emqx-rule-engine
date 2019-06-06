@@ -41,14 +41,20 @@
         , remove_action/1
         , remove_actions/1
         , remove_actions_of/1
+        , add_action_instance_params/1
+        , get_action_instance_params/1
+        , remove_action_instance_params/1
         ]).
 
 %% Resource Management
 -export([ get_resources/0
         , add_resource/1
+        , add_resource_params/1
         , find_resource/1
+        , find_resource_params/1
         , get_resources_by_type/1
         , remove_resource/1
+        , remove_resource_params/1
         ]).
 
 %% Resource Types
@@ -57,6 +63,9 @@
         , register_resource_types/1
         , unregister_resource_types_of/1
         ]).
+
+%% for debug purposes
+-export([dump/0]).
 
 %% gen_server Callbacks
 -export([ init/1
@@ -78,15 +87,17 @@
 %% Tables
 -define(RULE_TAB, emqx_rule).
 -define(ACTION_TAB, emqx_rule_action).
+-define(ACTION_INST_PARAMS_TAB, emqx_action_instance_params).
 -define(RES_TAB, emqx_resource).
+-define(RES_PARAMS_TAB, emqx_resource_params).
 -define(RULE_HOOKS, emqx_rule_hooks).
 -define(RES_TYPE_TAB, emqx_resource_type).
 
 %% Statistics
 -define(STATS,
-        [ {?RULE_TAB, 'rules/count', 'rules/max'}
-        , {?ACTION_TAB, 'actions/count', 'actions/max'}
-        , {?RES_TAB, 'resources/count', 'resources/max'}
+        [ {?RULE_TAB, 'rules.count', 'rules.max'}
+        , {?ACTION_TAB, 'actions.count', 'actions.max'}
+        , {?RES_TAB, 'resources.count', 'resources.max'}
         ]).
 
 %%------------------------------------------------------------------------------
@@ -126,7 +137,7 @@ mnesia(boot) ->
                 {index, [#resource_type.provider]},
                 {attributes, record_info(fields, resource_type)},
                 {storage_properties, StoreProps}]),
-    %% Resource instance table
+    %% Mapping from hook to rule_id
     ok = ekka_mnesia:create_table(?RULE_HOOKS, [
                 {type, bag},
                 {disc_copies, [node()]},
@@ -145,6 +156,18 @@ mnesia(copy) ->
     ok = ekka_mnesia:copy_table(?RES_TYPE_TAB),
     %% Copy hook_name -> rule_id table
     ok = ekka_mnesia:copy_table(?RULE_HOOKS).
+
+dump() ->
+    io:format("Rules: ~p~n"
+              "ActionInstParams: ~p~n"
+              "Resources: ~p~n"
+              "ResourceParams: ~p~n"
+              "Rule-Hook Mapping: ~p~n",
+            [ets:tab2list(?RULE_TAB),
+             ets:tab2list(?ACTION_INST_PARAMS_TAB),
+             ets:tab2list(?RES_TAB),
+             ets:tab2list(?RES_PARAMS_TAB),
+             ets:tab2list(?RULE_HOOKS)]).
 
 %%------------------------------------------------------------------------------
 %% Start the registry
@@ -276,6 +299,25 @@ delete_action(Action) when is_record(Action, action) ->
 delete_action(Name) when is_atom(Name) ->
     mnesia:delete(?ACTION_TAB, Name, write).
 
+%% @doc Add an action instance params.
+-spec(add_action_instance_params(emqx_rule_engine:action_instance_params()) -> ok).
+add_action_instance_params(ActionInstParams) when is_record(ActionInstParams, action_instance_params) ->
+    ets:insert(?ACTION_INST_PARAMS_TAB, ActionInstParams),
+    ok.
+
+-spec(get_action_instance_params(action_instance_id()) -> {ok, emqx_rule_engine:action_instance_params()} | not_found).
+get_action_instance_params(ActionInstId) ->
+    case ets:lookup(?ACTION_INST_PARAMS_TAB, ActionInstId) of
+        [ActionInstParams] -> {ok, ActionInstParams};
+        [] -> not_found
+    end.
+
+%% @doc Delete an action instance params.
+-spec(remove_action_instance_params(action_instance_id()) -> ok).
+remove_action_instance_params(ActionInstId) ->
+    ets:delete(?ACTION_INST_PARAMS_TAB, ActionInstId),
+    ok.
+
 %%------------------------------------------------------------------------------
 %% Resource Management
 %%------------------------------------------------------------------------------
@@ -288,6 +330,11 @@ get_resources() ->
 add_resource(Resource) when is_record(Resource, resource) ->
     trans(fun insert_resource/1, [Resource]).
 
+-spec(add_resource_params(emqx_rule_engine:resource_params()) -> ok).
+add_resource_params(ResParams) when is_record(ResParams, resource_params) ->
+    ets:insert(?RES_PARAMS_TAB, ResParams),
+    ok.
+
 -spec(find_resource(Id :: resource_id()) -> {ok, emqx_rule_engine:resource()} | not_found).
 find_resource(Id) ->
     case mnesia:dirty_read(?RES_TAB, Id) of
@@ -295,17 +342,30 @@ find_resource(Id) ->
         [] -> not_found
     end.
 
--spec(remove_resource(emqx_rule_engine:resource() | binary()) -> ok).
+-spec(find_resource_params(Id :: resource_id())
+        -> {ok, emqx_rule_engine:resource_params()} | not_found).
+find_resource_params(Id) ->
+    case ets:lookup(?RES_PARAMS_TAB, Id) of
+        [ResParams] -> {ok, ResParams};
+        [] -> not_found
+    end.
+
+-spec(remove_resource(emqx_rule_engine:resource() | emqx_rule_engine:resource_id()) -> ok).
 remove_resource(Resource) when is_record(Resource, resource) ->
     trans(fun delete_resource/1, [Resource#resource.id]);
 
 remove_resource(ResId) when is_binary(ResId) ->
     trans(fun delete_resource/1, [ResId]).
 
+-spec(remove_resource_params(emqx_rule_engine:resource_id()) -> ok).
+remove_resource_params(ResId) ->
+    ets:delete(?RES_PARAMS_TAB, ResId),
+    ok.
+
 %% @private
 delete_resource(ResId) ->
     [[ResId =:= ResId1 andalso throw({dependency_exists, {rule, Id}})
-        || #{params := #{<<"$resource">> := ResId1}} <- Actions]
+        || #action_instance{args = #{<<"$resource">> := ResId1}} <- Actions]
             || #rule{id = Id, actions = Actions} <- get_rules()],
     mnesia:delete(?RES_TAB, ResId, write).
 
@@ -356,6 +416,9 @@ delete_resource_type(Type) ->
 %%------------------------------------------------------------------------------
 
 init([]) ->
+    Opts = [public, named_table, set, {read_concurrency, true}],
+    ets:new(?ACTION_INST_PARAMS_TAB, [{keypos, #action_instance_params.id}|Opts]),
+    ets:new(?RES_PARAMS_TAB, [{keypos, #resource_params.id}|Opts]),
     %% Enable stats timer
     ok = emqx_stats:update_interval(rule_registery_stats, fun update_stats/0),
     {ok, #{}}.
@@ -398,4 +461,3 @@ trans(Fun, Args) ->
         {atomic, ok} -> ok;
         {aborted, Reason} -> error(Reason)
     end.
-
