@@ -183,7 +183,9 @@ create_resource(#{type := Type, config := Config} = Params) ->
                                  config = Config,
                                  description = iolist_to_binary(maps:get(description, Params, ""))},
             ok = emqx_rule_registry:add_resource(Resource),
-            cluster_call(init_resource, [M, F, ResId, Config]),
+            %% Note that we will return OK in case of resource creation failure,
+            %% users can always re-start the resource later.
+            catch cluster_call(init_resource, [M, F, ResId, Config]),
             {ok, Resource};
         not_found ->
             {error, {resource_type_not_found, Type}}

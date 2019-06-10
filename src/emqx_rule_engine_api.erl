@@ -254,16 +254,9 @@ do_create_resource(Create, Params) ->
         throw:{resource_type_not_found, Type} ->
             return({error, 400, ?ERR_NO_RESOURCE_TYPE(Type)});
         throw:{init_resource_failure, Reason} ->
-            %% Note that we will return OK in case of resource creation failure,
-            %% users can always re-start the resource later.
-            case Create of
-                create_resource ->
-                    ?LOG(error, "[RuleEngineAPI] init_resource_failure: ~p", [Reason]),
-                    return(ok);
-                test_resource ->
-                    ?LOG(error, "[RuleEngineAPI] test_resource_failure: ~p", [Reason]),
-                    return({error, 500, <<"Test Creating Resource Failed">>})
-            end;
+            %% only test_resource would throw exceptions, create_resource won't
+            ?LOG(error, "[RuleEngineAPI] test_resource_failure: ~p", [Reason]),
+            return({error, 500, <<"Test Creating Resource Failed">>});
         throw:Reason ->
             return({error, 400, ?ERR_BADARGS(Reason)});
         _Error:Reason:StackT ->
