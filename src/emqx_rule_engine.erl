@@ -357,8 +357,7 @@ init_action(Module, OnCreate, ActionInstId, Params) ->
     end.
 
 clear_resource(_Module, undefined, ResId) ->
-    ok = emqx_rule_registry:remove_resource_params(ResId),
-    ok;
+    ok = emqx_rule_registry:remove_resource_params(ResId);
 clear_resource(Module, Destroy, ResId) ->
     case emqx_rule_registry:find_resource_params(ResId) of
         {ok, #resource_params{params = Params}} ->
