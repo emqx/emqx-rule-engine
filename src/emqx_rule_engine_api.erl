@@ -361,10 +361,19 @@ record_to_map(#rule{id = Id,
                     actions = Actions,
                     enabled = Enabled,
                     description = Descr}) ->
+    #{max := Max, current := Current, last5m := Last5M} = emqx_rule_metrics:get_rule_speed(Id),
+    Metrics = #{
+        matched => emqx_rule_metrics:get(Id, 'rule.matched'),
+        nomatch => emqx_rule_metrics:get(Id, 'rule.nomatch'),
+        speed => Current,
+        speed_max => Max,
+        speed_last5m => Last5M
+    },
     #{id => Id,
       for => Hook,
       rawsql => RawSQL,
       actions => printable_actions(Actions),
+      metrics => Metrics,
       enabled => Enabled,
       description => Descr
      };
@@ -410,8 +419,13 @@ record_to_map(#resource_type{name = Name,
      }.
 
 printable_actions(Actions) ->
-    [#{name => Name, params => Args}
-     || #action_instance{name = Name, args = Args} <- Actions].
+    [begin
+        Metrics = #{
+            success => emqx_rule_metrics:get(Id, 'actions.success'),
+            failed => emqx_rule_metrics:get(Id, 'actions.failed')
+        },
+        #{name => Name, params => Args, metrics => Metrics}
+     end || #action_instance{id = Id, name = Name, args = Args} <- Actions].
 
 parse_rule_params(Params) ->
     parse_rule_params(Params, #{description => <<"">>}).

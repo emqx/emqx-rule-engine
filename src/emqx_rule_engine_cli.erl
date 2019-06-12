@@ -221,7 +221,15 @@ format(#rule{id = Id,
              actions = Actions,
              enabled = Enabled,
              description = Descr}) ->
-    lists:flatten(io_lib:format("rule(id='~s', for='~0p', rawsql='~s', actions=~s, enabled='~s', description='~s')~n", [Id, Hook, Sql, printable_actions(Actions), Enabled, Descr]));
+    #{max := Max, current := Current, last5m := Last5M} = emqx_rule_metrics:get_rule_speed(Id),
+    Metrics = #{
+        matched => emqx_rule_metrics:get(Id, 'rule.matched'),
+        nomatch => emqx_rule_metrics:get(Id, 'rule.nomatch'),
+        speed => Current,
+        speed_max => Max,
+        speed_last5m => Last5M
+    },
+    lists:flatten(io_lib:format("rule(id='~s', for='~0p', rawsql='~s', actions=~s, metrics=~0p, enabled='~s', description='~s')~n", [Id, Hook, Sql, printable_actions(Actions), Metrics, Enabled, Descr]));
 
 format(#action{name = Name,
                for = Hook,
@@ -235,7 +243,8 @@ format(#resource{id = Id,
                  type = Type,
                  config = Config,
                  description = Descr}) ->
-    lists:flatten(io_lib:format("resource(id='~s', type='~s', config=~0p, description='~s')~n", [Id, Type, Config, Descr]));
+    {ok, Status} = emqx_rule_engine:get_resource_status(Id),
+    lists:flatten(io_lib:format("resource(id='~s', type='~s', config=~0p, status=~0p, description='~s')~n", [Id, Type, Config, Status, Descr]));
 
 format(#resource_type{name = Name,
                       provider = Provider,
@@ -256,8 +265,13 @@ make_resource(Opts) ->
       description => get_value(descr, Opts)}.
 
 printable_actions(Actions) when is_list(Actions) ->
-    jsx:encode([#{name => Name, params => Args}
-                || #action_instance{name = Name, args = Args} <- Actions]).
+    jsx:encode([begin
+                    Metrics = #{
+                        success => emqx_rule_metrics:get(Id, 'actions.success'),
+                        failed => emqx_rule_metrics:get(Id, 'actions.failed')
+                    },
+                    #{name => Name, params => Args, metrics => Metrics}
+                end || #action_instance{id = Id, name = Name, args = Args} <- Actions]).
 
 with_opts(Action, RawParams, OptSpecList, {CmdObject, CmdName}) ->
     case getopt:parse_and_check(OptSpecList, RawParams) of
