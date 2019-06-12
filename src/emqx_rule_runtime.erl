@@ -122,7 +122,8 @@ apply_rules_fun(Hook) ->
 rules_for(Hook) ->
     emqx_rule_registry:get_rules_for(Hook).
 
--spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
+-spec(apply_rules(list(emqx_rule_engine:rule()), map())
+        -> {ok, [ActionResult::term()]} | {error, nomatch}).
 apply_rules([], _Input) ->
     ok;
 apply_rules([#rule{enabled = false}|More], Input) ->
@@ -141,8 +142,12 @@ apply_rule(#rule{selects = Selects,
                  actions = Actions}, Input) ->
     Columns = columns(Input),
     Selected = select_and_transform(Selects, Columns),
-    match_conditions(Conditions, maps:merge(Columns, Selected))
-        andalso take_actions(Actions, Selected, Input).
+    case match_conditions(Conditions, maps:merge(Columns, Selected)) of
+        true ->
+            {ok, take_actions(Actions, Selected, Input)};
+        false ->
+            {error, nomatch}
+    end.
 
 %% Step1 -> Select and transform data
 select_and_transform(Fields, Input) ->
@@ -207,7 +212,7 @@ number(Bin) ->
 
 %% Step3 -> Take actions
 take_actions(Actions, Selected, Envs) ->
-    lists:foreach(fun(Action) -> take_action(Action, Selected, Envs) end, Actions).
+    lists:map(fun(Action) -> take_action(Action, Selected, Envs) end, Actions).
 
 take_action(#action_instance{id = Id}, Selected, Envs) ->
     {ok, #action_instance_params{apply = Apply}}

@@ -453,24 +453,20 @@ rule_sql_test(#{<<"rawsql">> := Sql, <<"ctx">> := Context}) ->
                 ok = emqx_rule_registry:add_action_instance_params(
                         #action_instance_params{id = ActInstId,
                                                 params = #{},
-                                                apply = feedback_action()}),
+                                                apply = sql_test_action()}),
                 emqx_rule_runtime:apply_rule(Rule, FullContext)
+            of
+                {ok, [Data]} -> {ok, Data};
+                {error, nomatch} -> {error, nomatch}
             after
                 ok = emqx_rule_registry:remove_action_instance_params(ActInstId)
-            end,
-            wait_feedback();
+            end;
         Error -> error(Error)
     end.
 
-feedback_action() ->
+sql_test_action() ->
     fun(Data, _Envs) ->
-        erlang:put(rule_sql_test_result, Data)
-    end.
-
-wait_feedback() ->
-    case erlang:erase(rule_sql_test_result) of
-        undefined -> {error, nomatch};
-        Data -> {ok, Data}
+        ?LOG(info, "Testing Rule SQL OK"), Data
     end.
 
 fill_default_values(Event, #{topic_filters := TopicFilters} = Context, Result) ->
