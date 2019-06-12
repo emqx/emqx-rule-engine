@@ -145,7 +145,8 @@ module_attributes(Module) ->
 create_rule(Params = #{rawsql := Sql, actions := Actions}) ->
     case emqx_rule_sqlparser:parse_select(Sql) of
         {ok, Select} ->
-            Rule = #rule{id = rule_id(),
+            RuleId = rule_id(),
+            Rule = #rule{id = RuleId,
                          rawsql = Sql,
                          for = emqx_rule_sqlparser:select_from(Select),
                          selects = emqx_rule_sqlparser:select_fields(Select),
@@ -153,6 +154,7 @@ create_rule(Params = #{rawsql := Sql, actions := Actions}) ->
                          actions = [prepare_action(Action) || Action <- Actions],
                          enabled = maps:get(enabled, Params, true),
                          description = maps:get(description, Params, "")},
+            emqx_rule_metrics:create(RuleId),
             ok = emqx_rule_registry:add_rule(Rule),
             {ok, Rule};
         Error -> error(Error)
@@ -167,6 +169,7 @@ delete_rule(RuleId) ->
                     {ok, #action{module = Mod, on_destroy = Destory}} = emqx_rule_registry:find_action(ActName),
                     cluster_call(clear_action, [Mod, Destory, Id])
                 end, Actions),
+            emqx_rule_metrics:clear(RuleId),
             emqx_rule_registry:remove_rule(RuleId);
         not_found ->
             ok
@@ -349,6 +352,7 @@ init_resource(Module, OnCreate, ResId, Config) ->
     emqx_rule_registry:add_resource_params(#resource_params{id = ResId, params = Params}).
 
 init_action(Module, OnCreate, ActionInstId, Params) ->
+    emqx_rule_metrics:create(ActionInstId),
     case ?RAISE(Module:OnCreate(ActionInstId, Params), {{init_action_failure, node()}, {{Module,OnCreate},_REASON_}}) of
         {Apply, NewParams} ->
             ok = emqx_rule_registry:add_action_instance_params(
@@ -371,8 +375,10 @@ clear_resource(Module, Destroy, ResId) ->
     end.
 
 clear_action(_Module, undefined, ActionInstId) ->
+    emqx_rule_metrics:clear(ActionInstId),
     ok = emqx_rule_registry:remove_action_instance_params(ActionInstId);
 clear_action(Module, Destroy, ActionInstId) ->
+    emqx_rule_metrics:clear(ActionInstId),
     case emqx_rule_registry:get_action_instance_params(ActionInstId) of
         {ok, #action_instance_params{params = Params}} ->
             ?RAISE(Module:Destroy(ActionInstId, Params),{{destroy_action_failure, node()},

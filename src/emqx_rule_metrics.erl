@@ -73,6 +73,10 @@
             overall_rule_speed :: #rule_speed{}
         }).
 
+%% TODO:
+%%    - Move overall metrics to emqx_metrics
+%%    - Move speed calculation to emqx_status
+
 %%------------------------------------------------------------------------------
 %% APIs
 %%------------------------------------------------------------------------------
@@ -88,26 +92,26 @@ clear(<<"rule:", _/binary>> = Id) ->
 clear(Id) ->
     gen_server:call(?MODULE, {delete_metrics, Id}).
 
--spec(get(rule_id(), atom()) -> number() | not_found).
+-spec(get(rule_id(), atom()) -> number()).
 get(Id, Metric) ->
     case couters_ref(Id) of
-        not_found -> not_found;
+        not_found -> 0;
         Ref -> counters:get(Ref, metrics_idx(Metric))
     end.
 
--spec(get_overall(atom()) -> number() | not_found).
+-spec(get_overall(atom()) -> number()).
 get_overall(Metric) ->
     case overall_couters_ref() of
-        not_found -> not_found;
+        not_found -> 0;
         Ref ->
             counters:get(Ref, metrics_idx(Metric))
     end.
 
--spec(get_rule_speed(atom()) -> map() | not_found).
+-spec(get_rule_speed(atom()) -> map()).
 get_rule_speed(Id) ->
     gen_server:call(?MODULE, {get_rule_speed, Id}).
 
--spec(get_overall_rule_speed() -> map() | not_found).
+-spec(get_overall_rule_speed() -> map()).
 get_overall_rule_speed() ->
     gen_server:call(?MODULE, get_overall_rule_speed).
 
@@ -143,10 +147,10 @@ init([]) ->
     {ok, #state{overall_rule_speed = #rule_speed{}}}.
 
 handle_call({get_rule_speed, _Id}, _From, State = #state{rule_speeds = undefined}) ->
-    {reply, not_found, State};
+    {reply, format_rule_speed(#rule_speed{}), State};
 handle_call({get_rule_speed, Id}, _From, State = #state{rule_speeds = RuleSpeeds}) ->
     {reply, case maps:get(Id, RuleSpeeds, undefined) of
-                undefined -> not_found;
+                undefined -> format_rule_speed(#rule_speed{});
                 Speed -> format_rule_speed(Speed)
             end, State};
 
@@ -158,11 +162,12 @@ handle_call({create_metrics, Id}, _From, State = #state{metric_ids = MIDs}) ->
 
 handle_call({create_rule_metrics, Id}, _From,
             State = #state{metric_ids = MIDs, rule_speeds = RuleSpeeds}) ->
-    {reply, create_counters(Id), State#state{metric_ids = sets:add_element(Id, MIDs),
-                            rule_speeds = case RuleSpeeds of
-                                              undefined -> #{Id => #rule_speed{}};
-                                              _ -> RuleSpeeds#{Id => #rule_speed{}}
-                                          end}};
+    {reply, create_counters(Id),
+     State#state{metric_ids = sets:add_element(Id, MIDs),
+                 rule_speeds =  case RuleSpeeds of
+                                    undefined -> #{Id => #rule_speed{}};
+                                    _ -> RuleSpeeds#{Id => #rule_speed{}}
+                                end}};
 
 handle_call({delete_metrics, Id}, _From,
             State = #state{metric_ids = MIDs, rule_speeds = undefined}) ->
@@ -170,11 +175,12 @@ handle_call({delete_metrics, Id}, _From,
 
 handle_call({delete_rule_metrics, Id}, _From,
             State = #state{metric_ids = MIDs, rule_speeds = RuleSpeeds}) ->
-    {reply, delete_counters(Id), State#state{metric_ids = sets:del_element(Id, MIDs),
-                            rule_speeds = case RuleSpeeds of
-                                              undefined -> undefined;
-                                              _ -> maps:remove(Id, RuleSpeeds)
-                                          end}};
+    {reply, delete_counters(Id),
+     State#state{metric_ids = sets:del_element(Id, MIDs),
+                 rule_speeds =  case RuleSpeeds of
+                                    undefined -> undefined;
+                                    _ -> maps:remove(Id, RuleSpeeds)
+                                end}};
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
