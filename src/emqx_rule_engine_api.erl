@@ -254,16 +254,9 @@ do_create_resource(Create, Params) ->
         throw:{resource_type_not_found, Type} ->
             return({error, 400, ?ERR_NO_RESOURCE_TYPE(Type)});
         throw:{init_resource_failure, Reason} ->
-            %% Note that we will return OK in case of resource creation failure,
-            %% users can always re-start the resource later.
-            case Create of
-                create_resource ->
-                    ?LOG(error, "[RuleEngineAPI] init_resource_failure: ~p", [Reason]),
-                    return(ok);
-                test_resource ->
-                    ?LOG(error, "[RuleEngineAPI] test_resource_failure: ~p", [Reason]),
-                    return({error, 500, <<"Test Creating Resource Failed">>})
-            end;
+            %% only test_resource would throw exceptions, create_resource won't
+            ?LOG(error, "[RuleEngineAPI] test_resource_failure: ~p", [Reason]),
+            return({error, 500, <<"Test Creating Resource Failed">>});
         throw:Reason ->
             return({error, 400, ?ERR_BADARGS(Reason)});
         _Error:Reason:StackT ->
@@ -361,10 +354,19 @@ record_to_map(#rule{id = Id,
                     actions = Actions,
                     enabled = Enabled,
                     description = Descr}) ->
+    #{max := Max, current := Current, last5m := Last5M} = emqx_rule_metrics:get_rule_speed(Id),
+    Metrics = #{
+        matched => emqx_rule_metrics:get(Id, 'rule.matched'),
+        nomatch => emqx_rule_metrics:get(Id, 'rule.nomatch'),
+        speed => Current,
+        speed_max => Max,
+        speed_last5m => Last5M
+    },
     #{id => Id,
       for => Hook,
       rawsql => RawSQL,
       actions => printable_actions(Actions),
+      metrics => Metrics,
       enabled => Enabled,
       description => Descr
      };
@@ -410,8 +412,13 @@ record_to_map(#resource_type{name = Name,
      }.
 
 printable_actions(Actions) ->
-    [#{name => Name, params => Args}
-     || #action_instance{name = Name, args = Args} <- Actions].
+    [begin
+        Metrics = #{
+            success => emqx_rule_metrics:get(Id, 'actions.success'),
+            failed => emqx_rule_metrics:get(Id, 'actions.failed')
+        },
+        #{name => Name, params => Args, metrics => Metrics}
+     end || #action_instance{id = Id, name = Name, args = Args} <- Actions].
 
 parse_rule_params(Params) ->
     parse_rule_params(Params, #{description => <<"">>}).
@@ -453,24 +460,20 @@ rule_sql_test(#{<<"rawsql">> := Sql, <<"ctx">> := Context}) ->
                 ok = emqx_rule_registry:add_action_instance_params(
                         #action_instance_params{id = ActInstId,
                                                 params = #{},
-                                                apply = feedback_action()}),
+                                                apply = sql_test_action()}),
                 emqx_rule_runtime:apply_rule(Rule, FullContext)
+            of
+                {ok, [Data]} -> {ok, Data};
+                {error, nomatch} -> {error, nomatch}
             after
                 ok = emqx_rule_registry:remove_action_instance_params(ActInstId)
-            end,
-            wait_feedback();
+            end;
         Error -> error(Error)
     end.
 
-feedback_action() ->
+sql_test_action() ->
     fun(Data, _Envs) ->
-        erlang:put(rule_sql_test_result, Data)
-    end.
-
-wait_feedback() ->
-    case erlang:erase(rule_sql_test_result) of
-        undefined -> {error, nomatch};
-        Data -> {ok, Data}
+        ?LOG(info, "Testing Rule SQL OK"), Data
     end.
 
 fill_default_values(Event, #{topic_filters := TopicFilters} = Context, Result) ->
