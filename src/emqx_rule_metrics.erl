@@ -45,7 +45,7 @@
 
 -ifndef(TEST).
 -define(SECS_5M, 300).
--define(SAMPLING, 5).
+-define(SAMPLING, 10).
 -else.
 %% Use 5 secs average speed instead of 5 mins in case of testing
 -define(SECS_5M, 5).
