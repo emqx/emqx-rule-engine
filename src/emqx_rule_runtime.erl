@@ -122,7 +122,8 @@ apply_rules_fun(Hook) ->
 rules_for(Hook) ->
     emqx_rule_registry:get_rules_for(Hook).
 
--spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
+-spec(apply_rules(list(emqx_rule_engine:rule()), map())
+        -> {ok, [ActionResult::term()]} | {error, nomatch}).
 apply_rules([], _Input) ->
     ok;
 apply_rules([#rule{enabled = false}|More], Input) ->
@@ -136,13 +137,20 @@ apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
     end,
     apply_rules(More, Input).
 
-apply_rule(#rule{selects = Selects,
+apply_rule(#rule{id = RuleId,
+                 selects = Selects,
                  conditions = Conditions,
                  actions = Actions}, Input) ->
     Columns = columns(Input),
     Selected = select_and_transform(Selects, Columns),
-    match_conditions(Conditions, maps:merge(Columns, Selected))
-        andalso take_actions(Actions, Selected, Input).
+    case match_conditions(Conditions, maps:merge(Columns, Selected)) of
+        true ->
+            ok = emqx_rule_metrics:inc(RuleId, 'rule.matched'),
+            {ok, take_actions(Actions, Selected, Input)};
+        false ->
+            ok = emqx_rule_metrics:inc(RuleId, 'rule.nomatch'),
+            {error, nomatch}
+    end.
 
 %% Step1 -> Select and transform data
 select_and_transform(Fields, Input) ->
@@ -207,12 +215,20 @@ number(Bin) ->
 
 %% Step3 -> Take actions
 take_actions(Actions, Selected, Envs) ->
-    lists:foreach(fun(Action) -> take_action(Action, Selected, Envs) end, Actions).
+    lists:map(fun(Action) -> take_action(Action, Selected, Envs) end, Actions).
 
 take_action(#action_instance{id = Id}, Selected, Envs) ->
     {ok, #action_instance_params{apply = Apply}}
         = emqx_rule_registry:get_action_instance_params(Id),
-    Apply(Selected, Envs).
+    try
+        Result = Apply(Selected, Envs),
+        emqx_rule_metrics:inc(Id, 'actions.success'),
+        Result
+    catch
+        _Error:Reason:Stack ->
+            emqx_rule_metrics:inc(Id, 'actions.failed'),
+            error({Reason, Stack})
+    end.
 
 eval({var, Var}, Input) -> %% nested
     nested_get(emqx_rule_utils:atom_key(Var), Input);
