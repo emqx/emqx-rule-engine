@@ -148,7 +148,6 @@ apply_rule(#rule{id = RuleId,
             ok = emqx_rule_metrics:inc(RuleId, 'rule.matched'),
             {ok, take_actions(Actions, Selected, Input)};
         false ->
-            ok = emqx_rule_metrics:inc(RuleId, 'rule.nomatch'),
             {error, nomatch}
     end.
 
@@ -226,7 +225,7 @@ take_action(#action_instance{id = Id}, Selected, Envs) ->
         Result
     catch
         _Error:Reason:Stack ->
-            emqx_rule_metrics:inc(Id, 'actions.failed'),
+            emqx_rule_metrics:inc(Id, 'actions.failure'),
             error({Reason, Stack})
     end.
 

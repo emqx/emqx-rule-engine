@@ -224,7 +224,6 @@ format(#rule{id = Id,
     #{max := Max, current := Current, last5m := Last5M} = emqx_rule_metrics:get_rule_speed(Id),
     Metrics = #{
         matched => emqx_rule_metrics:get(Id, 'rule.matched'),
-        nomatch => emqx_rule_metrics:get(Id, 'rule.nomatch'),
         speed => Current,
         speed_max => Max,
         speed_last5m => Last5M
@@ -268,7 +267,7 @@ printable_actions(Actions) when is_list(Actions) ->
     jsx:encode([begin
                     Metrics = #{
                         success => emqx_rule_metrics:get(Id, 'actions.success'),
-                        failed => emqx_rule_metrics:get(Id, 'actions.failed')
+                        failed => emqx_rule_metrics:get(Id, 'actions.failure')
                     },
                     #{name => Name, params => Args, metrics => Metrics}
                 end || #action_instance{id = Id, name = Name, args = Args} <- Actions]).
