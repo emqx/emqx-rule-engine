@@ -94,10 +94,10 @@ on_message_dropped(_, Message = #message{topic = <<"$SYS/", _/binary>>},
                    #{ignore_sys_message := true}) ->
     {ok, Message};
 
-on_message_dropped(#{node := Node}, Message, #{apply_fun := ApplyRules}) ->
+on_message_dropped(_, Message, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Message dropped for no subscription: ~s",
          [emqx_message:format(Message)]),
-    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.dropped', node => Node})),
+    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.dropped', node => node()})),
     {ok, Message}.
 
 on_message_deliver(Credentials = #{client_id := ClientId}, Message, #{apply_fun := ApplyRules}) ->
@@ -349,3 +349,4 @@ peername(undefined) ->
     null;
 peername({IPAddr, Port}) ->
     list_to_binary(inet:ntoa(IPAddr) ++ ":" ++ integer_to_list(Port)).
+
