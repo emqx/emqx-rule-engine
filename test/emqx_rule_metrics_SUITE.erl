@@ -40,19 +40,21 @@ groups() ->
 
 init_per_suite(Config) ->
     emqx_ct_helpers:start_apps([emqx]),
+    {ok, _} = emqx_rule_metrics:start_link(),
     Config.
 
 end_per_suite(_Config) ->
+    catch emqx_rule_metrics:stop(),
     emqx_ct_helpers:stop_apps([emqx]),
     ok.
 
 init_per_testcase(_, Config) ->
+    catch emqx_rule_metrics:stop(),
     {ok, _} = emqx_rule_metrics:start_link(),
     [emqx_metrics:set(M, 0) || M <- emqx_rule_metrics:overall_metrics()],
     Config.
 
 end_per_testcase(_, _Config) ->
-    emqx_rule_metrics:stop(),
     ok.
 
 t_action(_) ->

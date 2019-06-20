@@ -94,6 +94,7 @@
 -record(resource_params,
         { id :: resource_id()
         , params :: #{} %% the params got after initializing the resource
+        , status = #{is_alive => false} :: #{is_alive := boolean(), atom() => term()}
         }).
 
 -record(action_instance_params,
