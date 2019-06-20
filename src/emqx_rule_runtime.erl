@@ -94,10 +94,10 @@ on_message_dropped(_, Message = #message{topic = <<"$SYS/", _/binary>>},
                    #{ignore_sys_message := true}) ->
     {ok, Message};
 
-on_message_dropped(#{node := Node}, Message, #{apply_fun := ApplyRules}) ->
+on_message_dropped(_, Message, #{apply_fun := ApplyRules}) ->
     ?LOG(debug, "[RuleEngine] Message dropped for no subscription: ~s",
          [emqx_message:format(Message)]),
-    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.dropped', node => Node})),
+    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.dropped', node => node()})),
     {ok, Message}.
 
 on_message_deliver(Credentials = #{client_id := ClientId}, Message, #{apply_fun := ApplyRules}) ->
@@ -148,7 +148,6 @@ apply_rule(#rule{id = RuleId,
             ok = emqx_rule_metrics:inc(RuleId, 'rule.matched'),
             {ok, take_actions(Actions, Selected, Input)};
         false ->
-            ok = emqx_rule_metrics:inc(RuleId, 'rule.nomatch'),
             {error, nomatch}
     end.
 
@@ -226,7 +225,7 @@ take_action(#action_instance{id = Id}, Selected, Envs) ->
         Result
     catch
         _Error:Reason:Stack ->
-            emqx_rule_metrics:inc(Id, 'actions.failed'),
+            emqx_rule_metrics:inc(Id, 'actions.failure'),
             error({Reason, Stack})
     end.
 
@@ -349,3 +348,4 @@ peername(undefined) ->
     null;
 peername({IPAddr, Port}) ->
     list_to_binary(inet:ntoa(IPAddr) ++ ":" ++ integer_to_list(Port)).
+
