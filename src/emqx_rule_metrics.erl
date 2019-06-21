@@ -184,9 +184,9 @@ handle_info(ticking, State = #state{rule_speeds = RuleSpeeds0,
                                        overall_rule_speed = OverallRuleSpeed0}) ->
     RuleSpeeds = maps:map(
                     fun(Id, RuleSpeed) ->
-                        calculate_speed(get(Id, 'rule.matched'), RuleSpeed)
+                        calculate_speed(get(Id, 'rules.matched'), RuleSpeed)
                     end, RuleSpeeds0),
-    OverallRuleSpeed = calculate_speed(get_overall('rule.matched'), OverallRuleSpeed0),
+    OverallRuleSpeed = calculate_speed(get_overall('rules.matched'), OverallRuleSpeed0),
     emqx_rule_engine:refresh_resource_status(),
     erlang:send_after(timer:seconds(?SAMPLING), self(), ticking),
     {noreply, State#state{rule_speeds = RuleSpeeds,
@@ -265,10 +265,10 @@ precision(Float, N) ->
 
 max_counters_size() -> 4.
 
-metrics_idx('rule.matched') ->      1;
+metrics_idx('rules.matched') ->      1;
 metrics_idx('actions.success') ->   2;
 metrics_idx('actions.failure') ->   3;
 metrics_idx(_) ->                   4.
 
 overall_metrics() ->
-    ['rule.matched', 'actions.success', 'actions.failure'].
+    ['rules.matched', 'actions.success', 'actions.failure'].

@@ -73,13 +73,13 @@ t_action(_) ->
     ?assertEqual(1, emqx_rule_metrics:get_overall('actions.failure')).
 
 t_rule(_) ->
-    ok = emqx_rule_metrics:inc(<<"rule:1">>, 'rule.matched'),
-    ok = emqx_rule_metrics:inc(<<"rule:2">>, 'rule.matched'),
-    ok = emqx_rule_metrics:inc(<<"rule:2">>, 'rule.matched'),
-    ?assertEqual(1, emqx_rule_metrics:get(<<"rule:1">>, 'rule.matched')),
-    ?assertEqual(2, emqx_rule_metrics:get(<<"rule:2">>, 'rule.matched')),
-    ?assertEqual(0, emqx_rule_metrics:get(<<"rule:3">>, 'rule.matched')),
-    ?assertEqual(3, emqx_rule_metrics:get_overall('rule.matched')).
+    ok = emqx_rule_metrics:inc(<<"rule:1">>, 'rules.matched'),
+    ok = emqx_rule_metrics:inc(<<"rule:2">>, 'rules.matched'),
+    ok = emqx_rule_metrics:inc(<<"rule:2">>, 'rules.matched'),
+    ?assertEqual(1, emqx_rule_metrics:get(<<"rule:1">>, 'rules.matched')),
+    ?assertEqual(2, emqx_rule_metrics:get(<<"rule:2">>, 'rules.matched')),
+    ?assertEqual(0, emqx_rule_metrics:get(<<"rule:3">>, 'rules.matched')),
+    ?assertEqual(3, emqx_rule_metrics:get_overall('rules.matched')).
 
 t_clear(_) ->
     ok = emqx_rule_metrics:inc(<<"action:1">>, 'actions.success'),
@@ -88,10 +88,10 @@ t_clear(_) ->
     ?assertEqual(0, emqx_rule_metrics:get(<<"action:1">>, 'actions.success')).
 
 rule_speed(_) ->
-    ok = emqx_rule_metrics:inc(<<"rule:1">>, 'rule.matched'),
-    ok = emqx_rule_metrics:inc(<<"rule:1">>, 'rule.matched'),
-    ok = emqx_rule_metrics:inc(<<"rule:2">>, 'rule.matched'),
-    ?assertEqual(2, emqx_rule_metrics:get(<<"rule:1">>, 'rule.matched')),
+    ok = emqx_rule_metrics:inc(<<"rule:1">>, 'rules.matched'),
+    ok = emqx_rule_metrics:inc(<<"rule:1">>, 'rules.matched'),
+    ok = emqx_rule_metrics:inc(<<"rule:2">>, 'rules.matched'),
+    ?assertEqual(2, emqx_rule_metrics:get(<<"rule:1">>, 'rules.matched')),
     ct:sleep(1000),
     ?LET(#{max := Max, current := Current}, emqx_rule_metrics:get_rule_speed(<<"rule:1">>),
          {?assert(Max =< 2),
