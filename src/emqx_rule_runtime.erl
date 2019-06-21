@@ -145,7 +145,7 @@ apply_rule(#rule{id = RuleId,
     Selected = select_and_transform(Selects, Columns),
     case match_conditions(Conditions, maps:merge(Columns, Selected)) of
         true ->
-            ok = emqx_rule_metrics:inc(RuleId, 'rule.matched'),
+            ok = emqx_rule_metrics:inc(RuleId, 'rules.matched'),
             {ok, take_actions(Actions, Selected, Input)};
         false ->
             {error, nomatch}

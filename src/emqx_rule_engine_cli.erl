@@ -223,7 +223,7 @@ format(#rule{id = Id,
              description = Descr}) ->
     #{max := Max, current := Current, last5m := Last5M} = emqx_rule_metrics:get_rule_speed(Id),
     Metrics = #{
-        matched => emqx_rule_metrics:get(Id, 'rule.matched'),
+        matched => emqx_rule_metrics:get(Id, 'rules.matched'),
         speed => Current,
         speed_max => Max,
         speed_last5m => Last5M
