@@ -21,6 +21,7 @@
         , unload_providers/0
         , refresh_resources/0
         , refresh_rules/0
+        , refresh_resource_status/0
         ]).
 
 -export([ create_rule/1
@@ -52,6 +53,8 @@
              , resource_params/0
              , action_instance_params/0
              ]).
+
+-define(ALARM_ID_RES_DOWN(RES_ID), <<"resource_down/", RES_ID/binary>>).
 
 %%------------------------------------------------------------------------------
 %% Load resource/action providers from all available applications
@@ -282,6 +285,17 @@ refresh_rules() ->
                             [Error, StackTrace])
     end.
 
+-spec(refresh_resource_status() -> ok).
+refresh_resource_status() ->
+    lists:foreach(
+        fun(#resource{id = ResId, type = ResType}) ->
+            case emqx_rule_registry:find_resource_type(ResType) of
+                {ok, #resource_type{on_status = {Mod, OnStatus}}} ->
+                    fetch_resource_status(Mod, OnStatus, ResId);
+                _ -> ok
+            end
+        end, emqx_rule_registry:get_resources()).
+
 %%------------------------------------------------------------------------------
 %% Internal Functions
 %%------------------------------------------------------------------------------
@@ -390,14 +404,24 @@ clear_action(Module, Destroy, ActionInstId) ->
 
 fetch_resource_status(Module, OnStatus, ResId) ->
     case emqx_rule_registry:find_resource_params(ResId) of
-        {ok, #resource_params{params = Params}} ->
-            Status =
-                try Module:OnStatus(ResId, Params)
-                catch _Error:Reason:STrace ->
-                    ?LOG(error, "get resource status for ~p failed: ~0p", [ResId, {Reason, STrace}]),
-                    #{is_alive => false}
-                end,
-            Status;
+        {ok, ResParams = #resource_params{params = Params, status = #{is_alive := LastIsAlive}}} ->
+            try
+                NewStatus =
+                    case Module:OnStatus(ResId, Params) of
+                        #{is_alive := LastIsAlive} = Status -> Status;
+                        #{is_alive := true} = Status ->
+                            alarm_handler:clear_alarm(?ALARM_ID_RES_DOWN(ResId)),
+                            Status;
+                        #{is_alive := false} = Status ->
+                            alarm_handler:set_alarm({?ALARM_ID_RES_DOWN(ResId), "Resource Down"}),
+                            Status
+                    end,
+                emqx_rule_registry:add_resource_params(ResParams#resource_params{status = NewStatus}),
+                NewStatus
+            catch _Error:Reason:STrace ->
+                ?LOG(error, "get resource status for ~p failed: ~0p", [ResId, {Reason, STrace}]),
+                #{is_alive => false}
+            end;
         not_found ->
             #{is_alive => false}
     end.

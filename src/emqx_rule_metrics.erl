@@ -27,12 +27,11 @@
         , inc/3
         , get/2
         , get_overall/1
-        ]).
-
--export([ create/1
-        , clear/1
         , get_rule_speed/1
         , get_overall_rule_speed/0
+        , create/1
+        , clear/1
+        , overall_metrics/0
         ]).
 
 %% gen_server callbacks
@@ -73,10 +72,6 @@
             overall_rule_speed :: #rule_speed{}
         }).
 
-%% TODO:
-%%    - Move overall metrics to emqx_metrics
-%%    - Move speed calculation to emqx_status
-
 %%------------------------------------------------------------------------------
 %% APIs
 %%------------------------------------------------------------------------------
@@ -101,11 +96,7 @@ get(Id, Metric) ->
 
 -spec(get_overall(atom()) -> number()).
 get_overall(Metric) ->
-    case overall_couters_ref() of
-        not_found -> 0;
-        Ref ->
-            counters:get(Ref, metrics_idx(Metric))
-    end.
+    emqx_metrics:val(Metric).
 
 -spec(get_rule_speed(atom()) -> map()).
 get_rule_speed(Id) ->
@@ -129,10 +120,7 @@ inc(Id, Metric, Val) ->
 
 -spec(inc_overall(rule_id(), atom()) -> ok).
 inc_overall(Metric, Val) ->
-    case overall_couters_ref() of
-        not_found -> ok;
-        Ref -> counters:add(Ref, metrics_idx(Metric), Val)
-    end.
+    emqx_metrics:inc(Metric, Val).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -140,10 +128,9 @@ start_link() ->
 init([]) ->
     erlang:process_flag(trap_exit, true),
     %% the overall counters
-    CRef = counters:new(max_counters_size(), [write_concurrency]),
-    ok = persistent_term:put(?MODULE, CRef),
+    [ok = emqx_metrics:new(Metric)|| Metric <- overall_metrics()],
     %% the speed metrics
-    erlang:send_after(timer:seconds(?SAMPLING), self(), calc_speed),
+    erlang:send_after(timer:seconds(?SAMPLING), self(), ticking),
     {ok, #state{overall_rule_speed = #rule_speed{}}}.
 
 handle_call({get_rule_speed, _Id}, _From, State = #state{rule_speeds = undefined}) ->
@@ -188,18 +175,20 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info(calc_speed, State = #state{rule_speeds = undefined}) ->
-    erlang:send_after(timer:seconds(?SAMPLING), self(), calc_speed),
+handle_info(ticking, State = #state{rule_speeds = undefined}) ->
+    emqx_rule_engine:refresh_resource_status(),
+    erlang:send_after(timer:seconds(?SAMPLING), self(), ticking),
     {noreply, State};
 
-handle_info(calc_speed, State = #state{rule_speeds = RuleSpeeds0,
+handle_info(ticking, State = #state{rule_speeds = RuleSpeeds0,
                                        overall_rule_speed = OverallRuleSpeed0}) ->
     RuleSpeeds = maps:map(
                     fun(Id, RuleSpeed) ->
-                        calculate_speed(get(Id, 'rule.matched'), RuleSpeed)
+                        calculate_speed(get(Id, 'rules.matched'), RuleSpeed)
                     end, RuleSpeeds0),
-    OverallRuleSpeed = calculate_speed(get_overall('rule.matched'), OverallRuleSpeed0),
-    erlang:send_after(timer:seconds(?SAMPLING), self(), calc_speed),
+    OverallRuleSpeed = calculate_speed(get_overall('rules.matched'), OverallRuleSpeed0),
+    emqx_rule_engine:refresh_resource_status(),
+    erlang:send_after(timer:seconds(?SAMPLING), self(), ticking),
     {noreply, State#state{rule_speeds = RuleSpeeds,
                           overall_rule_speed = OverallRuleSpeed}};
 
@@ -228,12 +217,6 @@ delete_counters(Id) ->
 
 couters_ref(Id) ->
     try persistent_term:get(?CRefID(Id))
-    catch
-        error:badarg -> not_found
-    end.
-
-overall_couters_ref() ->
-    try persistent_term:get(?MODULE)
     catch
         error:badarg -> not_found
     end.
@@ -280,10 +263,12 @@ precision(Float, N) ->
 %% Metrics Definitions
 %%------------------------------------------------------------------------------
 
-max_counters_size() -> 5.
+max_counters_size() -> 4.
 
-metrics_idx('rule.matched') ->      1;
-metrics_idx('rule.nomatch') ->      2;
-metrics_idx('actions.success') ->   3;
-metrics_idx('actions.failed') ->    4;
-metrics_idx(_) ->                   5.
+metrics_idx('rules.matched') ->      1;
+metrics_idx('actions.success') ->   2;
+metrics_idx('actions.failure') ->   3;
+metrics_idx(_) ->                   4.
+
+overall_metrics() ->
+    ['rules.matched', 'actions.success', 'actions.failure'].
