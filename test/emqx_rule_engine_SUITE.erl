@@ -133,6 +133,7 @@ init_per_testcase(t_events, Config) ->
                          , 'client.subscribe'
                          , 'client.unsubscribe'
                          ]),
+    ok = emqx_rule_registry:register_resource_types([make_simple_resource_type(simple_resource_type)]),
     ok = emqx_rule_registry:add_action(
             #action{name = 'hook-metrics-action', app = ?APP,
                     module = ?MODULE, on_create = hook_metrics_action,
@@ -696,11 +697,14 @@ make_simple_resource_type(ResTypeName) ->
     #resource_type{name = ResTypeName, provider = ?APP,
                    params_spec = #{},
                    on_create = {?MODULE, on_simple_resource_type_create},
+                   on_destroy = {?MODULE, on_simple_resource_type_destroy},
+                   on_status = {?MODULE, on_simple_resource_type_status},
                    title = #{en => <<"Simple Resource Type">>},
                    description = #{en => <<"Simple Resource Type">>}}.
 
-on_simple_resource_type_create(_Id, #{}) ->
-    #{}.
+on_simple_resource_type_create(_Id, #{}) -> #{}.
+on_simple_resource_type_destroy(_Id, #{}) -> ok.
+on_simple_resource_type_status(_Id, #{}, #{}) -> #{is_alive => true}.
 
 hook_metrics_action(_Id, _Params) ->
     fun(_Data = #{event := Hookpoint}, _Events) ->
@@ -720,6 +724,7 @@ init_events_counters(Hookpoints) ->
 %%------------------------------------------------------------------------------
 
 stop_apps() ->
+    stopped = mnesia:stop(),
     [application:stop(App) || App <- [emqx_rule_engine, emqx]].
 
 start_apps() ->
