@@ -26,7 +26,7 @@
                 required => true,
                 title => #{en => <<"Target Topic">>,
                            zh => <<"目的主题"/utf8>>},
-                description => #{en => <<"Repubilsh the message to which topic">>,
+                description => #{en => <<"To which topic the message will be republished">>,
                                  zh => <<"重新发布消息到哪个主题"/utf8>>}
             }
         }).
@@ -49,7 +49,7 @@
                params => ?REPUBLISH_PARAMS_SPEC,
                title => #{en => <<"Republish">>,
                           zh => <<"消息重新发布"/utf8>>},
-               description => #{en => <<"Republish a MQTT message to a another topic">>,
+               description => #{en => <<"Republish a MQTT message to another topic">>,
                                 zh => <<"重新发布消息到另一个主题"/utf8>>}
               }).
 
