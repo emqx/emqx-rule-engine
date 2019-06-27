@@ -230,6 +230,8 @@ format(#rule{id = Id,
     },
     lists:flatten(io_lib:format("rule(id='~s', for='~0p', rawsql='~s', actions=~s, metrics=~0p, enabled='~s', description='~s')~n", [Id, Hook, Sql, printable_actions(Actions), Metrics, Enabled, Descr]));
 
+format(#action{hidden = true}) ->
+    ok;
 format(#action{name = Name,
                for = Hook,
                app = App,
