@@ -53,6 +53,17 @@
                                 zh => <<"重新发布消息到另一个主题"/utf8>>}
               }).
 
+-rule_action(#{name => do_nothing,
+               for => '$any',
+               types => [],
+               create => on_action_do_nothing,
+               params => #{},
+               title => #{en => <<"Do Nothing (debug)">>,
+                          zh => <<"空动作 (调试)"/utf8>>},
+               description => #{en => <<"This action does nothing and never fails. It's for debug purpose">>,
+                                zh => <<"此动作什么都不做，并且不会失败 (用以调试)"/utf8>>}
+              }).
+
 -type(action_fun() :: fun((SelectedData::map(), Envs::map()) -> Result::any())).
 
 -export_type([action_fun/0]).
@@ -61,6 +72,7 @@
 
 -export([ on_action_create_inspect/2
         , on_action_create_republish/2
+        , on_action_do_nothing/2
         ]).
 
 %%------------------------------------------------------------------------------
@@ -100,6 +112,9 @@ on_action_create_republish(_Id, #{<<"target_topic">> := TargetTopic}) ->
                 timestamp = erlang:timestamp()
             })
     end.
+
+on_action_do_nothing(_, _) ->
+    fun(_, _) -> ok end.
 
 republish_from(Client) ->
     C = bin(Client), <<"action:republish:", C/binary>>.
