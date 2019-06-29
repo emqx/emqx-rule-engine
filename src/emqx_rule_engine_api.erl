@@ -337,8 +337,14 @@ if_test(True, False, Params) ->
     end.
 
 return_all(Records) ->
-    Data = lists:map(fun record_to_map/1, Records),
+    Data = lists:foldr(fun maybe_record_to_map/2, [], Records),
     return({ok, Data}).
+
+maybe_record_to_map(Rec, Acc) ->
+    case record_to_map(Rec) of
+        ignore -> Acc;
+        Map -> [Map | Acc]
+    end.
 
 reply_with(Find, Key) ->
     case Find(Key) of
@@ -370,6 +376,8 @@ record_to_map(#rule{id = Id,
       description => Descr
      };
 
+record_to_map(#action{hidden = true}) ->
+    ignore;
 record_to_map(#action{name = Name,
                       app = App,
                       for = Hook,

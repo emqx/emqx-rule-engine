@@ -45,6 +45,7 @@
         , module :: module()
         , on_create :: mf()
         , on_destroy :: maybe(mf())
+        , hidden = false :: boolean()
         , params_spec :: #{atom() => term()} %% params specs
         , title = ?descr :: descr()
         , description = ?descr :: descr()
