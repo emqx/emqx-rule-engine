@@ -161,6 +161,7 @@ bin(Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8).
 sql_data(List) when is_list(List) -> List;
 sql_data(Bin) when is_binary(Bin) -> Bin;
 sql_data(Num) when is_number(Num) -> Num;
+sql_data(Bool) when is_boolean(Bool) -> Bool;
 sql_data(Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8).
 
 number_to_binary(Int) when is_integer(Int) ->

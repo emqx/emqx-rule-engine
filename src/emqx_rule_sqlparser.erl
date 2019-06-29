@@ -115,7 +115,7 @@ do_transform_field(<<"payload.", Attr/binary>>, Columns) ->
 do_transform_field({Op, Arg1, Arg2}, Columns) when ?is_arith(Op) ->
     {Op, transform_field(Arg1, Columns), transform_field(Arg2, Columns)};
 do_transform_field(Var, Columns) when is_binary(Var) ->
-    {var, validate_var(parse_nested(Var), Columns)};
+    {var, validate_var(escape(parse_nested(Var)), Columns)};
 do_transform_field({'fun', Name, Args}, Columns) when is_binary(Name) ->
     Fun = list_to_existing_atom(binary_to_list(Name)),
     {'fun', Fun, [transform_field(Arg, Columns) || Arg <- Args]}.
@@ -125,19 +125,19 @@ transform_non_const_field(<<"payload.", Attr/binary>>) ->
 transform_non_const_field({Op, Arg1, Arg2}) when ?is_arith(Op) ->
     {Op, transform_non_const_field(Arg1), transform_non_const_field(Arg2)};
 transform_non_const_field(Var) when is_binary(Var) ->
-    {var, parse_nested(Var)};
+    {var, escape(parse_nested(Var))};
 transform_non_const_field({'fun', Name, Args}) when is_binary(Name) ->
     Fun = list_to_existing_atom(binary_to_list(Name)),
     {'fun', Fun, [transform_non_const_field(Arg) || Arg <- Args]}.
 
 validate_var(Var, SupportedColumns) ->
     case {Var, lists:member(Var, SupportedColumns)} of
-        {_, true} -> Var;
+        {_, true} -> escape(Var);
         {[TopVar | _], false} ->
             lists:member(TopVar, SupportedColumns) orelse error({unknown_column, Var}),
-            Var;
+            escape(Var);
         {_, false} ->
-            error({unknown_column, Var})
+            error({unknown_column, escape(Var)})
     end.
 
 is_number_str(Str) when is_binary(Str) ->
@@ -169,6 +169,10 @@ parse_nested(Attr) ->
         [Attr] -> Attr;
         Nested -> Nested
     end.
+
+%% escape the SQL reserved key words
+escape(<<"TIMESTAMP">>) -> <<"timestamp">>;
+escape(Var) -> Var.
 
 unquote(Topic) ->
     string:trim(Topic, both, "\"'").

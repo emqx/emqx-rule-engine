@@ -310,6 +310,10 @@ columns(Input = #{id := Id}, Result) ->
 columns(Input = #{from := From}, Result) ->
     columns(maps:remove(from, Input),
             Result#{client_id => From});
+columns(Input = #{flags := Flags}, Result) ->
+    Retain = maps:get(retain, Flags, false),
+    columns(maps:remove(flags, Input),
+            maps:merge(Result, #{retain => int(Retain)}));
 columns(Input = #{headers := Headers}, Result) ->
     Username = maps:get(username, Headers, null),
     Peername = peername(maps:get(peername, Headers, undefined)),
@@ -349,3 +353,5 @@ peername(undefined) ->
 peername({IPAddr, Port}) ->
     list_to_binary(inet:ntoa(IPAddr) ++ ":" ++ integer_to_list(Port)).
 
+int(true) -> 1;
+int(false) -> 0.
