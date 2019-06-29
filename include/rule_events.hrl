@@ -30,6 +30,7 @@
                 , 'client.subscribe'
                 , 'client.unsubscribe'
                 ];
+           '$any' -> '$any';
            _ -> ['$any', ALIAS]
         end).
 

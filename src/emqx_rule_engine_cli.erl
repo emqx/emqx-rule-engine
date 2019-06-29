@@ -32,7 +32,7 @@
 -define(OPTSPEC_RESOURCE_TYPE,
         [{type, $t, "type", {atom, undefined}, "Resource Type"}]).
 -define(OPTSPEC_ACTION_TYPE,
-        [ {hook, $k, "hook", {atom, undefined}, "Event Type"}
+        [ {eventype, $k, "eventype", {atom, undefined}, "Event Type"}
         ]).
 
 -define(OPTSPEC_RESOURCES_CREATE,
@@ -113,14 +113,14 @@ rules(_usage) ->
 
 actions(["list" | Params]) ->
     with_opts(fun({Opts, _}) ->
-            print_all(get_actions(get_value(hook, Opts)))
+            print_all(get_actions(get_value(eventype, Opts)))
         end, Params, ?OPTSPEC_ACTION_TYPE, {'rule-actions', list});
 
 actions(["show", ActionId]) ->
     print_with(fun emqx_rule_registry:find_action/1, ?RAISE(list_to_existing_atom(ActionId), {not_found, ActionId}));
 
 actions(_usage) ->
-    emqx_cli:usage([{"rule-actions list",            "List all actions"},
+    emqx_cli:usage([{"rule-actions list",            "List actions"},
                     {"rule-actions show <ActionId>", "Show a rule action"}
                    ]).
 
@@ -176,7 +176,7 @@ resources(["delete", ResourceId]) ->
 
 resources(_usage) ->
     emqx_cli:usage([{"resources create", "Create a resource"},
-                    {"resources list [-t <ResourceType>]", "List all resources"},
+                    {"resources list [-t <ResourceType>]", "List resources"},
                     {"resources show <ResourceId>", "Show a resource"},
                     {"resources delete <ResourceId>", "Delete a resource"}
                    ]).
