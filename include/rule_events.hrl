@@ -40,7 +40,6 @@
                 [ <<"client_id">>
                 , <<"username">>
                 , <<"event">>
-                , <<"flags">>
                 , <<"id">>
                 , <<"payload">>
                 , <<"peername">>
@@ -54,7 +53,6 @@
                 , <<"event">>
                 , <<"auth_result">>
                 , <<"mountpoint">>
-                , <<"flags">>
                 , <<"id">>
                 , <<"payload">>
                 , <<"peername">>
@@ -66,7 +64,6 @@
                 [ <<"client_id">>
                 , <<"username">>
                 , <<"event">>
-                , <<"flags">>
                 , <<"id">>
                 , <<"payload">>
                 , <<"peername">>
@@ -78,7 +75,6 @@
                 [ <<"client_id">>
                 , <<"username">>
                 , <<"event">>
-                , <<"flags">>
                 , <<"id">>
                 , <<"node">>
                 , <<"payload">>
@@ -135,6 +131,134 @@
         RuleType ->
                 error({unknown_rule_type, RuleType})
         end).
+
+-define(TEST_COLUMNS_MESSGE,
+        [ {<<"client_id">>, <<"c_emqx">>}
+        , {<<"username">>, <<"u_emqx">>}
+        , {<<"topic">>, <<"t/a">>}
+        , {<<"qos">>, 1}
+        , {<<"payload">>, <<"{\"msg\": \"hello\"}">>}
+        ]).
+
+-define(TEST_COLUMNS(EVENT),
+        case EVENT of
+        'message.publish' -> ?TEST_COLUMNS_MESSGE;
+        'message.deliver' -> ?TEST_COLUMNS_MESSGE;
+        'message.acked' -> ?TEST_COLUMNS_MESSGE;
+        'message.dropped' -> ?TEST_COLUMNS_MESSGE;
+        'client.connected' ->
+            [ {<<"client_id">>, <<"c_emqx">>}
+            , {<<"username">>, <<"u_emqx">>}
+            , {<<"auth_result">>, <<"success">>}
+            , {<<"peername">>, <<"127.0.0.1:63412">>}
+            ];
+        'client.disconnected' ->
+            [ {<<"client_id">>, <<"c_emqx">>}
+            , {<<"username">>, <<"u_emqx">>}
+            , {<<"reason_code">>, <<"normal">>}
+            ];
+        'client.subscribe' ->
+            [ {<<"client_id">>, <<"c_emqx">>}
+            , {<<"username">>, <<"u_emqx">>}
+            , {<<"topic_filters">>,
+               [ [{<<"topic">>, <<"t/a">>}, {<<"qos">>, 0}]
+               , [{<<"topic">>, <<"t/b">>}, {<<"qos">>, 1}]
+               ]}
+            ];
+        'client.unsubscribe' ->
+            [ {<<"client_id">>, <<"c_emqx">>}
+            , {<<"username">>, <<"u_emqx">>}
+            , {<<"topic_filters">>,
+               [ <<"t/a">>
+               , <<"t/b">>
+               ]}
+            ];
+        RuleType ->
+            error({unknown_rule_type, RuleType})
+        end).
+
+-define(EVENT_INFO_MESSAGE_PUBLISH,
+        #{ event => 'message.publish',
+           title => #{en => <<"message publish">>, zh => <<"消息发布"/utf8>>},
+           description => #{en => <<"message publish">>, zh => <<"消息发布"/utf8>>},
+           test_columns => ?TEST_COLUMNS('message.publish'),
+           columns => ?COLUMNS('message.publish'),
+           sql_example => <<"SELECT * FROM \"message.publish\" WHERE topic =~ 't/#'">>
+        }).
+
+-define(EVENT_INFO_MESSAGE_DELIVER,
+        #{ event => 'message.deliver',
+           title => #{en => <<"message deliver">>, zh => <<"消息投递"/utf8>>},
+           description => #{en => <<"message deliver">>, zh => <<"消息投递"/utf8>>},
+           test_columns => ?TEST_COLUMNS('message.deliver'),
+           columns => ?COLUMNS('message.deliver'),
+           sql_example => <<"SELECT * FROM \"message.deliver\" WHERE topic =~ 't/#'">>
+        }).
+
+-define(EVENT_INFO_MESSAGE_ACKED,
+        #{ event => 'message.acked',
+           title => #{en => <<"message acked">>, zh => <<"消息应答"/utf8>>},
+           description => #{en => <<"message acked">>, zh => <<"消息应答"/utf8>>},
+           test_columns => ?TEST_COLUMNS('message.acked'),
+           columns => ?COLUMNS('message.acked'),
+           sql_example => <<"SELECT * FROM \"message.acked\" WHERE topic =~ 't/#'">>
+        }).
+
+-define(EVENT_INFO_MESSAGE_DROPPED,
+        #{ event => 'message.dropped',
+           title => #{en => <<"message dropped">>, zh => <<"消息丢弃"/utf8>>},
+           description => #{en => <<"message dropped">>, zh => <<"消息丢弃"/utf8>>},
+           test_columns => ?TEST_COLUMNS('message.dropped'),
+           columns => ?COLUMNS('message.dropped'),
+           sql_example => <<"SELECT * FROM \"message.dropped\" WHERE topic =~ 't/#'">>
+        }).
+
+-define(EVENT_INFO_CLIENT_CONNECTED,
+        #{ event => 'client.connected',
+           title => #{en => <<"client connected">>, zh => <<"连接建立"/utf8>>},
+           description => #{en => <<"client connected">>, zh => <<"连接建立"/utf8>>},
+           test_columns => ?TEST_COLUMNS('client.connected'),
+           columns => ?COLUMNS('client.connected'),
+           sql_example => <<"SELECT * FROM \"client.connected\"">>
+        }).
+
+-define(EVENT_INFO_CLIENT_DISCONNECTED,
+        #{ event => 'client.disconnected',
+           title => #{en => <<"client disconnected">>, zh => <<"连接断开"/utf8>>},
+           description => #{en => <<"client disconnected">>, zh => <<"连接断开"/utf8>>},
+           test_columns => ?TEST_COLUMNS('client.disconnected'),
+           columns => ?COLUMNS('client.disconnected'),
+           sql_example => <<"SELECT * FROM \"client.disconnected\"">>
+        }).
+
+-define(EVENT_INFO_CLIENT_SUBSCRIBE,
+        #{ event => 'client.subscribe',
+           title => #{en => <<"client subscribe">>, zh => <<"终端订阅"/utf8>>},
+           description => #{en => <<"client subscribe">>, zh => <<"终端订阅"/utf8>>},
+           test_columns => ?TEST_COLUMNS('client.subscribe'),
+           columns => ?COLUMNS('client.subscribe'),
+           sql_example => <<"SELECT * FROM \"client.subscribe\" WHERE topic =~ 't/#'">>
+        }).
+
+-define(EVENT_INFO_CLIENT_UNSUBSCRIBE,
+        #{ event => 'client.unsubscribe',
+           title => #{en => <<"client unsubscribe">>, zh => <<"终端订阅"/utf8>>},
+           description => #{en => <<"client unsubscribe">>, zh => <<"终端订阅"/utf8>>},
+           test_columns => ?TEST_COLUMNS('client.unsubscribe'),
+           columns => ?COLUMNS('client.unsubscribe'),
+           sql_example => <<"SELECT * FROM \"client.unsubscribe\" WHERE topic =~ 't/#'">>
+        }).
+
+-define(EVENT_INFO,
+        [ ?EVENT_INFO_MESSAGE_PUBLISH
+        , ?EVENT_INFO_MESSAGE_DELIVER
+        , ?EVENT_INFO_MESSAGE_ACKED
+        , ?EVENT_INFO_MESSAGE_DROPPED
+        , ?EVENT_INFO_CLIENT_CONNECTED
+        , ?EVENT_INFO_CLIENT_DISCONNECTED
+        , ?EVENT_INFO_CLIENT_SUBSCRIBE
+        , ?EVENT_INFO_CLIENT_UNSUBSCRIBE
+        ]).
 
 -define(EG_ENVS(EVENT),
         case EVENT of
