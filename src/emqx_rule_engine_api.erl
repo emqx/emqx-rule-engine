@@ -125,6 +125,13 @@
             descr  => "List all resources of a resource type"
            }).
 
+-rest_api(#{name   => list_events,
+            method => 'GET',
+            path   => "/rule_events/",
+            func   => list_events,
+            descr  => "List all events with detailed info"
+           }).
+
 -export([ create_rule/2
         , list_rules/2
         , show_rule/2
@@ -147,6 +154,8 @@
         , list_resources_by_type/2
         , show_resource_type/2
         ]).
+
+-export([list_events/2]).
 
 -define(ERR_NO_ACTION(NAME), list_to_binary(io_lib:format("Action ~s Not Found", [(NAME)]))).
 -define(ERR_NO_RESOURCE(RESID), list_to_binary(io_lib:format("Resource ~s Not Found", [(RESID)]))).
@@ -323,6 +332,14 @@ list_resource_types(#{}, _Params) ->
 
 show_resource_type(#{name := Name}, _Params) ->
     reply_with(fun emqx_rule_registry:find_resource_type/1, Name).
+
+
+%%------------------------------------------------------------------------------
+%% Events API
+%%------------------------------------------------------------------------------
+
+list_events(#{}, _Params) ->
+    return({ok, ?EVENT_INFO}).
 
 %%------------------------------------------------------------------------------
 %% Internal functions
