@@ -125,6 +125,13 @@
             descr  => "List all resources of a resource type"
            }).
 
+-rest_api(#{name   => list_events,
+            method => 'GET',
+            path   => "/rule_events/",
+            func   => list_events,
+            descr  => "List all events with detailed info"
+           }).
+
 -export([ create_rule/2
         , list_rules/2
         , show_rule/2
@@ -147,6 +154,8 @@
         , list_resources_by_type/2
         , show_resource_type/2
         ]).
+
+-export([list_events/2]).
 
 -define(ERR_NO_ACTION(NAME), list_to_binary(io_lib:format("Action ~s Not Found", [(NAME)]))).
 -define(ERR_NO_RESOURCE(RESID), list_to_binary(io_lib:format("Resource ~s Not Found", [(RESID)]))).
@@ -324,6 +333,14 @@ list_resource_types(#{}, _Params) ->
 show_resource_type(#{name := Name}, _Params) ->
     reply_with(fun emqx_rule_registry:find_resource_type/1, Name).
 
+
+%%------------------------------------------------------------------------------
+%% Events API
+%%------------------------------------------------------------------------------
+
+list_events(#{}, _Params) ->
+    return({ok, ?EVENT_INFO}).
+
 %%------------------------------------------------------------------------------
 %% Internal functions
 %%------------------------------------------------------------------------------
@@ -360,18 +377,11 @@ record_to_map(#rule{id = Id,
                     actions = Actions,
                     enabled = Enabled,
                     description = Descr}) ->
-    #{max := Max, current := Current, last5m := Last5M} = emqx_rule_metrics:get_rule_speed(Id),
-    Metrics = #{
-        matched => emqx_rule_metrics:get(Id, 'rules.matched'),
-        speed => Current,
-        speed_max => Max,
-        speed_last5m => Last5M
-    },
     #{id => Id,
       for => Hook,
       rawsql => RawSQL,
       actions => printable_actions(Actions),
-      metrics => Metrics,
+      metrics => get_rule_metrics(Id),
       enabled => Enabled,
       description => Descr
      };
@@ -398,7 +408,11 @@ record_to_map(#resource{id = Id,
                         type = Type,
                         config = Config,
                         description = Descr}) ->
-    {ok, Status} = emqx_rule_engine:get_resource_status(Id),
+    Status =
+        [begin
+            {ok, St} = rpc:call(Node, emqx_rule_engine, get_resource_status, [Id]),
+            maps:put(node, Node, St)
+        end || Node <- [node()| nodes()]],
     #{id => Id,
       type => Type,
       config => Config,
@@ -419,13 +433,8 @@ record_to_map(#resource_type{name = Name,
      }.
 
 printable_actions(Actions) ->
-    [begin
-        Metrics = #{
-            success => emqx_rule_metrics:get(Id, 'actions.success'),
-            failed => emqx_rule_metrics:get(Id, 'actions.failure')
-        },
-        #{name => Name, params => Args, metrics => Metrics}
-     end || #action_instance{id = Id, name = Name, args = Args} <- Actions].
+    [#{id => Id, name => Name, params => Args, metrics => get_action_metrics(Id)}
+     || #action_instance{id = Id, name = Name, args = Args} <- Actions].
 
 parse_rule_params(Params) ->
     parse_rule_params(Params, #{description => <<"">>}).
@@ -557,6 +566,14 @@ sort_spec(Spec) when is_list(Spec) ->
                 #{schema := SubSpec} -> {Key, Spec0#{schema => sort_spec(SubSpec)}};
                 _ -> {Key, Spec0}
               end || {Key, Spec0} <- Spec]).
+
+get_rule_metrics(Id) ->
+    [maps:put(node, Node, rpc:call(Node, emqx_rule_metrics, get_rule_metrics, [Id]))
+     || Node <- [node()| nodes()]].
+
+get_action_metrics(Id) ->
+    [maps:put(node, Node, rpc:call(Node, emqx_rule_metrics, get_action_metrics, [Id]))
+     || Node <- [node()| nodes()]].
 
 %% TEST
 -ifdef(EUNIT).

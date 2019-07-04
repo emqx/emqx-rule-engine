@@ -34,6 +34,10 @@
         , overall_metrics/0
         ]).
 
+-export([ get_rule_metrics/1
+        , get_action_metrics/1
+        ]).
+
 %% gen_server callbacks
 -export([ init/1
         , handle_call/3
@@ -105,6 +109,21 @@ get_rule_speed(Id) ->
 -spec(get_overall_rule_speed() -> map()).
 get_overall_rule_speed() ->
     gen_server:call(?MODULE, get_overall_rule_speed).
+
+-spec(get_rule_metrics(rule_id()) -> map()).
+get_rule_metrics(Id) ->
+    #{max := Max, current := Current, last5m := Last5M} = get_rule_speed(Id),
+    #{matched => get(Id, 'rules.matched'),
+      speed => Current,
+      speed_max => Max,
+      speed_last5m => Last5M
+    }.
+
+-spec(get_action_metrics(action_instance_id()) -> map()).
+get_action_metrics(Id) ->
+    #{success => get(Id, 'actions.success'),
+      failed => get(Id, 'actions.failure')
+     }.
 
 -spec(inc(rule_id(), atom()) -> ok).
 inc(Id, Metric) ->
