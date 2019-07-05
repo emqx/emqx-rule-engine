@@ -221,7 +221,7 @@ format(#rule{id = Id,
              actions = Actions,
              enabled = Enabled,
              description = Descr}) ->
-    lists:flatten(io_lib:format("rule(id='~s', for='~0p', rawsql='~s', actions=~0p, metrics=~0p, enabled='~s', description='~s')~n", [Id, Hook, Sql, printable_actions(Actions), get_rule_metrics(Id), Enabled, Descr]));
+    lists:flatten(io_lib:format("rule(id='~s', for='~0p', rawsql='~s', actions=~0p, metrics=~0p, enabled='~s', description='~s')~n", [Id, Hook, rmlf(Sql), printable_actions(Actions), get_rule_metrics(Id), Enabled, Descr]));
 
 format(#action{hidden = true}) ->
     ok;
@@ -295,6 +295,9 @@ get_rule_metrics(Id) ->
 get_action_metrics(Id) ->
     [maps:put(node, Node, rpc:call(Node, emqx_rule_metrics, get_action_metrics, [Id]))
      || Node <- [node()| nodes()]].
+
+rmlf(Str) ->
+    re:replace(Str, "\n", "", [global]).
 
 untilde(Str) ->
     re:replace(Str,"~","&&",[{return,list}, global]).
