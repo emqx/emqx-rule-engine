@@ -217,16 +217,16 @@ take_actions(Actions, Selected, Envs) ->
     lists:map(fun(Action) -> take_action(Action, Selected, Envs) end, Actions).
 
 take_action(#action_instance{id = Id}, Selected, Envs) ->
-    {ok, #action_instance_params{apply = Apply}}
-        = emqx_rule_registry:get_action_instance_params(Id),
     try
+        {ok, #action_instance_params{apply = Apply}}
+            = emqx_rule_registry:get_action_instance_params(Id),
         Result = Apply(Selected, Envs),
         emqx_rule_metrics:inc(Id, 'actions.success'),
         Result
     catch
         _Error:Reason:Stack ->
             emqx_rule_metrics:inc(Id, 'actions.failure'),
-            error({Reason, Stack})
+            error({take_action_failed, {Id, Reason, Stack}})
     end.
 
 eval({var, Var}, Input) -> %% nested

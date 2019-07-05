@@ -280,7 +280,17 @@ list_resources_by_type(#{type := Type}, _Params) ->
     return_all(emqx_rule_registry:get_resources_by_type(Type)).
 
 show_resource(#{id := Id}, _Params) ->
-    reply_with(fun emqx_rule_registry:find_resource/1, Id).
+    case emqx_rule_registry:find_resource(Id) of
+        {ok, R} ->
+            Status =
+                [begin
+                    {ok, St} = rpc:call(Node, emqx_rule_engine, get_resource_status, [Id]),
+                    maps:put(node, Node, St)
+                end || Node <- [node()| nodes()]],
+            return({ok, maps:put(status, Status, record_to_map(R))});
+        not_found ->
+            return({error, 404, <<"Not Found">>})
+    end.
 
 get_resource_status(#{id := Id}, _Params) ->
     case emqx_rule_engine:get_resource_status(Id) of
@@ -408,15 +418,9 @@ record_to_map(#resource{id = Id,
                         type = Type,
                         config = Config,
                         description = Descr}) ->
-    Status =
-        [begin
-            {ok, St} = rpc:call(Node, emqx_rule_engine, get_resource_status, [Id]),
-            maps:put(node, Node, St)
-        end || Node <- [node()| nodes()]],
     #{id => Id,
       type => Type,
       config => Config,
-      status => Status,
       description => Descr
      };
 

@@ -195,7 +195,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(ticking, State = #state{rule_speeds = undefined}) ->
-    emqx_rule_engine:refresh_resource_status(),
+    async_refresh_resource_status(),
     erlang:send_after(timer:seconds(?SAMPLING), self(), ticking),
     {noreply, State};
 
@@ -206,7 +206,7 @@ handle_info(ticking, State = #state{rule_speeds = RuleSpeeds0,
                         calculate_speed(get(Id, 'rules.matched'), RuleSpeed)
                     end, RuleSpeeds0),
     OverallRuleSpeed = calculate_speed(get_overall('rules.matched'), OverallRuleSpeed0),
-    emqx_rule_engine:refresh_resource_status(),
+    async_refresh_resource_status(),
     erlang:send_after(timer:seconds(?SAMPLING), self(), ticking),
     {noreply, State#state{rule_speeds = RuleSpeeds,
                           overall_rule_speed = OverallRuleSpeed}};
@@ -224,6 +224,9 @@ stop() ->
 %%------------------------------------------------------------------------------
 %% Internal Functions
 %%------------------------------------------------------------------------------
+
+async_refresh_resource_status() ->
+    spawn(emqx_rule_engine, refresh_resource_status, []).
 
 create_counters(Id) ->
     CRef = counters:new(max_counters_size(), [write_concurrency]),
