@@ -237,7 +237,11 @@ format(#resource{id = Id,
                  type = Type,
                  config = Config,
                  description = Descr}) ->
-    {ok, Status} = emqx_rule_engine:get_resource_status(Id),
+    Status =
+        [begin
+            {ok, St} = rpc:call(Node, emqx_rule_engine, get_resource_status, [Id]),
+            maps:put(node, Node, St)
+        end || Node <- [node()| nodes()]],
     lists:flatten(io_lib:format("resource(id='~s', type='~s', config=~0p, status=~0p, description='~s')~n", [Id, Type, Config, Status, Descr]));
 
 format(#resource_type{name = Name,
