@@ -34,6 +34,10 @@
         , overall_metrics/0
         ]).
 
+-export([ get_rule_metrics/1
+        , get_action_metrics/1
+        ]).
+
 %% gen_server callbacks
 -export([ init/1
         , handle_call/3
@@ -106,6 +110,21 @@ get_rule_speed(Id) ->
 get_overall_rule_speed() ->
     gen_server:call(?MODULE, get_overall_rule_speed).
 
+-spec(get_rule_metrics(rule_id()) -> map()).
+get_rule_metrics(Id) ->
+    #{max := Max, current := Current, last5m := Last5M} = get_rule_speed(Id),
+    #{matched => get(Id, 'rules.matched'),
+      speed => Current,
+      speed_max => Max,
+      speed_last5m => Last5M
+    }.
+
+-spec(get_action_metrics(action_instance_id()) -> map()).
+get_action_metrics(Id) ->
+    #{success => get(Id, 'actions.success'),
+      failed => get(Id, 'actions.failure')
+     }.
+
 -spec(inc(rule_id(), atom()) -> ok).
 inc(Id, Metric) ->
     inc(Id, Metric, 1).
@@ -176,7 +195,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(ticking, State = #state{rule_speeds = undefined}) ->
-    emqx_rule_engine:refresh_resource_status(),
+    async_refresh_resource_status(),
     erlang:send_after(timer:seconds(?SAMPLING), self(), ticking),
     {noreply, State};
 
@@ -187,7 +206,7 @@ handle_info(ticking, State = #state{rule_speeds = RuleSpeeds0,
                         calculate_speed(get(Id, 'rules.matched'), RuleSpeed)
                     end, RuleSpeeds0),
     OverallRuleSpeed = calculate_speed(get_overall('rules.matched'), OverallRuleSpeed0),
-    emqx_rule_engine:refresh_resource_status(),
+    async_refresh_resource_status(),
     erlang:send_after(timer:seconds(?SAMPLING), self(), ticking),
     {noreply, State#state{rule_speeds = RuleSpeeds,
                           overall_rule_speed = OverallRuleSpeed}};
@@ -205,6 +224,9 @@ stop() ->
 %%------------------------------------------------------------------------------
 %% Internal Functions
 %%------------------------------------------------------------------------------
+
+async_refresh_resource_status() ->
+    spawn(emqx_rule_engine, refresh_resource_status, []).
 
 create_counters(Id) ->
     CRef = counters:new(max_counters_size(), [write_concurrency]),

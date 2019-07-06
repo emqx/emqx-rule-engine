@@ -200,7 +200,7 @@ resource_types(_usage) ->
 %%------------------------------------------------------------------------------
 
 print(Data) ->
-    emqx_cli:print(format(Data)).
+    emqx_cli:print(untilde(format(Data))).
 
 print_all(DataList) ->
     lists:map(fun(Data) ->
@@ -221,14 +221,7 @@ format(#rule{id = Id,
              actions = Actions,
              enabled = Enabled,
              description = Descr}) ->
-    #{max := Max, current := Current, last5m := Last5M} = emqx_rule_metrics:get_rule_speed(Id),
-    Metrics = #{
-        matched => emqx_rule_metrics:get(Id, 'rules.matched'),
-        speed => Current,
-        speed_max => Max,
-        speed_last5m => Last5M
-    },
-    lists:flatten(io_lib:format("rule(id='~s', for='~0p', rawsql='~s', actions=~s, metrics=~0p, enabled='~s', description='~s')~n", [Id, Hook, Sql, printable_actions(Actions), Metrics, Enabled, Descr]));
+    lists:flatten(io_lib:format("rule(id='~s', for='~0p', rawsql='~s', actions=~0p, metrics=~0p, enabled='~s', description='~s')~n", [Id, Hook, rmlf(Sql), printable_actions(Actions), get_rule_metrics(Id), Enabled, Descr]));
 
 format(#action{hidden = true}) ->
     ok;
@@ -244,7 +237,11 @@ format(#resource{id = Id,
                  type = Type,
                  config = Config,
                  description = Descr}) ->
-    {ok, Status} = emqx_rule_engine:get_resource_status(Id),
+    Status =
+        [begin
+            {ok, St} = rpc:call(Node, emqx_rule_engine, get_resource_status, [Id]),
+            maps:put(node, Node, St)
+        end || Node <- [node()| nodes()]],
     lists:flatten(io_lib:format("resource(id='~s', type='~s', config=~0p, status=~0p, description='~s')~n", [Id, Type, Config, Status, Descr]));
 
 format(#resource_type{name = Name,
@@ -266,13 +263,8 @@ make_resource(Opts) ->
       description => get_value(descr, Opts)}.
 
 printable_actions(Actions) when is_list(Actions) ->
-    jsx:encode([begin
-                    Metrics = #{
-                        success => emqx_rule_metrics:get(Id, 'actions.success'),
-                        failed => emqx_rule_metrics:get(Id, 'actions.failure')
-                    },
-                    #{name => Name, params => Args, metrics => Metrics}
-                end || #action_instance{id = Id, name = Name, args = Args} <- Actions]).
+    jsx:encode([#{id => Id, name => Name, params => Args, metrics => get_action_metrics(Id)}
+                || #action_instance{id = Id, name = Name, args = Args} <- Actions]).
 
 with_opts(Action, RawParams, OptSpecList, {CmdObject, CmdName}) ->
     case getopt:parse_and_check(OptSpecList, RawParams) of
@@ -300,3 +292,16 @@ get_actions(undefined) ->
 get_actions(Hook) ->
     emqx_rule_registry:get_actions_for(Hook).
 
+get_rule_metrics(Id) ->
+    [maps:put(node, Node, rpc:call(Node, emqx_rule_metrics, get_rule_metrics, [Id]))
+     || Node <- [node()| nodes()]].
+
+get_action_metrics(Id) ->
+    [maps:put(node, Node, rpc:call(Node, emqx_rule_metrics, get_action_metrics, [Id]))
+     || Node <- [node()| nodes()]].
+
+rmlf(Str) ->
+    re:replace(Str, "\n", "", [global]).
+
+untilde(Str) ->
+    re:replace(Str,"~","&&",[{return,list}, global]).
