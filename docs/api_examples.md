@@ -64,11 +64,11 @@ $ curl -v --basic -u $APPSECRET -k http://localhost:8080/api/v3/actions
 ```shell
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/actions?for=message.publish'
 
-{"app":"emqx_rule_engine","description":"Republish a MQTT message","name":"built_in:republish_action","params":{"target_topic":"topic"},"types":[]}]}
+{"app":"emqx_rule_engine","description":"Republish a MQTT message","name":"built_in:republish_action","params":{"target_topic":"topic", "payload_tmpl": "${payload}"},"types":[]}]}
 
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/actions?for=$message'
 
-{"code":0,"data":[{"app":"emqx_rule_engine","description":"Debug Action","for":"$any","name":"inspect","params":{},"types":[]},{"app":"emqx_rule_engine","description":"Republish a MQTT message","for":"message.publish","name":"built_in:republish_action","params":{"target_topic":"topic"},"types":[]},{"app":"emqx_web_hook","description":"Forward Messages to Web Server","for":"message.publish","name":"web_hook:publish_action","params":{"$resource":"web_hook"},"types":["web_hook"]}]}
+{"code":0,"data":[{"app":"emqx_rule_engine","description":"Debug Action","for":"$any","name":"inspect","params":{},"types":[]},{"app":"emqx_rule_engine","description":"Republish a MQTT message","for":"message.publish","name":"built_in:republish_action","params":{"target_topic":"topic", "payload_tmpl": "${payload}"},"types":[]},{"app":"emqx_web_hook","description":"Forward Messages to Web Server","for":"message.publish","name":"web_hook:publish_action","params":{"$resource":"web_hook"},"types":["web_hook"]}]}
 
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/actions?for=$client'
 

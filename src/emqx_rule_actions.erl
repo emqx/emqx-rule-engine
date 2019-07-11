@@ -21,13 +21,25 @@
 
 -define(REPUBLISH_PARAMS_SPEC, #{
             target_topic => #{
+                order => 1,
                 type => string,
-                format => topic,
                 required => true,
+                default => <<"resp/${client_id}">>,
                 title => #{en => <<"Target Topic">>,
                            zh => <<"目的主题"/utf8>>},
                 description => #{en => <<"To which topic the message will be republished">>,
                                  zh => <<"重新发布消息到哪个主题"/utf8>>}
+            },
+            payload_tmpl => #{
+                order => 2,
+                type => string,
+                input => textarea,
+                required => true,
+                default => <<"${payload}">>,
+                title => #{en => <<"Payload Template">>,
+                           zh => <<"消息内容模板"/utf8>>},
+                description => #{en => <<"The payload template, variable interpolation is supported">>,
+                                 zh => <<"消息内容模板，支持变量"/utf8>>}
             }
         }).
 
@@ -95,11 +107,13 @@ on_action_create_inspect(_Id, Params) ->
 %% A Demo Action.
 -spec(on_action_create_republish(action_instance_id(), #{binary() := emqx_topic:topic()})
       -> action_fun()).
-on_action_create_republish(_Id, #{<<"target_topic">> := TargetTopic}) ->
+on_action_create_republish(_Id, #{<<"target_topic">> := TargetTopic, <<"payload_tmpl">> := PayloadTmpl}) ->
     fun(Selected, #{qos := QoS, from := Client,
                     flags := Flags, headers := Headers}) ->
         ?LOG(debug, "[republish] republish to: ~p, Payload: ~p",
                         [TargetTopic, Selected]),
+        TopicTks = emqx_rule_utils:preproc_tmpl(TargetTopic),
+        PayloadTks = emqx_rule_utils:preproc_tmpl(PayloadTmpl),
         emqx_broker:safe_publish(
             #message{
                 id = emqx_guid:gen(),
@@ -107,8 +121,8 @@ on_action_create_republish(_Id, #{<<"target_topic">> := TargetTopic}) ->
                 from = republish_from(Client),
                 flags = Flags,
                 headers = Headers,
-                topic = TargetTopic,
-                payload = jsx:encode(Selected),
+                topic = emqx_rule_utils:proc_tmpl(TopicTks, Selected),
+                payload = emqx_rule_utils:proc_tmpl(PayloadTks, Selected),
                 timestamp = erlang:timestamp()
             })
     end.
