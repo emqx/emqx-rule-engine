@@ -135,6 +135,7 @@ apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
             ?LOG(error, "Apply rule ~s error: ~p. Statcktrace:~n~p",
                  [RuleID, Error, StkTrace])
     end,
+    erase_payload(),
     apply_rules(More, Input).
 
 apply_rule(#rule{id = RuleId,
@@ -267,14 +268,14 @@ apply_func(Name, Args, Input) when is_atom(Name) ->
 
 %% TODO: move to schema registry later.
 erase_payload() ->
-    erase('$payload').
+    erase('$rule_payload').
 
 parse_payload(Input) ->
-    case get('$payload') of
+    case get('$rule_payload') of
         undefined ->
             Payload = get_value(payload, Input, <<"{}">>),
             Json = emqx_json:decode(Payload, [return_maps]),
-            put('$payload', Json),
+            put('$rule_payload', Json),
             Json;
         Json -> Json
     end.
