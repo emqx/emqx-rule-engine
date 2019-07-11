@@ -245,7 +245,7 @@ t_republish_action(_Config) ->
         emqx_rule_engine:create_rule(
                     #{rawsql => <<"select topic, payload, qos from \"message.publish\" where topic=t1">>,
                       actions => [{'republish',
-                                  #{<<"target_topic">> => <<"t1">>}}],
+                                  #{<<"target_topic">> => <<"t1">>, <<"payload_tmpl">> => <<"${payload}">>}}],
                       description => <<"builtin-republish-rule">>}),
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqx_client:connect(Client),
@@ -617,7 +617,7 @@ t_sqlselect(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     TopicRule = create_simple_repub_rule(
                     <<"t2">>,
-                    "SELECT payload.x as x "
+                    "SELECT payload.x as x, payload "
                     "FROM \"message.publish\" "
                     "WHERE (topic =~ 't3/#' or topic = 't1') and x = 1"),
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
@@ -667,7 +667,7 @@ create_simple_repub_rule(TargetTopic, SQL) ->
     {ok, Rule} = emqx_rule_engine:create_rule(
                     #{rawsql => SQL,
                       actions => [{'republish',
-                                  #{<<"target_topic">> => TargetTopic}}],
+                                  #{<<"target_topic">> => TargetTopic, <<"payload_tmpl">> => <<"${payload}">>}}],
                       description => <<"simple repub rule">>}),
     Rule.
 
