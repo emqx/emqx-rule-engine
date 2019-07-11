@@ -158,7 +158,6 @@ create_rule(Params = #{rawsql := Sql, actions := Actions}) ->
                          actions = [prepare_action(Action) || Action <- Actions],
                          enabled = maps:get(enabled, Params, true),
                          description = maps:get(description, Params, "")},
-            emqx_rule_metrics:create(RuleId),
             ok = emqx_rule_registry:add_rule(Rule),
             {ok, Rule};
         Error -> error(Error)
@@ -367,7 +366,6 @@ init_resource(Module, OnCreate, ResId, Config) ->
     emqx_rule_registry:add_resource_params(#resource_params{id = ResId, params = Params}).
 
 init_action(Module, OnCreate, ActionInstId, Params) ->
-    emqx_rule_metrics:create(ActionInstId),
     case ?RAISE(Module:OnCreate(ActionInstId, Params), {{init_action_failure, node()}, {{Module,OnCreate},_REASON_}}) of
         {Apply, NewParams} ->
             ok = emqx_rule_registry:add_action_instance_params(
