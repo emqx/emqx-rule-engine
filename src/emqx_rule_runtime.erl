@@ -273,10 +273,14 @@ erase_payload() ->
 parse_payload(Input) ->
     case get('$rule_payload') of
         undefined ->
-            Payload = get_value(payload, Input, <<"{}">>),
-            Json = emqx_json:decode(Payload, [return_maps]),
-            put('$rule_payload', Json),
-            Json;
+            case get_value(payload, Input, <<"{}">>) of
+                Payload when is_binary(Payload) ->
+                    Json = emqx_json:decode(Payload, [return_maps]),
+                    put('$rule_payload', Json),
+                    Json;
+                Payload when is_map(Payload) ->
+                    Payload
+            end;
         Json -> Json
     end.
 
