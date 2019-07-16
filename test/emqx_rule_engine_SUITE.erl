@@ -81,7 +81,8 @@ groups() ->
       ]},
      {runtime, [],
       [t_events,
-       t_sqlselect
+       t_sqlselect_0,
+       t_sqlselect_1
       ]}
     ].
 
@@ -613,7 +614,7 @@ client_disconnected(Client) ->
     verify_events_counter('client.disconnected'),
     ok.
 
-t_sqlselect(_Config) ->
+t_sqlselect_0(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     TopicRule = create_simple_repub_rule(
                     <<"t2">>,
@@ -645,6 +646,35 @@ t_sqlselect(_Config) ->
         ?assertEqual(<<"{\"x\":1}">>, Payload3)
     after 1000 ->
         ct:fail(wait_for_t2)
+    end,
+
+    emqx_client:stop(Client),
+    emqx_rule_registry:remove_rule(TopicRule).
+
+t_sqlselect_1(_Config) ->
+    ok = emqx_rule_engine:load_providers(),
+    TopicRule = create_simple_repub_rule(
+                    <<"t2">>,
+                    "SELECT payload.x, payload.y "
+                    "FROM \"message.publish\" "
+                    "WHERE payload.x = 1 and payload.y = 2"),
+    {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqx_client:connect(Client),
+    {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
+    emqx_client:publish(Client, <<"t1">>, <<"{\"x\":1,\"y\":2}">>, 0),
+    ct:sleep(100),
+    receive {publish, #{topic := T, payload := Payload}} ->
+        ?assertEqual(<<"t2">>, T),
+        ?assertEqual(<<"{\"payload\":{\"x\":1,\"y\":2}}">>, Payload)
+    after 1000 ->
+        ct:fail(wait_for_t2)
+    end,
+
+    emqx_client:publish(Client, <<"t1">>, <<"{\"x\":1,\"y\":1}">>, 0),
+    receive {publish, #{topic := <<"t2">>, payload := _}} ->
+        ct:fail(unexpected_t2)
+    after 1000 ->
+        ok
     end,
 
     emqx_client:stop(Client),
