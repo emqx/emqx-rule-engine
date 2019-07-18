@@ -156,7 +156,8 @@ str(Atom) when is_atom(Atom) -> atom_to_list(Atom).
 bin(List) when is_list(List) -> list_to_binary(List);
 bin(Bin) when is_binary(Bin) -> Bin;
 bin(Num) when is_number(Num) -> number_to_binary(Num);
-bin(Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8).
+bin(Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8);
+bin(Map) when is_map(Map) -> jsx:encode(Map).
 
 sql_data(List) when is_list(List) -> List;
 sql_data(Bin) when is_binary(Bin) -> Bin;

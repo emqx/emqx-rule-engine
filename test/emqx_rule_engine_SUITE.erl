@@ -657,15 +657,19 @@ t_sqlselect_1(_Config) ->
                     <<"t2">>,
                     "SELECT payload.x, payload.y "
                     "FROM \"message.publish\" "
-                    "WHERE payload.x = 1 and payload.y = 2"),
+                    "WHERE payload.x = 1 and payload.y = 2 and topic = 't1'"),
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqx_client:connect(Client),
     {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
+    dbg:tracer(),
+    dbg:p(all, c),
+    dbg:tpl(emqx_broker,safe_publish, '_', cx),
+    dbg:tpl(emqx_rule_utils,proc_tmpl, '_', cx),
     emqx_client:publish(Client, <<"t1">>, <<"{\"x\":1,\"y\":2}">>, 0),
     ct:sleep(100),
     receive {publish, #{topic := T, payload := Payload}} ->
         ?assertEqual(<<"t2">>, T),
-        ?assertEqual(<<"{\"payload\":{\"x\":1,\"y\":2}}">>, Payload)
+        ?assertEqual(<<"{\"x\":1,\"y\":2}">>, Payload)
     after 1000 ->
         ct:fail(wait_for_t2)
     end,
