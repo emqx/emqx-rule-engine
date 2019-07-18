@@ -82,7 +82,8 @@ groups() ->
      {runtime, [],
       [t_events,
        t_sqlselect_0,
-       t_sqlselect_1
+       t_sqlselect_1,
+       t_sqlselect_2
       ]}
     ].
 
@@ -661,10 +662,7 @@ t_sqlselect_1(_Config) ->
     {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqx_client:connect(Client),
     {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
-    dbg:tracer(),
-    dbg:p(all, c),
-    dbg:tpl(emqx_broker,safe_publish, '_', cx),
-    dbg:tpl(emqx_rule_utils,proc_tmpl, '_', cx),
+
     emqx_client:publish(Client, <<"t1">>, <<"{\"x\":1,\"y\":2}">>, 0),
     ct:sleep(100),
     receive {publish, #{topic := T, payload := Payload}} ->
@@ -679,6 +677,34 @@ t_sqlselect_1(_Config) ->
         ct:fail(unexpected_t2)
     after 1000 ->
         ok
+    end,
+
+    emqx_client:stop(Client),
+    emqx_rule_registry:remove_rule(TopicRule).
+
+t_sqlselect_2(_Config) ->
+    ok = emqx_rule_engine:load_providers(),
+    %% recursively republish to t2
+    TopicRule = create_simple_repub_rule(
+                    <<"t2">>,
+                    "SELECT * "
+                    "FROM \"message.publish\" "
+                    "WHERE topic =~ '#'"),
+    {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqx_client:connect(Client),
+    {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
+
+    emqx_client:publish(Client, <<"t1">>, <<"{\"x\":1,\"y\":1}">>, 0),
+    Fun = fun() ->
+            receive {publish, #{topic := <<"t2">>, payload := _}} ->
+                received_t2
+            after 1000 ->
+                received_nothing
+            end
+          end,
+    case Fun() of
+        received_t2 -> received_nothing = Fun();
+        received_nothing -> ok
     end,
 
     emqx_client:stop(Client),
