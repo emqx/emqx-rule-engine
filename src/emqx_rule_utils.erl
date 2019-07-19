@@ -87,7 +87,7 @@ preproc_sql(Sql, ReplaceWith) ->
     end.
 
 get_phld_var(Phld, Data) ->
-    maps:get(atom_key(unwrap(Phld)), Data, undefined).
+    emqx_rule_maps:nested_get(atom_key(parse_nested(unwrap(Phld))), Data).
 
 repalce_with(Tmpl, '?') ->
     re:replace(Tmpl, ?EX_PLACE_HOLDER, "?", [{return, binary}, global]);
@@ -163,7 +163,8 @@ sql_data(List) when is_list(List) -> List;
 sql_data(Bin) when is_binary(Bin) -> Bin;
 sql_data(Num) when is_number(Num) -> Num;
 sql_data(Bool) when is_boolean(Bool) -> Bool;
-sql_data(Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8).
+sql_data(Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8);
+sql_data(Map) when is_map(Map) -> jsx:encode(Map).
 
 number_to_binary(Int) when is_integer(Int) ->
     integer_to_binary(Int);
@@ -174,3 +175,9 @@ utf8_bin(Str) ->
     unicode:characters_to_binary(Str).
 utf8_str(Str) ->
     unicode:characters_to_list(Str).
+
+parse_nested(Attr) ->
+    case string:split(Attr, <<".">>, all) of
+        [Attr] -> Attr;
+        Nested -> Nested
+    end.
