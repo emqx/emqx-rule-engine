@@ -122,20 +122,22 @@ apply_rules_fun(Hook) ->
 rules_for(Hook) ->
     emqx_rule_registry:get_rules_for(Hook).
 
--spec(apply_rules(list(emqx_rule_engine:rule()), map())
-        -> {ok, [ActionResult::term()]} | {error, nomatch}).
+-spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
 apply_rules([], _Input) ->
+    erase_payload(),
     ok;
 apply_rules([#rule{enabled = false}|More], Input) ->
     apply_rules(More, Input);
 apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
     try apply_rule(Rule, Input)
     catch
+        throw:Error when Error =:= select_and_transform_error;
+                         Error =:= match_conditions_error
+            -> ok; %% ignore the errors if select or match failed
         _:Error:StkTrace ->
-            ?LOG(error, "Apply rule ~s error: ~p. Statcktrace:~n~p",
+            ?LOG(error, "Apply rule ~s failed: ~p. Statcktrace:~n~p",
                  [RuleID, Error, StkTrace])
     end,
-    erase_payload(),
     apply_rules(More, Input).
 
 apply_rule(#rule{id = RuleId,
@@ -143,8 +145,10 @@ apply_rule(#rule{id = RuleId,
                  conditions = Conditions,
                  actions = Actions}, Input) ->
     Columns = columns(Input),
-    Selected = select_and_transform(Selects, Columns),
-    case match_conditions(Conditions, maps:merge(Columns, Selected)) of
+    Selected = ?THROW(select_and_transform(Selects, Columns),
+                      select_and_transform_error),
+    case ?THROW(match_conditions(Conditions, maps:merge(Columns, Selected)),
+                match_conditions_error) of
         true ->
             ok = emqx_rule_metrics:inc(RuleId, 'rules.matched'),
             {ok, take_actions(Actions, Selected, Input)};
@@ -157,7 +161,7 @@ select_and_transform(Fields, Input) ->
     select_and_transform(Fields, Input, #{}).
 
 select_and_transform([], _Input, Output) ->
-    erase_payload(), Output;
+    Output;
 select_and_transform(['*'|More], Input, Output) ->
     select_and_transform(More, Input, maps:merge(Output, Input));
 select_and_transform([{as, Field, Alias}|More], Input, Output) ->
@@ -275,7 +279,7 @@ parse_payload(Input) ->
         undefined ->
             case get_value(payload, Input, <<"{}">>) of
                 Payload when is_binary(Payload) ->
-                    Json = emqx_json:decode(Payload, [return_maps]),
+                    Json = jsx:decode(Payload, [return_maps]),
                     put('$rule_payload', Json),
                     Json;
                 Payload when is_map(Payload) ->
