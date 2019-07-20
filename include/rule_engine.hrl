@@ -128,3 +128,8 @@
         begin
             try (_EXP_) catch _:_REASON_ -> throw(_ERROR_) end
         end).
+
+-define(THROW(_EXP_, _ERROR_),
+        begin
+            try (_EXP_) catch _:_ -> throw(_ERROR_) end
+        end).
