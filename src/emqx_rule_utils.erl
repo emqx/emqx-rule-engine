@@ -143,8 +143,12 @@ tcp_connectivity(Host, Port) ->
         {error, Reason} -> {error, Reason}
     end.
 
-default_port(http) -> 80;
-default_port(https) -> 443.
+default_port("http") -> 80;
+default_port("https") -> 443;
+default_port(<<"http">>) -> 80;
+default_port(<<"https">>) -> 443;
+default_port(Scheme) -> throw({bad_scheme, Scheme}).
+
 
 unwrap(<<"${", Val/binary>>) ->
     binary:part(Val, {0, byte_size(Val)-1}).
