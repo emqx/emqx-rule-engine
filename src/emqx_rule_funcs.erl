@@ -101,8 +101,12 @@
         , sha256/1
         ]).
 
-%% Base64 encode
--export([ base64_encode/1 ]).
+%% Data encode and decode
+-export([ base64_encode/1
+        , base64_decode/1
+        , schema_encode/2
+        , schema_decode/2
+        ]).
 
 -import(emqx_rule_maps,
         [ get_value/2
@@ -420,3 +424,11 @@ hexstring(<<X:256/big-unsigned-integer>>) ->
 base64_encode(Data) when is_binary(Data) ->
     base64:encode(Data).
 
+base64_decode(Data) when is_binary(Data) ->
+    base64:decode(Data).
+
+schema_encode(SchemaId, Term) ->
+    emqx_schema_parser:encode(SchemaId, Term).
+
+schema_decode(SchemaId, Data) ->
+    emqx_schema_parser:decode(SchemaId, Data).

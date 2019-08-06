@@ -131,10 +131,10 @@ apply_rule(#rule{id = RuleId,
                  conditions = Conditions,
                  actions = Actions}, Input) ->
     Columns = columns(Input),
-    Selected = ?THROW(select_and_transform(Selects, Columns),
-                      select_and_transform_error),
-    case ?THROW(match_conditions(Conditions, maps:merge(Columns, Selected)),
-                match_conditions_error) of
+    Selected = ?RAISE(select_and_transform(Selects, Columns),
+                      {select_and_transform_error, _REASON_}),
+    case ?RAISE(match_conditions(Conditions, maps:merge(Columns, Selected)),
+                {match_conditions_error, _REASON_}) of
         true ->
             ok = emqx_rule_metrics:inc(RuleId, 'rules.matched'),
             {ok, take_actions(Actions, Selected, Input)};
