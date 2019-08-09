@@ -27,7 +27,7 @@
         , on_message_publish/2
         , on_message_dropped/3
         , on_message_deliver/3
-        , on_message_acked/3
+        , on_message_acked/2
         ]).
 
 -export([apply_rule/2]).
@@ -51,7 +51,7 @@ start(Env) ->
     hook_rules('message.publish', fun ?MODULE:on_message_publish/2, Env),
     hook_rules('message.dropped', fun ?MODULE:on_message_dropped/3, Env),
     hook_rules('message.deliver', fun ?MODULE:on_message_deliver/3, Env),
-    hook_rules('message.acked', fun ?MODULE:on_message_acked/3, Env).
+    hook_rules('message.acked', fun ?MODULE:on_message_acked/2, Env).
 
 hook_rules(Name, Fun, Env) ->
     emqx:hook(Name, Fun, [Env#{apply_fun => apply_rules_fun(Name)}]).
@@ -94,8 +94,8 @@ on_message_deliver(Credentials, Message, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(Credentials#{event => 'message.deliver', node => node()}, emqx_message:to_map(Message))),
     {ok, Message}.
 
-on_message_acked(#{client_id := ClientId, username := Username}, Message, #{apply_fun := ApplyRules}) ->
-    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.acked', client_id => ClientId, username => Username, node => node()})),
+on_message_acked(Message, #{apply_fun := ApplyRules}) ->
+    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.acked', node => node()})),
     {ok, Message}.
 
 %%------------------------------------------------------------------------------
@@ -291,7 +291,7 @@ stop(_Env) ->
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
     emqx:unhook('message.dropped', fun ?MODULE:on_message_dropped/3),
     emqx:unhook('message.deliver', fun ?MODULE:on_message_deliver/3),
-    emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3).
+    emqx:unhook('message.acked', fun ?MODULE:on_message_acked/2).
 
 %%------------------------------------------------------------------------------
 %% Internal Functions
@@ -325,7 +325,7 @@ columns(Input = #{sockname := Peername}, Result) ->
     columns(maps:remove(sockname, Input),
             Result#{sockname => peername(Peername)});
 columns(Input = #{connattrs := Conn}, Result) ->
-    ConnAt = maps:get(connected_at, Conn, null),
+    ConnAt = maps:get(connected_at, Conn, erlang:timestamp()),
     columns(maps:remove(connattrs, Input),
             maps:merge(Result, #{connected_at => emqx_time:now_ms(ConnAt),
                                  clean_start => maps:get(clean_start, Conn, null),
