@@ -22,12 +22,12 @@
 
 -export([ on_client_connected/4
         , on_client_disconnected/3
-        , on_client_subscribe/3
-        , on_client_unsubscribe/3
+        , on_client_subscribe/4
+        , on_client_unsubscribe/4
         , on_message_publish/2
         , on_message_dropped/3
         , on_message_deliver/3
-        , on_message_acked/3
+        , on_message_acked/2
         ]).
 
 -export([apply_rule/2]).
@@ -46,12 +46,12 @@
 start(Env) ->
     hook_rules('client.connected', fun ?MODULE:on_client_connected/4, Env),
     hook_rules('client.disconnected', fun ?MODULE:on_client_disconnected/3, Env),
-    hook_rules('client.subscribe', fun ?MODULE:on_client_subscribe/3, Env),
-    hook_rules('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3, Env),
+    hook_rules('client.subscribe', fun ?MODULE:on_client_subscribe/4, Env),
+    hook_rules('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/4, Env),
     hook_rules('message.publish', fun ?MODULE:on_message_publish/2, Env),
     hook_rules('message.dropped', fun ?MODULE:on_message_dropped/3, Env),
     hook_rules('message.deliver', fun ?MODULE:on_message_deliver/3, Env),
-    hook_rules('message.acked', fun ?MODULE:on_message_acked/3, Env).
+    hook_rules('message.acked', fun ?MODULE:on_message_acked/2, Env).
 
 hook_rules(Name, Fun, Env) ->
     emqx:hook(Name, Fun, [Env#{apply_fun => apply_rules_fun(Name)}]).
@@ -60,24 +60,17 @@ hook_rules(Name, Fun, Env) ->
 %% Callbacks
 %%------------------------------------------------------------------------------
 
-on_client_connected(Credentials = #{client_id := ClientId}, ConnAck, ConnAttrs, #{apply_fun := ApplyRules}) ->
-    ?LOG(debug, "[RuleEngine] Client(~s) connected, connack: ~w", [ClientId, ConnAck]),
+on_client_connected(Credentials, ConnAck, ConnAttrs, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(Credentials, #{event => 'client.connected', connack => ConnAck, connattrs => ConnAttrs, node => node()})).
 
-on_client_disconnected(Credentials = #{client_id := ClientId}, ReasonCode, #{apply_fun := ApplyRules}) ->
-    ?LOG(debug, "[RuleEngine] Client(~s) disconnected, reason_code: ~w",
-         [ClientId, ReasonCode]),
+on_client_disconnected(Credentials, ReasonCode, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(Credentials, #{event => 'client.disconnected', reason_code => ReasonCode, node => node(), timestamp => erlang:timestamp()})).
 
-on_client_subscribe(Credentials = #{client_id := ClientId}, TopicFilters, #{apply_fun := ApplyRules}) ->
-    ?LOG(debug, "[RuleEngine] Client(~s) will subscribe: ~p",
-         [ClientId, TopicFilters]),
+on_client_subscribe(Credentials, _Properties, TopicFilters, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(Credentials, #{event => 'client.subscribe', topic_filters => TopicFilters, node => node(), timestamp => erlang:timestamp()})),
     {ok, TopicFilters}.
 
-on_client_unsubscribe(Credentials = #{client_id := ClientId}, TopicFilters, #{apply_fun := ApplyRules}) ->
-    ?LOG(debug, "[RuleEngine] Client(~s) unsubscribe ~p",
-         [ClientId, TopicFilters]),
+on_client_unsubscribe(Credentials, _Properties, TopicFilters, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(Credentials, #{event => 'client.unsubscribe', topic_filters => TopicFilters, node => node(), timestamp => erlang:timestamp()})),
     {ok, TopicFilters}.
 
@@ -86,7 +79,6 @@ on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
     {ok, Message};
 
 on_message_publish(Message, #{apply_fun := ApplyRules}) ->
-    ?LOG(debug, "[RuleEngine] Publish ~s", [emqx_message:format(Message)]),
     ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.publish', node => node()})),
     {ok, Message}.
 
@@ -95,21 +87,15 @@ on_message_dropped(_, Message = #message{topic = <<"$SYS/", _/binary>>},
     {ok, Message};
 
 on_message_dropped(_, Message, #{apply_fun := ApplyRules}) ->
-    ?LOG(debug, "[RuleEngine] Message dropped for no subscription: ~s",
-         [emqx_message:format(Message)]),
     ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.dropped', node => node()})),
     {ok, Message}.
 
-on_message_deliver(Credentials = #{client_id := ClientId}, Message, #{apply_fun := ApplyRules}) ->
-    ?LOG(debug, "[RuleEngine] Deliver message to client(~s): ~s",
-         [ClientId, emqx_message:format(Message)]),
+on_message_deliver(Credentials, Message, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(Credentials#{event => 'message.deliver', node => node()}, emqx_message:to_map(Message))),
     {ok, Message}.
 
-on_message_acked(#{client_id := ClientId, username := Username}, Message, #{apply_fun := ApplyRules}) ->
-    ?LOG(debug, "[RuleEngine] Session(~s) acked message: ~s",
-         [ClientId, emqx_message:format(Message)]),
-    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.acked', client_id => ClientId, username => Username, node => node()})),
+on_message_acked(Message, #{apply_fun := ApplyRules}) ->
+    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.acked', node => node()})),
     {ok, Message}.
 
 %%------------------------------------------------------------------------------
@@ -145,10 +131,10 @@ apply_rule(#rule{id = RuleId,
                  conditions = Conditions,
                  actions = Actions}, Input) ->
     Columns = columns(Input),
-    Selected = ?THROW(select_and_transform(Selects, Columns),
-                      select_and_transform_error),
-    case ?THROW(match_conditions(Conditions, maps:merge(Columns, Selected)),
-                match_conditions_error) of
+    Selected = ?RAISE(select_and_transform(Selects, Columns),
+                      {select_and_transform_error, _REASON_}),
+    case ?RAISE(match_conditions(Conditions, maps:merge(Columns, Selected)),
+                {match_conditions_error, _REASON_}) of
         true ->
             ok = emqx_rule_metrics:inc(RuleId, 'rules.matched'),
             {ok, take_actions(Actions, Selected, Input)};
@@ -300,12 +286,12 @@ parse_payload(Input) ->
 stop(_Env) ->
     emqx:unhook('client.connected', fun ?MODULE:on_client_connected/4),
     emqx:unhook('client.disconnected', fun ?MODULE:on_client_disconnected/3),
-    emqx:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/3),
-    emqx:unhook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3),
+    emqx:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/4),
+    emqx:unhook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/4),
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
     emqx:unhook('message.dropped', fun ?MODULE:on_message_dropped/3),
     emqx:unhook('message.deliver', fun ?MODULE:on_message_deliver/3),
-    emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3).
+    emqx:unhook('message.acked', fun ?MODULE:on_message_acked/2).
 
 %%------------------------------------------------------------------------------
 %% Internal Functions
@@ -339,7 +325,7 @@ columns(Input = #{sockname := Peername}, Result) ->
     columns(maps:remove(sockname, Input),
             Result#{sockname => peername(Peername)});
 columns(Input = #{connattrs := Conn}, Result) ->
-    ConnAt = maps:get(connected_at, Conn, null),
+    ConnAt = maps:get(connected_at, Conn, erlang:timestamp()),
     columns(maps:remove(connattrs, Input),
             maps:merge(Result, #{connected_at => emqx_time:now_ms(ConnAt),
                                  clean_start => maps:get(clean_start, Conn, null),

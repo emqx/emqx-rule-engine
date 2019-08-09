@@ -253,8 +253,8 @@
 
 -define(EVENT_INFO_CLIENT_UNSUBSCRIBE,
         #{ event => 'client.unsubscribe',
-           title => #{en => <<"client unsubscribe">>, zh => <<"终端订阅"/utf8>>},
-           description => #{en => <<"client unsubscribe">>, zh => <<"终端订阅"/utf8>>},
+           title => #{en => <<"client unsubscribe">>, zh => <<"终端取消订阅"/utf8>>},
+           description => #{en => <<"client unsubscribe">>, zh => <<"终端取消订阅"/utf8>>},
            test_columns => ?TEST_COLUMNS('client.unsubscribe'),
            columns => ?COLUMNS('client.unsubscribe'),
            sql_example => <<"SELECT * FROM \"client.unsubscribe\" WHERE topic =~ 't/#'">>
