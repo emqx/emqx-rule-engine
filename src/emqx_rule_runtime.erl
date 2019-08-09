@@ -22,8 +22,8 @@
 
 -export([ on_client_connected/4
         , on_client_disconnected/3
-        , on_client_subscribe/3
-        , on_client_unsubscribe/3
+        , on_client_subscribe/4
+        , on_client_unsubscribe/4
         , on_message_publish/2
         , on_message_dropped/3
         , on_message_deliver/3
@@ -46,8 +46,8 @@
 start(Env) ->
     hook_rules('client.connected', fun ?MODULE:on_client_connected/4, Env),
     hook_rules('client.disconnected', fun ?MODULE:on_client_disconnected/3, Env),
-    hook_rules('client.subscribe', fun ?MODULE:on_client_subscribe/3, Env),
-    hook_rules('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3, Env),
+    hook_rules('client.subscribe', fun ?MODULE:on_client_subscribe/4, Env),
+    hook_rules('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/4, Env),
     hook_rules('message.publish', fun ?MODULE:on_message_publish/2, Env),
     hook_rules('message.dropped', fun ?MODULE:on_message_dropped/3, Env),
     hook_rules('message.deliver', fun ?MODULE:on_message_deliver/3, Env),
@@ -66,11 +66,11 @@ on_client_connected(Credentials, ConnAck, ConnAttrs, #{apply_fun := ApplyRules})
 on_client_disconnected(Credentials, ReasonCode, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(Credentials, #{event => 'client.disconnected', reason_code => ReasonCode, node => node(), timestamp => erlang:timestamp()})).
 
-on_client_subscribe(Credentials, TopicFilters, #{apply_fun := ApplyRules}) ->
+on_client_subscribe(Credentials, _Properties, TopicFilters, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(Credentials, #{event => 'client.subscribe', topic_filters => TopicFilters, node => node(), timestamp => erlang:timestamp()})),
     {ok, TopicFilters}.
 
-on_client_unsubscribe(Credentials, TopicFilters, #{apply_fun := ApplyRules}) ->
+on_client_unsubscribe(Credentials, _Properties, TopicFilters, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(Credentials, #{event => 'client.unsubscribe', topic_filters => TopicFilters, node => node(), timestamp => erlang:timestamp()})),
     {ok, TopicFilters}.
 
@@ -286,8 +286,8 @@ parse_payload(Input) ->
 stop(_Env) ->
     emqx:unhook('client.connected', fun ?MODULE:on_client_connected/4),
     emqx:unhook('client.disconnected', fun ?MODULE:on_client_disconnected/3),
-    emqx:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/3),
-    emqx:unhook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3),
+    emqx:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/4),
+    emqx:unhook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/4),
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
     emqx:unhook('message.dropped', fun ?MODULE:on_message_dropped/3),
     emqx:unhook('message.deliver', fun ?MODULE:on_message_deliver/3),
