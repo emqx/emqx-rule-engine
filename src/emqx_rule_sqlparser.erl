@@ -83,9 +83,9 @@ preprocess(#select{fields = Fields, from = Hooks, where = Conditions}) ->
 preprocess_field(<<"*">>) ->
     '*';
 preprocess_field({'as', Field, Alias}) when is_binary(Alias) ->
-    {'as', transform_non_const_field(Field), transform_alias(Alias)};
+    {'as', transform_select_field(Field), transform_alias(Alias)};
 preprocess_field(Field) ->
-    transform_non_const_field(Field).
+    transform_select_field(Field).
 
 preprocess_condition({Op, L, R}, Columns) when ?is_logical(Op) orelse ?is_comp(Op) ->
     {Op, preprocess_condition(L, Columns), preprocess_condition(R, Columns)};
@@ -120,15 +120,17 @@ do_transform_field({'fun', Name, Args}, Columns) when is_binary(Name) ->
     Fun = list_to_existing_atom(binary_to_list(Name)),
     {'fun', Fun, [transform_field(Arg, Columns) || Arg <- Args]}.
 
-transform_non_const_field(<<"payload.", Attr/binary>>) ->
+transform_select_field({const, Val}) ->
+    {const, Val};
+transform_select_field(<<"payload.", Attr/binary>>) ->
     {payload, parse_nested(Attr)};
-transform_non_const_field({Op, Arg1, Arg2}) when ?is_arith(Op) ->
-    {Op, transform_non_const_field(Arg1), transform_non_const_field(Arg2)};
-transform_non_const_field(Var) when is_binary(Var) ->
+transform_select_field({Op, Arg1, Arg2}) when ?is_arith(Op) ->
+    {Op, transform_select_field(Arg1), transform_select_field(Arg2)};
+transform_select_field(Var) when is_binary(Var) ->
     {var, escape(parse_nested(Var))};
-transform_non_const_field({'fun', Name, Args}) when is_binary(Name) ->
+transform_select_field({'fun', Name, Args}) when is_binary(Name) ->
     Fun = list_to_existing_atom(binary_to_list(Name)),
-    {'fun', Fun, [transform_non_const_field(Arg) || Arg <- Args]}.
+    {'fun', Fun, [transform_select_field(Arg) || Arg <- Args]}.
 
 validate_var(Var, SupportedColumns) ->
     case {Var, lists:member(Var, SupportedColumns)} of
