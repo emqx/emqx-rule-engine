@@ -104,9 +104,9 @@
 %% Data encode and decode
 -export([ base64_encode/1
         , base64_decode/1
-        , schema_encode/2
-        , schema_decode/2
         ]).
+
+-export(['$handle_undefined_function'/2]).
 
 -import(emqx_rule_maps,
         [ get_value/2
@@ -427,8 +427,19 @@ base64_encode(Data) when is_binary(Data) ->
 base64_decode(Data) when is_binary(Data) ->
     base64:decode(Data).
 
-schema_encode(SchemaId, Term) ->
-    emqx_schema_parser:encode(SchemaId, Term).
+%% @doc This is for sql funcs that should be handled in the specific modules.
+%% Here the emqx_rule_funcs module acts as a proxy, forwarding
+%% the function handling to the worker module.
+%% @end
+'$handle_undefined_function'(schema_decode, [SchemaId, Data|MoreArgs]) ->
+    emqx_schema_parser:decode(SchemaId, Data, MoreArgs);
+'$handle_undefined_function'(schema_decode, Args) ->
+    error({args_count_error, {schema_decode, Args}});
 
-schema_decode(SchemaId, Data) ->
-    emqx_schema_parser:decode(SchemaId, Data).
+'$handle_undefined_function'(schema_encode, [SchemaId, Term|MoreArgs]) ->
+    emqx_schema_parser:encode(SchemaId, Term, MoreArgs);
+'$handle_undefined_function'(schema_encode, Args) ->
+    error({args_count_error, {schema_encode, Args}});
+
+'$handle_undefined_function'(Fun, _Args) ->
+    error({sql_function_not_supported, Fun}).
