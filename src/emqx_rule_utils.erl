@@ -35,6 +35,10 @@
           tcp_connectivity/2
         ]).
 
+-export([ now_ms/0
+        , now_ms/1
+        ]).
+
 -define(EX_PLACE_HOLDER, "(\\$\\{[a-zA-Z0-9\\._]+\\})").
 
 -type(uri_string() :: iodata()).
@@ -185,3 +189,9 @@ parse_nested(Attr) ->
         [Attr] -> Attr;
         Nested -> Nested
     end.
+
+now_ms() ->
+    erlang:system_time(millisecond).
+
+now_ms({MegaSecs, Secs, MicroSecs}) ->
+    (MegaSecs * 1000000 + Secs) * 1000 + round(MicroSecs/1000).
