@@ -317,7 +317,7 @@ columns(Input = #{headers := Headers}, Result) ->
                                  peername => Peername}));
 columns(Input = #{timestamp := Timestamp}, Result) ->
     columns(maps:remove(timestamp, Input),
-            Result#{timestamp => emqx_time:now_ms(Timestamp)});
+            Result#{timestamp => emqx_rule_utils:now_ms(Timestamp)});
 columns(Input = #{peername := Peername}, Result) ->
     columns(maps:remove(peername, Input),
             Result#{peername => peername(Peername)});
@@ -327,7 +327,7 @@ columns(Input = #{sockname := Peername}, Result) ->
 columns(Input = #{connattrs := Conn}, Result) ->
     ConnAt = maps:get(connected_at, Conn, erlang:timestamp()),
     columns(maps:remove(connattrs, Input),
-            maps:merge(Result, #{connected_at => emqx_time:now_ms(ConnAt),
+            maps:merge(Result, #{connected_at => emqx_rule_utils:now_ms(ConnAt),
                                  clean_start => maps:get(clean_start, Conn, null),
                                  is_bridge => maps:get(is_bridge, Conn, null),
                                  keepalive => maps:get(keepalive, Conn, null),
