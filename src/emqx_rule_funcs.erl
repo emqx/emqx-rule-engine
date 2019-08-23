@@ -194,8 +194,8 @@ payload(Path) when is_list(Path) ->
 %% @doc "timestamp()" Func
 timestamp() ->
     fun(#{timestamp := Ts}) ->
-            emqx_time:now_ms(Ts);
-       (_) -> emqx_time:now_ms()
+            emqx_rule_utils:now_ms(Ts);
+       (_) -> emqx_rule_utils:now_ms()
     end.
 
 %% @doc Check if a topic_filter contains a specific topic

@@ -233,10 +233,10 @@ t_inspect_action(_Config) ->
                   type => built_in,
                   description => <<"Inspect rule">>
                   }),
-    {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
-    {ok, _} = emqx_client:connect(Client),
-    emqx_client:publish(Client, <<"t1">>, <<"{\"id\": 1, \"name\": \"ha\"}">>, 0),
-    emqx_client:stop(Client),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqtt:connect(Client),
+    emqtt:publish(Client, <<"t1">>, <<"{\"id\": 1, \"name\": \"ha\"}">>, 0),
+    emqtt:stop(Client),
     emqx_rule_registry:remove_rule(Id),
     emqx_rule_registry:remove_resource(ResId),
     ok.
@@ -249,18 +249,18 @@ t_republish_action(_Config) ->
                       actions => [{'republish',
                                   #{<<"target_topic">> => <<"t1">>, <<"payload_tmpl">> => <<"${payload}">>}}],
                       description => <<"builtin-republish-rule">>}),
-    {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
-    {ok, _} = emqx_client:connect(Client),
-    {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqtt:connect(Client),
+    {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
 
     Msg = <<"{\"id\": 1, \"name\": \"ha\"}">>,
-    emqx_client:publish(Client, <<"t1">>, Msg, 0),
+    emqtt:publish(Client, <<"t1">>, Msg, 0),
     receive {publish, #{topic := <<"t2">>, payload := Payload}} ->
         ?assertEqual(Msg, Payload)
     after 1000 ->
         ct:fail(wait_for_t2)
     end,
-    emqx_client:stop(Client),
+    emqtt:stop(Client),
     emqx_rule_registry:remove_rule(Id),
     ok.
 
@@ -572,7 +572,7 @@ unregister_resource_types_of() ->
 %%------------------------------------------------------------------------------
 
 t_events(_Config) ->
-    {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
     client_connected(Client),
     client_subscribe(Client),
     message_publish(Client),
@@ -584,15 +584,15 @@ t_events(_Config) ->
     ok.
 
 client_connected(Client) ->
-    {ok, _} = emqx_client:connect(Client),
+    {ok, _} = emqtt:connect(Client),
     verify_events_counter('client.connected'),
     ok.
 client_subscribe(Client) ->
-    {ok, _, _} = emqx_client:subscribe(Client, <<"t1">>, 1),
+    {ok, _, _} = emqtt:subscribe(Client, <<"t1">>, 1),
     verify_events_counter('client.subscribe'),
     ok.
 message_publish(Client) ->
-    emqx_client:publish(Client, <<"t1">>, <<"{\"id\": 1, \"name\": \"ha\"}">>, 1),
+    emqtt:publish(Client, <<"t1">>, <<"{\"id\": 1, \"name\": \"ha\"}">>, 1),
     verify_events_counter('message.publish'),
     ok.
 message_deliver(_Client) ->
@@ -603,7 +603,7 @@ message_acked(_Client) ->
     verify_events_counter('message.acked'),
     ok.
 client_unsubscribe(Client) ->
-    {ok, _, _} = emqx_client:unsubscribe(Client, <<"t1">>),
+    {ok, _, _} = emqtt:unsubscribe(Client, <<"t1">>),
     verify_events_counter('client.unsubscribe'),
     ok.
 message_dropped(Client) ->
@@ -611,7 +611,7 @@ message_dropped(Client) ->
     verify_events_counter('message.dropped'),
     ok.
 client_disconnected(Client) ->
-    ok = emqx_client:stop(Client),
+    ok = emqtt:stop(Client),
     verify_events_counter('client.disconnected'),
     ok.
 
@@ -622,10 +622,10 @@ t_sqlselect_0(_Config) ->
                     "SELECT payload.x as x, payload "
                     "FROM \"message.publish\" "
                     "WHERE (topic =~ 't3/#' or topic = 't1') and x = 1"),
-    {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
-    {ok, _} = emqx_client:connect(Client),
-    {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
-    emqx_client:publish(Client, <<"t1">>, <<"{\"x\":1}">>, 0),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqtt:connect(Client),
+    {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
+    emqtt:publish(Client, <<"t1">>, <<"{\"x\":1}">>, 0),
     ct:sleep(100),
     receive {publish, #{topic := T, payload := Payload}} ->
         ?assertEqual(<<"t2">>, T),
@@ -634,14 +634,14 @@ t_sqlselect_0(_Config) ->
         ct:fail(wait_for_t2)
     end,
 
-    emqx_client:publish(Client, <<"t1">>, <<"{\"x\":2}">>, 0),
+    emqtt:publish(Client, <<"t1">>, <<"{\"x\":2}">>, 0),
     receive {publish, #{topic := <<"t2">>, payload := _}} ->
         ct:fail(unexpected_t2)
     after 1000 ->
         ok
     end,
 
-    emqx_client:publish(Client, <<"t3/a">>, <<"{\"x\":1}">>, 0),
+    emqtt:publish(Client, <<"t3/a">>, <<"{\"x\":1}">>, 0),
     receive {publish, #{topic := T3, payload := Payload3}} ->
         ?assertEqual(<<"t2">>, T3),
         ?assertEqual(<<"{\"x\":1}">>, Payload3)
@@ -649,7 +649,7 @@ t_sqlselect_0(_Config) ->
         ct:fail(wait_for_t2)
     end,
 
-    emqx_client:stop(Client),
+    emqtt:stop(Client),
     emqx_rule_registry:remove_rule(TopicRule).
 
 t_sqlselect_1(_Config) ->
@@ -659,11 +659,11 @@ t_sqlselect_1(_Config) ->
                     "SELECT payload.x, payload.y "
                     "FROM \"message.publish\" "
                     "WHERE payload.x = 1 and payload.y = 2 and topic = 't1'"),
-    {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
-    {ok, _} = emqx_client:connect(Client),
-    {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqtt:connect(Client),
+    {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
 
-    emqx_client:publish(Client, <<"t1">>, <<"{\"x\":1,\"y\":2}">>, 0),
+    emqtt:publish(Client, <<"t1">>, <<"{\"x\":1,\"y\":2}">>, 0),
     ct:sleep(100),
     receive {publish, #{topic := T, payload := Payload}} ->
         ?assertEqual(<<"t2">>, T),
@@ -672,14 +672,14 @@ t_sqlselect_1(_Config) ->
         ct:fail(wait_for_t2)
     end,
 
-    emqx_client:publish(Client, <<"t1">>, <<"{\"x\":1,\"y\":1}">>, 0),
+    emqtt:publish(Client, <<"t1">>, <<"{\"x\":1,\"y\":1}">>, 0),
     receive {publish, #{topic := <<"t2">>, payload := _}} ->
         ct:fail(unexpected_t2)
     after 1000 ->
         ok
     end,
 
-    emqx_client:stop(Client),
+    emqtt:stop(Client),
     emqx_rule_registry:remove_rule(TopicRule).
 
 t_sqlselect_2(_Config) ->
@@ -690,11 +690,11 @@ t_sqlselect_2(_Config) ->
                     "SELECT * "
                     "FROM \"message.publish\" "
                     "WHERE topic =~ '#'"),
-    {ok, Client} = emqx_client:start_link([{username, <<"emqx">>}]),
-    {ok, _} = emqx_client:connect(Client),
-    {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqtt:connect(Client),
+    {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
 
-    emqx_client:publish(Client, <<"t1">>, <<"{\"x\":1,\"y\":1}">>, 0),
+    emqtt:publish(Client, <<"t1">>, <<"{\"x\":1,\"y\":1}">>, 0),
     Fun = fun() ->
             receive {publish, #{topic := <<"t2">>, payload := _}} ->
                 received_t2
@@ -707,7 +707,7 @@ t_sqlselect_2(_Config) ->
         received_nothing -> ok
     end,
 
-    emqx_client:stop(Client),
+    emqtt:stop(Client),
     emqx_rule_registry:remove_rule(TopicRule).
 
 %%------------------------------------------------------------------------------
