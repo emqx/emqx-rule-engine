@@ -33,8 +33,10 @@
         ]).
 
 %% connectivity check
--export([ http_connectivity/1,
-          tcp_connectivity/2
+-export([ http_connectivity/1
+        , http_connectivity/2
+        , tcp_connectivity/2
+        , tcp_connectivity/3
         ]).
 
 -export([ now_ms/0
@@ -129,22 +131,33 @@ atom_key(Key) when is_binary(Key) ->
 
 -spec(http_connectivity(uri_string()) -> ok | {error, Reason :: term()}).
 http_connectivity(Url) ->
+    http_connectivity(Url, 3000).
+
+-spec(http_connectivity(uri_string(), integer()) -> ok | {error, Reason :: term()}).
+http_connectivity(Url, Timeout) ->
     case uri_string:parse(uri_string:normalize(Url)) of
         {error, Reason, _} ->
             {error, Reason};
         #{host := Host, port := Port} ->
-            tcp_connectivity(str(Host), Port);
+            tcp_connectivity(str(Host), Port, Timeout);
         #{host := Host, scheme := Scheme} ->
-            tcp_connectivity(str(Host), default_port(Scheme));
+            tcp_connectivity(str(Host), default_port(Scheme), Timeout);
         _ ->
             {error, {invalid_url, Url}}
     end.
 
--spec(tcp_connectivity(Host :: inet:socket_address() | inet:hostname(),
+-spec tcp_connectivity(Host :: inet:socket_address() | inet:hostname(),
                        Port :: inet:port_number())
-        -> ok | {error, Reason :: term()}).
+      -> ok | {error, Reason :: term()}.
 tcp_connectivity(Host, Port) ->
-    case gen_tcp:connect(Host, Port, [], 3000) of
+    tcp_connectivity(Host, Port, 3000).
+
+-spec(tcp_connectivity(Host :: inet:socket_address() | inet:hostname(),
+                       Port :: inet:port_number(),
+                       Timeout :: integer())
+        -> ok | {error, Reason :: term()}).
+tcp_connectivity(Host, Port, Timeout) ->
+    case gen_tcp:connect(Host, Port, [], Timeout) of
         {ok, Sock} -> gen_tcp:close(Sock), ok;
         {error, Reason} -> {error, Reason}
     end.
