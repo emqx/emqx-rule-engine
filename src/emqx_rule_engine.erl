@@ -30,6 +30,7 @@
         , test_resource/1
         , start_resource/1
         , get_resource_status/1
+        , get_resource_params/1
         , delete_resource/1
         ]).
 
@@ -233,6 +234,15 @@ get_resource_status(ResId) ->
             {ok, Status};
         not_found ->
             {error, {resource_not_found, ResId}}
+    end.
+
+-spec(get_resource_params(resource_id()) -> {ok, map()} | {error, Reason :: term()}).
+get_resource_params(ResId) ->
+     case emqx_rule_registry:find_resource_params(ResId) of
+        {ok, #resource_params{params = Params}} ->
+            {ok, Params};
+        not_found ->
+            {error, resource_not_initialized}
     end.
 
 -spec(delete_resource(resource_id()) -> ok | {error, Reason :: term()}).
