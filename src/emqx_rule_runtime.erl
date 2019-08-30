@@ -119,9 +119,11 @@ apply_rules([#rule{enabled = false}|More], Input) ->
 apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
     try apply_rule(Rule, Input)
     catch
-        throw:Error when Error =:= select_and_transform_error;
-                         Error =:= match_conditions_error
-            -> ok; %% ignore the errors if select or match failed
+        %% ignore the errors if select or match failed
+        _:{select_and_transform_error, _} ->
+            ok;
+        _:{match_conditions_error, _} ->
+            ok;
         _:Error:StkTrace ->
             ?LOG(error, "Apply rule ~s failed: ~p. Statcktrace:~n~p",
                  [RuleID, Error, StkTrace])

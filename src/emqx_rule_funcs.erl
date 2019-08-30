@@ -106,6 +106,8 @@
 %% Data encode and decode
 -export([ base64_encode/1
         , base64_decode/1
+        , json_decode/1
+        , json_encode/1
         ]).
 
 -export(['$handle_undefined_function'/2]).
@@ -428,6 +430,12 @@ base64_encode(Data) when is_binary(Data) ->
 
 base64_decode(Data) when is_binary(Data) ->
     base64:decode(Data).
+
+json_encode(Data) ->
+    jsx:encode(Data).
+
+json_decode(Data) ->
+    jsx:decode(Data, [return_maps]).
 
 %% @doc This is for sql funcs that should be handled in the specific modules.
 %% Here the emqx_rule_funcs module acts as a proxy, forwarding
