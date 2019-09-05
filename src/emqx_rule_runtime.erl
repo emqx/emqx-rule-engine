@@ -118,12 +118,14 @@ apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
     try apply_rule(Rule, Input)
     catch
         %% ignore the errors if select or match failed
-        _:{select_and_transform_error, _} ->
-            ok;
-        _:{match_conditions_error, _} ->
-            ok;
+        _:{select_and_transform_error, Error}:StkTrace ->
+            ?LOG(debug, "SELECT clause exception for ~s failed: ~p. Stacktrace:~n~p",
+                 [RuleID, Error, StkTrace]);
+        _:{match_conditions_error, Error}:StkTrace ->
+            ?LOG(debug, "WHERE clause exception for ~s failed: ~p. Stacktrace:~n~p",
+                 [RuleID, Error, StkTrace]);
         _:Error:StkTrace ->
-            ?LOG(error, "Apply rule ~s failed: ~p. Statcktrace:~n~p",
+            ?LOG(error, "Apply rule ~s failed: ~p. Stacktrace:~n~p",
                  [RuleID, Error, StkTrace])
     end,
     apply_rules(More, Input).
@@ -153,13 +155,17 @@ select_and_transform([], _Input, Output) ->
 select_and_transform(['*'|More], Input, Output) ->
     select_and_transform(More, Input, maps:merge(Output, Input));
 select_and_transform([{as, Field, Alias}|More], Input, Output) ->
+    Key = emqx_rule_utils:unsafe_atom_key(Alias),
     Val = eval(Field, Input),
-    select_and_transform(More, Input,
-        nested_put(emqx_rule_utils:unsafe_atom_key(Alias), Val, Output));
+    select_and_transform(More,
+        nested_put(Key, Val, Input),
+        nested_put(Key, Val, Output));
 select_and_transform([Field|More], Input, Output) ->
     Val = eval(Field, Input),
-    Alias = alias(Field, Val),
-    select_and_transform(More, Input, nested_put(Alias, Val, Output)).
+    Key = alias(Field, Val),
+    select_and_transform(More,
+        nested_put(Key, Val, Input),
+        nested_put(Key, Val, Output)).
 
 %% Step2 -> Match selected data with conditions
 match_conditions({'and', L, R}, Data) ->

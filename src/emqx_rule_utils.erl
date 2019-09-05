@@ -107,15 +107,15 @@ repalce_with(Tmpl, '$n') ->
 
 unsafe_atom_key(Key) when is_atom(Key) ->
     Key;
-unsafe_atom_key(_Keys = [Key | SubKeys]) when is_binary(Key) ->
-    [binary_to_atom(Key, utf8) | SubKeys];
+unsafe_atom_key(Keys = [Key | _]) when is_binary(Key) ->
+    [binary_to_atom(SubKey, utf8) || SubKey <- Keys];
 unsafe_atom_key(Key) when is_binary(Key) ->
     binary_to_atom(Key, utf8).
 
 atom_key(Key) when is_atom(Key) ->
     Key;
-atom_key(Keys = [Key | SubKeys]) when is_binary(Key) -> %% nested keys
-    try [binary_to_existing_atom(Key, utf8) | SubKeys]
+atom_key(Keys = [Key | _]) when is_binary(Key) -> %% nested keys
+    try [binary_to_existing_atom(SubKey, utf8) || SubKey <- Keys]
     catch error:badarg -> error({invalid_key, Keys})
     end;
 atom_key(Key) when is_binary(Key) ->
