@@ -1,3 +1,4 @@
+%%--------------------------------------------------------------------
 %% Copyright (c) 2019 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,6 +12,7 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
+%%--------------------------------------------------------------------
 
 -module(emqx_rule_runtime).
 
@@ -27,7 +29,7 @@
         , on_message_publish/2
         , on_message_dropped/3
         , on_message_deliver/3
-        , on_message_acked/2
+        , on_message_acked/3
         ]).
 
 -export([apply_rule/2]).
@@ -51,7 +53,7 @@ start(Env) ->
     hook_rules('message.publish', fun ?MODULE:on_message_publish/2, Env),
     hook_rules('message.dropped', fun ?MODULE:on_message_dropped/3, Env),
     hook_rules('message.deliver', fun ?MODULE:on_message_deliver/3, Env),
-    hook_rules('message.acked', fun ?MODULE:on_message_acked/2, Env).
+    hook_rules('message.acked', fun ?MODULE:on_message_acked/3, Env).
 
 hook_rules(Name, Fun, Env) ->
     emqx:hook(Name, Fun, [Env#{apply_fun => apply_rules_fun(Name)}]).
@@ -94,7 +96,7 @@ on_message_deliver(Credentials, Message, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(Credentials#{event => 'message.deliver', node => node()}, emqx_message:to_map(Message))),
     {ok, Message}.
 
-on_message_acked(Message, #{apply_fun := ApplyRules}) ->
+on_message_acked(_Credentials, Message, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.acked', node => node()})),
     {ok, Message}.
 
@@ -117,11 +119,15 @@ apply_rules([#rule{enabled = false}|More], Input) ->
 apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
     try apply_rule(Rule, Input)
     catch
-        throw:Error when Error =:= select_and_transform_error;
-                         Error =:= match_conditions_error
-            -> ok; %% ignore the errors if select or match failed
+        %% ignore the errors if select or match failed
+        _:{select_and_transform_error, Error}:StkTrace ->
+            ?LOG(debug, "SELECT clause exception for ~s failed: ~p. Stacktrace:~n~p",
+                 [RuleID, Error, StkTrace]);
+        _:{match_conditions_error, Error}:StkTrace ->
+            ?LOG(debug, "WHERE clause exception for ~s failed: ~p. Stacktrace:~n~p",
+                 [RuleID, Error, StkTrace]);
         _:Error:StkTrace ->
-            ?LOG(error, "Apply rule ~s failed: ~p. Statcktrace:~n~p",
+            ?LOG(error, "Apply rule ~s failed: ~p. Stacktrace:~n~p",
                  [RuleID, Error, StkTrace])
     end,
     apply_rules(More, Input).
@@ -151,13 +157,17 @@ select_and_transform([], _Input, Output) ->
 select_and_transform(['*'|More], Input, Output) ->
     select_and_transform(More, Input, maps:merge(Output, Input));
 select_and_transform([{as, Field, Alias}|More], Input, Output) ->
+    Key = emqx_rule_utils:unsafe_atom_key(Alias),
     Val = eval(Field, Input),
-    select_and_transform(More, Input,
-        nested_put(emqx_rule_utils:unsafe_atom_key(Alias), Val, Output));
+    select_and_transform(More,
+        nested_put(Key, Val, Input),
+        nested_put(Key, Val, Output));
 select_and_transform([Field|More], Input, Output) ->
     Val = eval(Field, Input),
-    Alias = alias(Field, Val),
-    select_and_transform(More, Input, nested_put(Alias, Val, Output)).
+    Key = alias(Field, Val),
+    select_and_transform(More,
+        nested_put(Key, Val, Input),
+        nested_put(Key, Val, Output)).
 
 %% Step2 -> Match selected data with conditions
 match_conditions({'and', L, R}, Data) ->

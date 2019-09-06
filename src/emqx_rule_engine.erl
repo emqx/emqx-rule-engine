@@ -1,3 +1,4 @@
+%%--------------------------------------------------------------------
 %% Copyright (c) 2019 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,6 +12,7 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
+%%--------------------------------------------------------------------
 
 -module(emqx_rule_engine).
 
@@ -30,6 +32,7 @@
         , test_resource/1
         , start_resource/1
         , get_resource_status/1
+        , get_resource_params/1
         , delete_resource/1
         ]).
 
@@ -233,6 +236,15 @@ get_resource_status(ResId) ->
             {ok, Status};
         not_found ->
             {error, {resource_not_found, ResId}}
+    end.
+
+-spec(get_resource_params(resource_id()) -> {ok, map()} | {error, Reason :: term()}).
+get_resource_params(ResId) ->
+     case emqx_rule_registry:find_resource_params(ResId) of
+        {ok, #resource_params{params = Params}} ->
+            {ok, Params};
+        not_found ->
+            {error, resource_not_initialized}
     end.
 
 -spec(delete_resource(resource_id()) -> ok | {error, Reason :: term()}).
