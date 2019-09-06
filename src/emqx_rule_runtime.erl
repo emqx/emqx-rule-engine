@@ -29,7 +29,7 @@
         , on_message_publish/2
         , on_message_dropped/3
         , on_message_deliver/3
-        , on_message_acked/2
+        , on_message_acked/3
         ]).
 
 -export([apply_rule/2]).
@@ -53,7 +53,7 @@ start(Env) ->
     hook_rules('message.publish', fun ?MODULE:on_message_publish/2, Env),
     hook_rules('message.dropped', fun ?MODULE:on_message_dropped/3, Env),
     hook_rules('message.deliver', fun ?MODULE:on_message_deliver/3, Env),
-    hook_rules('message.acked', fun ?MODULE:on_message_acked/2, Env).
+    hook_rules('message.acked', fun ?MODULE:on_message_acked/3, Env).
 
 hook_rules(Name, Fun, Env) ->
     emqx:hook(Name, Fun, [Env#{apply_fun => apply_rules_fun(Name)}]).
@@ -96,7 +96,7 @@ on_message_deliver(Credentials, Message, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(Credentials#{event => 'message.deliver', node => node()}, emqx_message:to_map(Message))),
     {ok, Message}.
 
-on_message_acked(Message, #{apply_fun := ApplyRules}) ->
+on_message_acked(_Credentials, Message, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.acked', node => node()})),
     {ok, Message}.
 
