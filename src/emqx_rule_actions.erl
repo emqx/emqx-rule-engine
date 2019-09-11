@@ -57,7 +57,7 @@
               }).
 
 -rule_action(#{name => republish,
-               for => 'message.publish',
+               for => '$any',
                types => [],
                create => on_action_create_republish,
                params => ?REPUBLISH_PARAMS_SPEC,
