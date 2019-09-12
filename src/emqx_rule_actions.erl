@@ -24,14 +24,25 @@
                 order => 1,
                 type => string,
                 required => true,
-                default => <<"resp/${client_id}">>,
+                default => <<"repub/to/${client_id}">>,
                 title => #{en => <<"Target Topic">>,
                            zh => <<"目的主题"/utf8>>},
                 description => #{en => <<"To which topic the message will be republished">>,
                                  zh => <<"重新发布消息到哪个主题"/utf8>>}
             },
-            payload_tmpl => #{
+            target_qos => #{
                 order => 2,
+                type => number,
+                enum => [-1, 0, 1, 2],
+                required => true,
+                default => 0,
+                title => #{en => <<"Target QoS">>,
+                           zh => <<"目的 QoS"/utf8>>},
+                description => #{en => <<"The QoS Level to be uses when republishing the message. Set to -1 to use the original QoS">>,
+                                 zh => <<"重新发布消息时用的 QoS 级别, 设置为 -1 以使用原消息中的 QoS"/utf8>>}
+            },
+            payload_tmpl => #{
+                order => 3,
                 type => string,
                 input => textarea,
                 required => true,
@@ -107,7 +118,9 @@ on_action_create_inspect(_Id, Params) ->
 %% A Demo Action.
 -spec(on_action_create_republish(action_instance_id(), #{binary() := emqx_topic:topic()})
       -> action_fun()).
-on_action_create_republish(Id, #{<<"target_topic">> := TargetTopic, <<"payload_tmpl">> := PayloadTmpl}) ->
+on_action_create_republish(Id, #{<<"target_topic">> := TargetTopic, <<"target_qos">> := TargetQoS, <<"payload_tmpl">> := PayloadTmpl}) ->
+    TopicTks = emqx_rule_utils:preproc_tmpl(TargetTopic),
+    PayloadTks = emqx_rule_utils:preproc_tmpl(PayloadTmpl),
     fun (_Selected, Envs = #{headers := #{republish_by := ActId},
                              topic := Topic}) when ActId =:= Id ->
             ?LOG(error, "[republish] recursively republish detected, msg topic: ~p, target topic: ~p",
@@ -116,15 +129,28 @@ on_action_create_republish(Id, #{<<"target_topic">> := TargetTopic, <<"payload_t
         (Selected, #{qos := QoS, flags := Flags, headers := Headers}) ->
             ?LOG(debug, "[republish] republish to: ~p, Payload: ~p",
                 [TargetTopic, Selected]),
-            TopicTks = emqx_rule_utils:preproc_tmpl(TargetTopic),
-            PayloadTks = emqx_rule_utils:preproc_tmpl(PayloadTmpl),
             emqx_broker:safe_publish(
                 #message{
                     id = emqx_guid:gen(),
-                    qos = QoS,
+                    qos = if TargetQoS =:= -1 -> QoS; true -> TargetQoS end,
                     from = Id,
                     flags = Flags,
                     headers = Headers#{republish_by => Id},
+                    topic = emqx_rule_utils:proc_tmpl(TopicTks, Selected),
+                    payload = emqx_rule_utils:proc_tmpl(PayloadTks, Selected),
+                    timestamp = erlang:timestamp()
+                });
+        %% in case this is not a "message.publish" request
+        (Selected, _Envs) ->
+            ?LOG(debug, "[republish] republish to: ~p, Payload: ~p",
+                [TargetTopic, Selected]),
+            emqx_broker:safe_publish(
+                #message{
+                    id = emqx_guid:gen(),
+                    qos = if TargetQoS =:= -1 -> 0; true -> TargetQoS end,
+                    from = Id,
+                    flags = #{},
+                    headers = #{republish_by => Id},
                     topic = emqx_rule_utils:proc_tmpl(TopicTks, Selected),
                     payload = emqx_rule_utils:proc_tmpl(PayloadTks, Selected),
                     timestamp = erlang:timestamp()

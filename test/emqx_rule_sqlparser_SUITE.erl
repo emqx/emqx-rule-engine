@@ -41,15 +41,15 @@ t_sqlparse(_Config) ->
     ?assertEqual(['*'], emqx_rule_sqlparser:select_fields(Select)),
     ?assertEqual(['message.publish'], emqx_rule_sqlparser:select_from(Select)),
     ?assertEqual({'and',{'and',{'=',{var,<<"topic">>},{const,<<"topic/#">>}},
-                               {'>',{payload,<<"x">>},{const,10}}},
-                        {'<=',{payload,<<"y">>},{const,20}}},
+                               {'>',{var,[<<"payload">>, <<"x">>]},{const,10}}},
+                        {'<=',{var,[<<"payload">>, <<"y">>]},{const,20}}},
                  emqx_rule_sqlparser:select_where(Select)),
     %% test null where
     {ok, Select1} = emqx_rule_sqlparser:parse_select("select * from \"message.publish\""),
     ?assertEqual({}, emqx_rule_sqlparser:select_where(Select1)),
     %% test trim alias
     {ok, Select2} = emqx_rule_sqlparser:parse_select("select payload.x as payload.y from \"message.publish\" where topic='topic'"),
-    ?assertEqual([{'as', {payload, <<"x">>}, [<<"payload">>, <<"y">>]}],
+    ?assertEqual([{'as', {var,[<<"payload">>, <<"x">>]}, [<<"payload">>, <<"y">>]}],
                   emqx_rule_sqlparser:select_fields(Select2)).
 
 t_sqlparse_error(_) ->
@@ -59,9 +59,9 @@ t_sqlparse_where_in(_) ->
     {ok, Select} = emqx_rule_sqlparser:parse_select("select payload.a, payload.b, payload.c as c "
                                                     "from \"message.publish\" "
                                                     "where c in (1, 2, 3)"),
-    ?assertEqual([{payload,<<"a">>},
-                  {payload,<<"b">>},
-                  {as,{payload,<<"c">>},<<"c">>}],
+    ?assertEqual([{var,[<<"payload">>, <<"a">>]},
+                  {var,[<<"payload">>, <<"b">>]},
+                  {as,{var,[<<"payload">>, <<"c">>]},<<"c">>}],
                  emqx_rule_sqlparser:select_fields(Select)),
     ?assertEqual({'in', {var, <<"c">>}, {list, [{const, 1}, {const, 2}, {const, 3}]}},
                  emqx_rule_sqlparser:select_where(Select)).

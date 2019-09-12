@@ -109,9 +109,6 @@ transform_field(Val, Columns) ->
             do_transform_field(Val, Columns)
     end.
 
-do_transform_field(<<"payload.", Attr/binary>>, Columns) ->
-    validate_var(<<"payload">>, Columns),
-    {payload, parse_nested(Attr)};
 do_transform_field({Op, Arg1, Arg2}, Columns) when ?is_arith(Op) ->
     {Op, transform_field(Arg1, Columns), transform_field(Arg2, Columns)};
 do_transform_field(Var, Columns) when is_binary(Var) ->
@@ -122,8 +119,6 @@ do_transform_field({'fun', Name, Args}, Columns) when is_binary(Name) ->
 
 transform_select_field({const, Val}) ->
     {const, Val};
-transform_select_field(<<"payload.", Attr/binary>>) ->
-    {payload, parse_nested(Attr)};
 transform_select_field({Op, Arg1, Arg2}) when ?is_arith(Op) ->
     {Op, transform_select_field(Arg1), transform_select_field(Arg2)};
 transform_select_field(Var) when is_binary(Var) ->

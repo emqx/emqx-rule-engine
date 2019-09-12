@@ -110,7 +110,6 @@ rules_for(Hook) ->
 
 -spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
 apply_rules([], _Input) ->
-    erase_payload(),
     ok;
 apply_rules([#rule{enabled = false}|More], Input) ->
     apply_rules(More, Input);
@@ -232,10 +231,6 @@ eval({var, Var}, Input) -> %% nested
     nested_get(emqx_rule_utils:atom_key(Var), Input);
 eval({const, Val}, _Input) ->
     Val;
-eval({payload, Attr}, Input) when is_binary(Attr) ->
-    get_value(Attr, parse_payload(Input));
-eval({payload, AttrPath}, Input) -> %% nested
-    nested_get(AttrPath, parse_payload(Input));
 eval({Op, L, R}, Input) when ?is_arith(Op) ->
     apply_func(Op, [eval(L, Input), eval(R, Input)], Input);
 eval({'fun', Name, Args}, Input) ->
@@ -251,10 +246,6 @@ alias({var, Var}) ->
     emqx_rule_utils:atom_key(Var);
 alias({const, Val}) ->
     Val;
-alias({payload, Attr}) when is_binary(Attr) ->
-    [payload, Attr];
-alias({payload, AttrPath}) when is_list(AttrPath) ->
-    [payload|AttrPath];
 alias(_) -> undefined.
 
 apply_func(Name, Args, Input) when is_atom(Name) ->
@@ -263,28 +254,6 @@ apply_func(Name, Args, Input) when is_atom(Name) ->
             erlang:apply(Func, [Input]);
         Result -> Result
     end.
-
-%% TODO: move to schema registry later.
-erase_payload() ->
-    erase('$rule_payload').
-
-parse_payload(Input) ->
-    case get('$rule_payload') of
-        undefined ->
-            case get_value(payload, Input, <<"{}">>) of
-                Payload when is_binary(Payload) ->
-                    Json = jsx:decode(Payload, [return_maps]),
-                    put('$rule_payload', Json),
-                    Json;
-                Payload when is_map(Payload) ->
-                    Payload
-            end;
-        Json -> Json
-    end.
-
-%% TODO: is the resource available?
-%% call_resource(_ResId) ->
-%%    ok.
 
 %%------------------------------------------------------------------------------
 %% Stop
@@ -299,7 +268,7 @@ stop(_Env) ->
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
     emqx:unhook('message.dropped', fun ?MODULE:on_message_dropped/3),
     emqx:unhook('message.deliver', fun ?MODULE:on_message_deliver/3),
-    emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3).
+    emqx:unhook('message.acked', fun ?MODULE:on_message_acked/2).
 
 %%------------------------------------------------------------------------------
 %% Internal Functions
