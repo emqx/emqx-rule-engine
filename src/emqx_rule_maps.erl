@@ -22,6 +22,7 @@
         , get_value/3
         , put_value/3
         , atom_key_map/1
+        , unsafe_atom_key_map/1
         ]).
 
 nested_get(Key, Map) when not is_list(Key) ->
@@ -73,9 +74,27 @@ put_value(Key, Val, Map) ->
     maps:put(Key, Val, Map).
 
 atom_key_map(BinKeyMap) when is_map(BinKeyMap) ->
-    maps:fold(fun(K, V, Acc) ->
-            Acc#{binary_to_existing_atom(K, utf8) => atom_key_map(V)}
+    maps:fold(
+        fun(K, V, Acc) when is_binary(K) ->
+              Acc#{binary_to_existing_atom(K, utf8) => atom_key_map(V)};
+           (K, V, Acc) when is_list(K) ->
+              Acc#{list_to_existing_atom(K) => atom_key_map(V)};
+           (K, V, Acc) when is_atom(K) ->
+              Acc#{K => atom_key_map(V)}
         end, #{}, BinKeyMap);
 atom_key_map(ListV) when is_list(ListV) ->
     [atom_key_map(V) || V <- ListV];
 atom_key_map(Val) -> Val.
+
+unsafe_atom_key_map(BinKeyMap) when is_map(BinKeyMap) ->
+    maps:fold(
+        fun(K, V, Acc) when is_binary(K) ->
+              Acc#{binary_to_atom(K, utf8) => unsafe_atom_key_map(V)};
+           (K, V, Acc) when is_list(K) ->
+              Acc#{list_to_atom(K) => unsafe_atom_key_map(V)};
+           (K, V, Acc) when is_atom(K) ->
+              Acc#{K => unsafe_atom_key_map(V)}
+        end, #{}, BinKeyMap);
+unsafe_atom_key_map(ListV) when is_list(ListV) ->
+    [unsafe_atom_key_map(V) || V <- ListV];
+unsafe_atom_key_map(Val) -> Val.
