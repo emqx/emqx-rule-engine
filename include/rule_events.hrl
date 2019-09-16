@@ -20,7 +20,7 @@
                 [ '$message'
                 , '$any'
                 , 'message.publish'
-                , 'message.deliver'
+                , 'message.delivered'
                 , 'message.acked'
                 , 'message.dropped'
                 ];
@@ -50,7 +50,7 @@
                 , <<"topic">>
                 , <<"node">>
                 ];
-        'message.deliver' ->
+        'message.delivered' ->
                 [ <<"client_id">>
                 , <<"username">>
                 , <<"event">>
@@ -156,7 +156,7 @@
 -define(TEST_COLUMNS(EVENT),
         case EVENT of
         'message.publish' -> ?TEST_COLUMNS_MESSGE;
-        'message.deliver' -> ?TEST_COLUMNS_MESSGE;
+        'message.delivered' -> ?TEST_COLUMNS_MESSGE;
         'message.acked' -> ?TEST_COLUMNS_MESSGE;
         'message.dropped' -> ?TEST_COLUMNS_MESSGE;
         'client.connected' ->
@@ -200,11 +200,11 @@
         }).
 
 -define(EVENT_INFO_MESSAGE_DELIVER,
-        #{ event => 'message.deliver',
+        #{ event => 'message.delivered',
            title => #{en => <<"message deliver">>, zh => <<"消息投递"/utf8>>},
            description => #{en => <<"message deliver">>, zh => <<"消息投递"/utf8>>},
-           test_columns => ?TEST_COLUMNS('message.deliver'),
-           columns => ?COLUMNS('message.deliver'),
+           test_columns => ?TEST_COLUMNS('message.delivered'),
+           columns => ?COLUMNS('message.delivered'),
            sql_example => <<"SELECT * FROM \"message.deliver\" WHERE topic =~ 't/#'">>
         }).
 
@@ -288,10 +288,10 @@
               timestamp => erlang:timestamp(),
               node => node(),
               topic => <<"t1">>};
-        'message.deliver' ->
+        'message.delivered' ->
             #{anonymous => true,auth_result => success,
               client_id => <<"c_emqx">>,
-              event => 'message.deliver',
+              event => 'message.delivered',
               flags => #{dup => false,retain => false},
               from => <<"c_emqx">>,
               headers =>
