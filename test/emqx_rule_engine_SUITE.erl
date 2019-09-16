@@ -85,7 +85,8 @@ groups() ->
       [t_events,
        t_sqlselect_0,
        t_sqlselect_1,
-       t_sqlselect_2
+       t_sqlselect_2,
+       t_sqlselect_3
       ]}
     ].
 
@@ -130,7 +131,7 @@ init_per_testcase(t_events, Config) ->
     ok = emqx_rule_engine:load_providers(),
     init_events_counters([ 'message.publish'
                          , 'message.dropped'
-                         , 'message.deliver'
+                         , 'message.delivered'
                          , 'message.acked'
                          , 'client.connected'
                          , 'client.disconnected'
@@ -249,7 +250,9 @@ t_republish_action(_Config) ->
         emqx_rule_engine:create_rule(
                     #{rawsql => <<"select topic, payload, qos from \"message.publish\" where topic=t1">>,
                       actions => [{'republish',
-                                  #{<<"target_topic">> => <<"t1">>, <<"payload_tmpl">> => <<"${payload}">>}}],
+                                  #{<<"target_topic">> => <<"t1">>,
+                                    <<"target_qos">> => -1,
+                                    <<"payload_tmpl">> => <<"${payload}">>}}],
                       description => <<"builtin-republish-rule">>}),
     {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqtt:connect(Client),
@@ -341,6 +344,7 @@ t_show_resource_type_api(_Config) ->
 %%------------------------------------------------------------------------------
 
 t_rules_cli(_Config) ->
+    print_mock(),
     RCreate = emqx_rule_engine_cli:rules(["create",
                                           "select * from \"message.publish\" where topic='t1'",
                                           "[{\"name\":\"inspect\", \"params\": {\"arg1\": 1}}]",
@@ -370,6 +374,7 @@ t_rules_cli(_Config) ->
     ok.
 
 t_actions_cli(_Config) ->
+    print_mock(),
     RList = emqx_rule_engine_cli:actions(["list"]),
     ?assertMatch({match, _}, re:run(RList, "inspect")),
     %ct:pal("RList : ~p", [RList]),
@@ -380,6 +385,7 @@ t_actions_cli(_Config) ->
     ok.
 
 t_resources_cli(_Config) ->
+    print_mock(),
     RCreate = emqx_rule_engine_cli:resources(["create", "built_in", "{\"a\" : 1}", "-d", "test resource"]),
     ResId = re:replace(re:replace(RCreate, "Resource\s", "", [{return, list}]), "\screated\n", "", [{return, list}]),
 
@@ -404,6 +410,7 @@ t_resources_cli(_Config) ->
     ok.
 
 t_resource_types_cli(_Config) ->
+    print_mock(),
     RList = emqx_rule_engine_cli:resource_types(["list"]),
     ?assertMatch({match, _}, re:run(RList, "built_in")),
     %ct:pal("RList : ~p", [RList]),
@@ -426,6 +433,7 @@ t_topic_func(_Config) ->
 %%------------------------------------------------------------------------------
 
 t_add_get_remove_rule(_Config) ->
+    print_mock(),
     RuleId0 = <<"rule-debug-0">>,
     ok = emqx_rule_registry:add_rule(make_simple_rule(RuleId0)),
     ?assertMatch({ok, #rule{id = RuleId0}}, emqx_rule_registry:get_rule(RuleId0)),
@@ -575,13 +583,21 @@ unregister_resource_types_of() ->
 
 t_events(_Config) ->
     {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
+    ct:pal("====== client_connected"),
     client_connected(Client),
+    ct:pal("====== client_subscribe"),
     client_subscribe(Client),
+    ct:pal("====== message_publish"),
     message_publish(Client),
+    ct:pal("====== message_deliver"),
     message_deliver(Client),
+    ct:pal("====== message_acked"),
     message_acked(Client),
+    ct:pal("====== client_unsubscribe"),
     client_unsubscribe(Client),
+    ct:pal("====== message_dropped"),
     message_dropped(Client),
+    ct:pal("====== client_disconnected"),
     client_disconnected(Client),
     ok.
 
@@ -598,7 +614,7 @@ message_publish(Client) ->
     verify_events_counter('message.publish'),
     ok.
 message_deliver(_Client) ->
-    verify_events_counter('message.deliver'),
+    verify_events_counter('message.delivered'),
     ok.
 
 message_acked(_Client) ->
@@ -621,9 +637,9 @@ t_sqlselect_0(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     TopicRule = create_simple_repub_rule(
                     <<"t2">>,
-                    "SELECT payload.x as x, payload "
+                    "SELECT json_decode(payload) as p, payload "
                     "FROM \"message.publish\" "
-                    "WHERE (topic =~ 't3/#' or topic = 't1') and x = 1"),
+                    "WHERE (topic =~ 't3/#' or topic = 't1') and p.x = 1"),
     {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqtt:connect(Client),
     {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
@@ -658,15 +674,14 @@ t_sqlselect_1(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     TopicRule = create_simple_repub_rule(
                     <<"t2">>,
-                    "SELECT payload.x, payload.y "
+                    "SELECT json_decode(payload) as p, payload "
                     "FROM \"message.publish\" "
-                    "WHERE payload.x = 1 and payload.y = 2 and topic = 't1'"),
+                    "WHERE p.x = 1 and p.y = 2 and topic = 't1'"),
     {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqtt:connect(Client),
     {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
-
+    ct:sleep(200),
     emqtt:publish(Client, <<"t1">>, <<"{\"x\":1,\"y\":2}">>, 0),
-    ct:sleep(100),
     receive {publish, #{topic := T, payload := Payload}} ->
         ?assertEqual(<<"t2">>, T),
         ?assertEqual(<<"{\"x\":1,\"y\":2}">>, Payload)
@@ -712,6 +727,38 @@ t_sqlselect_2(_Config) ->
     emqtt:stop(Client),
     emqx_rule_registry:remove_rule(TopicRule).
 
+t_sqlselect_3(_Config) ->
+    ok = emqx_rule_engine:load_providers(),
+    %% republish the client.connected msg
+    TopicRule = create_simple_repub_rule(
+                    <<"t2">>,
+                    "SELECT * "
+                    "FROM \"client.connected\" "
+                    "WHERE username = 'emqx1'",
+                    <<"client_id=${client_id}">>),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx0">>}]),
+    {ok, _} = emqtt:connect(Client),
+    {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
+    ct:sleep(200),
+    {ok, Client1} = emqtt:start_link([{client_id, <<"c_emqx1">>}, {username, <<"emqx1">>}]),
+    {ok, _} = emqtt:connect(Client1),
+    receive {publish, #{topic := T, payload := Payload}} ->
+        ?assertEqual(<<"t2">>, T),
+        ?assertEqual(<<"client_id=c_emqx1">>, Payload)
+    after 1000 ->
+        ct:fail(wait_for_t2)
+    end,
+
+    emqtt:publish(Client, <<"t1">>, <<"{\"x\":1,\"y\":1}">>, 0),
+    receive {publish, #{topic := <<"t2">>, payload := _}} ->
+        ct:fail(unexpected_t2)
+    after 1000 ->
+        ok
+    end,
+
+    emqtt:stop(Client),
+    emqx_rule_registry:remove_rule(TopicRule).
+
 %%------------------------------------------------------------------------------
 %% Internal helpers
 %%------------------------------------------------------------------------------
@@ -726,10 +773,15 @@ make_simple_rule(RuleId) when is_binary(RuleId) ->
           description = <<"simple rule">>}.
 
 create_simple_repub_rule(TargetTopic, SQL) ->
+    create_simple_repub_rule(TargetTopic, SQL, <<"${payload}">>).
+
+create_simple_repub_rule(TargetTopic, SQL, Template) ->
     {ok, Rule} = emqx_rule_engine:create_rule(
                     #{rawsql => SQL,
                       actions => [{'republish',
-                                  #{<<"target_topic">> => TargetTopic, <<"payload_tmpl">> => <<"${payload}">>}}],
+                                  #{<<"target_topic">> => TargetTopic,
+                                    <<"target_qos">> => -1,
+                                    <<"payload_tmpl">> => Template}}],
                       description => <<"simple repub rule">>}),
     Rule.
 
@@ -825,3 +877,10 @@ local_path(RelativePath) ->
 
 set_special_configs(_App) ->
     ok.
+
+print_mock() ->
+    meck:new(emqx_ctl, [non_strict, passthrough]),
+    meck:expect(emqx_ctl, print, fun(Arg) -> emqx_ctl:format(Arg) end),
+    meck:expect(emqx_ctl, print, fun(Msg, Arg) -> emqx_ctl:format(Msg, Arg) end),
+    meck:expect(emqx_ctl, usage, fun(Usages) -> emqx_ctl:format_usage(Usages) end),
+    meck:expect(emqx_ctl, usage, fun(Cmd, Descr) -> emqx_ctl:format_usage(Cmd, Descr) end). 
