@@ -92,6 +92,8 @@
         , substr/3
         , trim/1
         , upper/1
+        , split/2
+        , split/3
         ]).
 
 %% Array Funcs
@@ -390,6 +392,15 @@ trim(S) when is_binary(S) ->
 
 upper(S) when is_binary(S) ->
     string:uppercase(S).
+
+split(S, P) when is_binary(S),is_binary(P) ->
+    [R || R <- string:split(S, P, all), R =/= <<>> andalso R =/= ""].
+
+split(S, P, <<"leading">>) when is_binary(S),is_binary(P) ->
+    [R || R <- string:split(S, P, leading), R =/= <<>> andalso R =/= ""];
+
+split(S, P, <<"trailing">>) when is_binary(S),is_binary(P) ->
+    [R || R <- string:split(S, P, trailing), R =/= <<>> andalso R =/= ""].
 
 %%------------------------------------------------------------------------------
 %% Array Funcs
