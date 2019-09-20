@@ -364,7 +364,7 @@ t_rules_cli(_Config) ->
     %ct:pal("RShow : ~p", [RShow]),
 
     RDelete = emqx_rule_engine_cli:rules(["delete", RuleId]),
-    ?assertEqual("\"ok~n\"", RDelete),
+    ?assertEqual("ok~n", RDelete),
     %ct:pal("RDelete : ~p", [RDelete]),
     %ct:pal("table action params after deleted: ~p", [ets:tab2list(emqx_action_instance_params)]),
 
@@ -402,7 +402,7 @@ t_resources_cli(_Config) ->
     %ct:pal("RShow : ~p", [RShow]),
 
     RDelete = emqx_rule_engine_cli:resources(["delete", ResId]),
-    ?assertEqual("\"ok~n\"", RDelete),
+    ?assertEqual("ok~n", RDelete),
 
     RShow2 = emqx_rule_engine_cli:resources(["show", ResId]),
     ?assertMatch({match, _}, re:run(RShow2, "Cannot found")),
