@@ -23,7 +23,7 @@
 -export([ start/1, stop/1 ]).
 
 -export([ on_client_connected/4
-        , on_client_disconnected/3
+        , on_client_disconnected/4
         , on_client_subscribe/4
         , on_client_unsubscribe/4
         , on_message_publish/2
@@ -47,7 +47,7 @@
 
 start(Env) ->
     hook_rules('client.connected', fun ?MODULE:on_client_connected/4, Env),
-    hook_rules('client.disconnected', fun ?MODULE:on_client_disconnected/3, Env),
+    hook_rules('client.disconnected', fun ?MODULE:on_client_disconnected/4, Env),
     hook_rules('client.subscribe', fun ?MODULE:on_client_subscribe/4, Env),
     hook_rules('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/4, Env),
     hook_rules('message.publish', fun ?MODULE:on_message_publish/2, Env),
@@ -65,7 +65,7 @@ hook_rules(Name, Fun, Env) ->
 on_client_connected(Credentials, ConnAck, ConnAttrs, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(Credentials, #{event => 'client.connected', connack => ConnAck, connattrs => ConnAttrs, node => node()})).
 
-on_client_disconnected(Credentials, ReasonCode, #{apply_fun := ApplyRules}) ->
+on_client_disconnected(Credentials, ReasonCode, _ConnInfo, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(Credentials, #{event => 'client.disconnected', reason_code => ReasonCode, node => node(), timestamp => erlang:timestamp()})).
 
 on_client_subscribe(Credentials, _Properties, TopicFilters, #{apply_fun := ApplyRules}) ->
@@ -264,7 +264,7 @@ apply_func(Name, Args, Input) when is_atom(Name) ->
 %% Called when the rule engine application stop
 stop(_Env) ->
     emqx:unhook('client.connected', fun ?MODULE:on_client_connected/4),
-    emqx:unhook('client.disconnected', fun ?MODULE:on_client_disconnected/3),
+    emqx:unhook('client.disconnected', fun ?MODULE:on_client_disconnected/4),
     emqx:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/4),
     emqx:unhook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/4),
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
