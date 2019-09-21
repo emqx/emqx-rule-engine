@@ -185,6 +185,10 @@ prop_math_fun() ->
                             end, true, MathFuns)
             end).
 
+comp_with_math(exp, X) ->
+    if X < 710 -> math:exp(X) == apply_func(exp, [X]);
+       true -> true
+    end;
 comp_with_math(F, X) ->
     math:F(X) == apply_func(F, [X]).
 
