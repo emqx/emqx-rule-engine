@@ -125,7 +125,7 @@ resource_type(name='built_in', provider='emqx_rule_engine', params=#{}, descript
 Resource resource:3128243e created
 
 2. Create a rule using action data_to_webserver, and bind above resource to that action.
-./bin/emqx_ctl rules create 'client.connected' 'SELECT client_id as c, username as u.name FROM "#"' '[{"name":"data_to_webserver", "params": {"$resource": "resource:3128243e"}}]' --descr "Forward Connected Events to WebServer"
+./bin/emqx_ctl rules create 'client.connected' 'SELECT clientid as c, username as u.name FROM "#"' '[{"name":"data_to_webserver", "params": {"$resource": "resource:3128243e"}}]' --descr "Forward Connected Events to WebServer"
 Rule rule:222b59f7 created
 ```
 

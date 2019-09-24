@@ -174,7 +174,7 @@ $ curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/resources' -d \
 {"code":0,"data":{"attrs":"undefined","config":{"headers":{"token":"axfw34y235wrq234t4ersgw4t"},"method":"POST","url":"http://127.0.0.1:9910"},"description":"web hook resource-1","id":"resource:8531a11f","type":"web_hook"}}
 
 curl -v --basic -u $APPSECRET -k 'http://localhost:8080/api/v3/rules' -d \
-'{"for":"client.connected","rawsql":"SELECT client_id as c, username as u.name FROM \"#\"","actions":[{"name":"data_to_webserver","params":{"$resource": "resource:8531a11f"}}],"description":"Forward connected events to webhook"}'
+'{"for":"client.connected","rawsql":"SELECT clientid as c, username as u.name FROM \"#\"","actions":[{"name":"data_to_webserver","params":{"$resource": "resource:8531a11f"}}],"description":"Forward connected events to webhook"}'
 
 {"code":0,"data":{"actions":[{"name":"data_to_webserver","params":{"$resource":"resource:8531a11f","headers":{"token":"axfw34y235wrq234t4ersgw4t"},"method":"POST","url":"http://127.0.0.1:9910"}}],"description":"Forward connected events to webhook","enabled":true,"for":"client.connected","id":"rule:4fe05936","rawsql":"select * from \"#\""}}
 ```
