@@ -51,10 +51,26 @@ start(Env) ->
     hook_rules('message.publish', fun ?MODULE:on_message_publish/2, Env),
     hook_rules('message.dropped', fun ?MODULE:on_message_dropped/3, Env),
     hook_rules('message.deliver', fun ?MODULE:on_message_deliver/3, Env),
-    hook_rules('message.acked', fun ?MODULE:on_message_acked/3, Env).
+    hook_rules('message.acked', fun ?MODULE:on_message_acked/3, Env),
+    ok.
 
 hook_rules(Name, Fun, Env) ->
     emqx:hook(Name, Fun, [Env#{apply_fun => apply_rules_fun(Name)}]).
+
+%%------------------------------------------------------------------------------
+%% Stop
+%%------------------------------------------------------------------------------
+%% Called when the rule engine application stop
+stop(_Env) ->
+    emqx:unhook('client.connected', fun ?MODULE:on_client_connected/4),
+    emqx:unhook('client.disconnected', fun ?MODULE:on_client_disconnected/3),
+    emqx:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/3),
+    emqx:unhook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3),
+    emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
+    emqx:unhook('message.dropped', fun ?MODULE:on_message_dropped/3),
+    emqx:unhook('message.deliver', fun ?MODULE:on_message_deliver/3),
+    emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3),
+    ok.
 
 %%------------------------------------------------------------------------------
 %% Callbacks
@@ -254,21 +270,6 @@ apply_func(Name, Args, Input) when is_atom(Name) ->
             erlang:apply(Func, [Input]);
         Result -> Result
     end.
-
-%%------------------------------------------------------------------------------
-%% Stop
-%%------------------------------------------------------------------------------
-
-%% Called when the rule engine application stop
-stop(_Env) ->
-    emqx:unhook('client.connected', fun ?MODULE:on_client_connected/4),
-    emqx:unhook('client.disconnected', fun ?MODULE:on_client_disconnected/3),
-    emqx:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/3),
-    emqx:unhook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3),
-    emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
-    emqx:unhook('message.dropped', fun ?MODULE:on_message_dropped/3),
-    emqx:unhook('message.deliver', fun ?MODULE:on_message_deliver/3),
-    emqx:unhook('message.acked', fun ?MODULE:on_message_acked/2).
 
 %%------------------------------------------------------------------------------
 %% Internal Functions
