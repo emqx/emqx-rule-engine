@@ -53,7 +53,8 @@ start(Env) ->
     hook_rules('message.publish', fun ?MODULE:on_message_publish/2, Env),
     hook_rules('message.dropped', fun ?MODULE:on_message_dropped/3, Env),
     hook_rules('message.delivered', fun ?MODULE:on_message_deliver/3, Env),
-    hook_rules('message.acked', fun ?MODULE:on_message_acked/3, Env).
+    hook_rules('message.acked', fun ?MODULE:on_message_acked/3, Env),
+    ok.
 
 hook_rules(Name, Fun, Env) ->
     emqx:hook(Name, Fun, [Env#{apply_fun => apply_rules_fun(Name)}]).
@@ -270,7 +271,8 @@ stop(_Env) ->
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
     emqx:unhook('message.dropped', fun ?MODULE:on_message_dropped/3),
     emqx:unhook('message.delivered', fun ?MODULE:on_message_deliver/3),
-    emqx:unhook('message.acked', fun ?MODULE:on_message_acked/2).
+    emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3),
+    ok.
 
 %%------------------------------------------------------------------------------
 %% Internal Functions
