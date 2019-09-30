@@ -26,7 +26,7 @@
                 order => 1,
                 type => string,
                 required => true,
-                default => <<"repub/to/${client_id}">>,
+                default => <<"repub/to/${clientid}">>,
                 title => #{en => <<"Target Topic">>,
                            zh => <<"目的主题"/utf8>>},
                 description => #{en => <<"To which topic the message will be republished">>,

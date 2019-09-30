@@ -39,7 +39,7 @@
 -define(COLUMNS(EVENT),
         case EVENT of
         'message.publish' ->
-                [ <<"client_id">>
+                [ <<"clientid">>
                 , <<"username">>
                 , <<"event">>
                 , <<"id">>
@@ -51,7 +51,7 @@
                 , <<"node">>
                 ];
         'message.delivered' ->
-                [ <<"client_id">>
+                [ <<"clientid">>
                 , <<"username">>
                 , <<"event">>
                 , <<"auth_result">>
@@ -65,7 +65,7 @@
                 , <<"node">>
                 ];
         'message.acked' ->
-                [ <<"client_id">>
+                [ <<"clientid">>
                 , <<"username">>
                 , <<"event">>
                 , <<"id">>
@@ -77,7 +77,7 @@
                 , <<"node">>
                 ];
         'message.dropped' ->
-                [ <<"client_id">>
+                [ <<"clientid">>
                 , <<"username">>
                 , <<"event">>
                 , <<"id">>
@@ -89,7 +89,7 @@
                 , <<"node">>
                 ];
         'client.connected' ->
-                [ <<"client_id">>
+                [ <<"clientid">>
                 , <<"username">>
                 , <<"event">>
                 , <<"auth_result">>
@@ -105,7 +105,7 @@
                 , <<"node">>
                 ];
         'client.disconnected' ->
-                [ <<"client_id">>
+                [ <<"clientid">>
                 , <<"username">>
                 , <<"event">>
                 , <<"auth_result">>
@@ -116,7 +116,7 @@
                 , <<"node">>
                 ];
         'client.subscribe' ->
-                [ <<"client_id">>
+                [ <<"clientid">>
                 , <<"username">>
                 , <<"event">>
                 , <<"auth_result">>
@@ -129,7 +129,7 @@
                 , <<"node">>
                 ];
         'client.unsubscribe' ->
-                [ <<"client_id">>
+                [ <<"clientid">>
                 , <<"username">>
                 , <<"event">>
                 , <<"auth_result">>
@@ -146,7 +146,7 @@
         end).
 
 -define(TEST_COLUMNS_MESSGE,
-        [ {<<"client_id">>, <<"c_emqx">>}
+        [ {<<"clientid">>, <<"c_emqx">>}
         , {<<"username">>, <<"u_emqx">>}
         , {<<"topic">>, <<"t/a">>}
         , {<<"qos">>, 1}
@@ -160,18 +160,18 @@
         'message.acked' -> ?TEST_COLUMNS_MESSGE;
         'message.dropped' -> ?TEST_COLUMNS_MESSGE;
         'client.connected' ->
-            [ {<<"client_id">>, <<"c_emqx">>}
+            [ {<<"clientid">>, <<"c_emqx">>}
             , {<<"username">>, <<"u_emqx">>}
             , {<<"auth_result">>, <<"success">>}
             , {<<"peername">>, <<"127.0.0.1:63412">>}
             ];
         'client.disconnected' ->
-            [ {<<"client_id">>, <<"c_emqx">>}
+            [ {<<"clientid">>, <<"c_emqx">>}
             , {<<"username">>, <<"u_emqx">>}
             , {<<"reason_code">>, <<"normal">>}
             ];
         'client.subscribe' ->
-            [ {<<"client_id">>, <<"c_emqx">>}
+            [ {<<"clientid">>, <<"c_emqx">>}
             , {<<"username">>, <<"u_emqx">>}
             , {<<"topic_filters">>,
                [ [{<<"topic">>, <<"t/a">>}, {<<"qos">>, 0}]
@@ -179,7 +179,7 @@
                ]}
             ];
         'client.unsubscribe' ->
-            [ {<<"client_id">>, <<"c_emqx">>}
+            [ {<<"clientid">>, <<"c_emqx">>}
             , {<<"username">>, <<"u_emqx">>}
             , {<<"topic_filters">>,
                [ <<"t/a">>
@@ -290,7 +290,7 @@
               topic => <<"t1">>};
         'message.delivered' ->
             #{anonymous => true,auth_result => success,
-              client_id => <<"c_emqx">>,
+              clientid => <<"c_emqx">>,
               event => 'message.delivered',
               flags => #{dup => false,retain => false},
               from => <<"c_emqx">>,
@@ -309,7 +309,7 @@
               topic => <<"t1">>,username => <<"u_emqx">>,
               ws_cookie => undefined,zone => external};
         'message.acked' ->
-            #{client_id => <<"c_emqx">>,
+            #{clientid => <<"c_emqx">>,
               event => 'message.acked',
               flags => #{dup => false,retain => false},
               from => <<"c_emqx">>,
@@ -337,16 +337,16 @@
               topic => <<"t1">>};
         'client.connected' ->
             #{anonymous => true,auth_result => success,
-              client_id => <<"c_emqx">>,
+              clientid => <<"c_emqx">>,
               connack => 0,
               connattrs =>
                   #{clean_start => true,
-                    client_id => <<"c_emqx">>,
+                    clientid => <<"c_emqx">>,
                     conn_mod => emqx_connection,
                     connected_at => erlang:timestamp(),
                     credentials =>
                         #{anonymous => true,auth_result => success,
-                          client_id =>
+                          clientid =>
                               <<"c_emqx">>,
                           mountpoint => undefined,
                           peername => {{127,0,0,1},50891},
@@ -365,7 +365,7 @@
               zone => external};
         'client.disconnected' ->
             #{anonymous => true,auth_result => success,
-              client_id => <<"c_emqx">>,
+              clientid => <<"c_emqx">>,
               event => 'client.disconnected',mountpoint => undefined,
               peername => {{127,0,0,1},50891},
               reason_code => closed,
@@ -376,7 +376,7 @@
               zone => external};
         'client.subscribe' ->
             #{anonymous => true,auth_result => success,
-              client_id => <<"c_emqx">>,
+              clientid => <<"c_emqx">>,
               event => 'client.subscribe',mountpoint => undefined,
               peername => {{127,0,0,1},50891},
               sockname => {{127,0,0,1},1883},
@@ -388,7 +388,7 @@
               zone => external};
         'client.unsubscribe' ->
             #{anonymous => true,auth_result => success,
-              client_id => <<"c_emqx">>,
+              clientid => <<"c_emqx">>,
               event => 'client.unsubscribe',mountpoint => undefined,
               peername => {{127,0,0,1},50891},
               sockname => {{127,0,0,1},1883},
