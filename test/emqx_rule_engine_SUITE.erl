@@ -228,7 +228,7 @@ t_inspect_action(_Config) ->
               config => #{},
               description => <<"debug resource">>}),
     {ok, #rule{id = Id}} = emqx_rule_engine:create_rule(
-                #{rawsql => "select client_id as c, username as u "
+                #{rawsql => "select clientid as c, username as u "
                             "from \"message.publish\" "
                             "where topic='t1'",
                   actions => [{'inspect',
@@ -735,16 +735,16 @@ t_sqlselect_3(_Config) ->
                     "SELECT * "
                     "FROM \"client.connected\" "
                     "WHERE username = 'emqx1'",
-                    <<"client_id=${client_id}">>),
+                    <<"clientid=${clientid}">>),
     {ok, Client} = emqtt:start_link([{username, <<"emqx0">>}]),
     {ok, _} = emqtt:connect(Client),
     {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
     ct:sleep(200),
-    {ok, Client1} = emqtt:start_link([{client_id, <<"c_emqx1">>}, {username, <<"emqx1">>}]),
+    {ok, Client1} = emqtt:start_link([{clientid, <<"c_emqx1">>}, {username, <<"emqx1">>}]),
     {ok, _} = emqtt:connect(Client1),
     receive {publish, #{topic := T, payload := Payload}} ->
         ?assertEqual(<<"t2">>, T),
-        ?assertEqual(<<"client_id=c_emqx1">>, Payload)
+        ?assertEqual(<<"clientid=c_emqx1">>, Payload)
     after 1000 ->
         ct:fail(wait_for_t2)
     end,
