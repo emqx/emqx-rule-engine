@@ -133,12 +133,12 @@ apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
     try apply_rule(Rule, Input)
     catch
         %% ignore the errors if select or match failed
-        _:{select_and_transform_error, Error}:StkTrace ->
-            ?LOG(debug, "SELECT clause exception for ~s failed: ~p. Stacktrace:~n~p",
-                 [RuleID, Error, StkTrace]);
-        _:{match_conditions_error, Error}:StkTrace ->
-            ?LOG(debug, "WHERE clause exception for ~s failed: ~p. Stacktrace:~n~p",
-                 [RuleID, Error, StkTrace]);
+        _:{select_and_transform_error, Error} ->
+            ?LOG(debug, "SELECT clause exception for ~s failed: ~p",
+                 [RuleID, Error]);
+        _:{match_conditions_error, Error} ->
+            ?LOG(debug, "WHERE clause exception for ~s failed: ~p",
+                 [RuleID, Error]);
         _:Error:StkTrace ->
             ?LOG(error, "Apply rule ~s failed: ~p. Stacktrace:~n~p",
                  [RuleID, Error, StkTrace])
