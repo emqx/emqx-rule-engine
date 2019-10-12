@@ -643,10 +643,6 @@ t_sqlselect_0(_Config) ->
     {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqtt:connect(Client),
     {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
-    dbg:tracer(),
-dbg:p(all, c),
-dbg:tpl(emqx_rule_runtime,match_conditions, '_', cx),
-dbg:tpl(emqx_rule_maps,nested_get, '_', cx),
     emqtt:publish(Client, <<"t1">>, <<"{\"x\":1}">>, 0),
     ct:sleep(100),
     receive {publish, #{topic := T, payload := Payload}} ->
