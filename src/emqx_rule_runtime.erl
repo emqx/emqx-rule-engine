@@ -244,7 +244,7 @@ take_action(#action_instance{id = Id}, Selected, Envs) ->
     end.
 
 eval({var, Var}, Input) -> %% nested
-    nested_get(emqx_rule_utils:atom_key(Var), Input);
+    nested_get(Var, Input);
 eval({const, Val}, _Input) ->
     Val;
 eval({Op, L, R}, Input) when ?is_arith(Op) ->
