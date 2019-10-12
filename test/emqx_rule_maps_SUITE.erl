@@ -22,7 +22,8 @@
 
 -export([ t_get_put_value/1
         , t_prop_get_put/1
-        , t_nested_get_put/1
+        , t_nested_get/1
+        , t_nested_put/1
         , t_atom_key_map/1
         ]).
 
@@ -41,13 +42,32 @@
 
 -define(PROPTEST(Prop), true = proper:quickcheck(Prop)).
 
-t_nested_get_put(_) ->
+t_nested_put(_) ->
+    ?assertEqual(#{a => 1}, nested_put(a, 1, #{})),
     ?assertEqual(#{a => a}, nested_put([a], a, #{})),
+    ?assertEqual(#{a => 1}, nested_put(a, 1, b)),
     ?assertEqual(#{a => #{b => b}}, nested_put([a,b], b, #{})),
     ?assertEqual(#{a => #{b => #{c => c}}}, nested_put([a,b,c], c, #{})),
+    ?assertEqual(#{<<"k">> => v1}, nested_put(k, v1, #{<<"k">> => v0})),
+    ?assertEqual(#{k => v1}, nested_put(k, v1, #{k => v0})),
+    ?assertEqual(#{<<"k">> => v1, a => b}, nested_put(k, v1, #{<<"k">> => v0, a => b})),
+    ?assertEqual(#{<<"k">> => v1}, nested_put([k], v1, #{<<"k">> => v0})),
+    ?assertEqual(#{k => v1}, nested_put([k], v1, #{k => v0})),
+    ?assertEqual(#{k => v1, a => b}, nested_put([k], v1, #{k => v0, a => b})),
+    ?assertEqual(#{<<"k">> => v1, a => b}, nested_put([k], v1, #{<<"k">> => v0, a => b})),
+    ?assertEqual(#{<<"k">> => #{<<"t">> => v1}}, nested_put([k,t], v1, #{<<"k">> => #{<<"t">> => v0}})),
+    ?assertEqual(#{<<"k">> => #{t => v1}}, nested_put([k,t], v1, #{<<"k">> => #{t => v0}})),
+    ?assertEqual(#{k => #{<<"t">> => #{a => v1}}}, nested_put([k,t,a], v1, #{k => #{<<"t">> => v0}})),
+    ?assertEqual(#{k => #{<<"t">> => #{<<"a">> => v1}}}, nested_put([k,t,<<"a">>], v1, #{k => #{<<"t">> => v0}})).
+
+t_nested_get(_) ->
+    ?assertEqual(undefined, nested_get(a, not_map)),
+    ?assertEqual(undefined, nested_get([a,b,c], not_map)),
     ?assertEqual(undefined, nested_get([a,b,c], #{})),
     ?assertEqual(undefined, nested_get([a,b,c], #{a => #{}})),
     ?assertEqual(undefined, nested_get([a,b,c], #{a => #{b => #{}}})),
+    ?assertEqual(v1, nested_get([p,x], #{p => #{x => v1}})),
+    ?assertEqual(v1, nested_get([<<"p">>,<<"x">>], #{p => #{x => v1}})),
     ?assertEqual(c, nested_get([a,b,c], #{a => #{b => #{c => c}}})).
 
 t_get_put_value(_) ->
