@@ -25,19 +25,24 @@
         , unsafe_atom_key_map/1
         ]).
 
+nested_get(Key, Map) when not is_map(Map) ->
+    nested_get(Key, #{});
 nested_get(Key, Map) when not is_list(Key) ->
     get_value(Key, Map);
 nested_get([Key], Map) ->
     get_value(Key, Map);
 nested_get([Key|More], Map) ->
-    case maps:find(Key, Map) of
-        {ok, Val} ->
-            nested_get(More, Val);
-        error -> undefined
-    end;
+    general_map(Key, Map,
+        fun
+            ({equivalent, {_EquiKey, Val}}) -> nested_get(More, Val);
+            ({found, {_Key, Val}}) -> nested_get(More, Val);
+            (not_found) -> undefined
+        end);
 nested_get([], Val) ->
     Val.
 
+nested_put(Key, Val, Map) when not is_map(Map) ->
+    nested_put(Key, Val, #{});
 nested_put(_, undefined, Map) ->
     Map;
 nested_put(Key, Val, Map) when not is_list(Key) ->
@@ -45,7 +50,7 @@ nested_put(Key, Val, Map) when not is_list(Key) ->
 nested_put([Key], Val, Map) ->
     put_value(Key, Val, Map);
 nested_put([Key|More], Val, Map) ->
-    SubMap = maps:get(Key, Map, #{}),
+    SubMap = general_map_get(Key, Map, #{}),
     put_value(Key, nested_put(More, Val, SubMap), Map);
 nested_put([], Val, _Map) ->
     Val.
@@ -53,25 +58,13 @@ nested_put([], Val, _Map) ->
 get_value(Key, Map) ->
     get_value(Key, Map, undefined).
 
-get_value(Key, Map, Default) when is_binary(Key) ->
-    case maps:find(Key, Map) of
-        {ok, Val} -> Val;
-        error ->
-            try list_to_existing_atom(
-                  binary_to_list(Key)) of
-                AtomKey ->
-                    maps:get(AtomKey, Map, Default)
-            catch error:badarg ->
-                Default
-            end
-    end;
 get_value(Key, Map, Default) ->
-    maps:get(Key, Map, Default).
+    general_map_get(Key, Map, Default).
 
 put_value(_Key, undefined, Map) ->
     Map;
 put_value(Key, Val, Map) ->
-    maps:put(Key, Val, Map).
+    general_map_put(Key, Val, Map).
 
 atom_key_map(BinKeyMap) when is_map(BinKeyMap) ->
     maps:fold(
@@ -98,3 +91,42 @@ unsafe_atom_key_map(BinKeyMap) when is_map(BinKeyMap) ->
 unsafe_atom_key_map(ListV) when is_list(ListV) ->
     [unsafe_atom_key_map(V) || V <- ListV];
 unsafe_atom_key_map(Val) -> Val.
+
+general_map_get(Key, Map, Default) ->
+    general_map(Key, Map,
+        fun
+            ({equivalent, {_EquiKey, Val}}) -> Val;
+            ({found, {_Key, Val}}) -> Val;
+            (not_found) -> Default
+        end).
+
+general_map_put(Key, Val, Map) ->
+    general_map(Key, Map,
+        fun
+            ({equivalent, {EquiKey, _Val}}) -> maps:put(EquiKey, Val, Map);
+            (_) -> maps:put(Key, Val, Map)
+        end).
+
+general_map(Key, Map, Handler) ->
+    case maps:find(Key, Map) of
+        {ok, Val} -> Handler({found, {Key, Val}});
+        error when is_atom(Key) ->
+            %% the map may have an equivalent binary-form key
+            BinKey = emqx_rule_utils:bin(Key),
+            case maps:find(BinKey, Map) of
+                {ok, Val} -> Handler({equivalent, {BinKey, Val}});
+                error -> Handler(not_found)
+            end;
+        error when is_binary(Key) ->
+            try %% the map may have an equivalent atom-form key
+                AtomKey = list_to_existing_atom(binary_to_list(Key)),
+                case maps:find(AtomKey, Map) of
+                    {ok, Val} -> Handler({equivalent, {AtomKey, Val}});
+                    error -> Handler(not_found)
+                end
+            catch error:badarg ->
+                Handler(not_found)
+            end;
+        error ->
+            Handler(not_found)
+    end.
