@@ -94,6 +94,12 @@
         , split/3
         ]).
 
+%% Map Funcs
+-export([ map_get/2
+        , map_get/3
+        , map_put/3
+        ]).
+
 %% Array Funcs
 -export([ nth/2 ]).
 
@@ -407,6 +413,16 @@ split(S, P, <<"trailing">>) when is_binary(S),is_binary(P) ->
 nth(N, L) when is_integer(N), is_list(L) ->
     lists:nth(N, L).
 
+map_get(Key, Map) ->
+    map_get(Key, Map, undefined).
+
+map_get(Key, Map, Default) ->
+    emqx_rule_maps:nested_get(split_nested_key(Key), Map, Default).
+
+map_put(Key, Val, Map) ->
+    emqx_rule_maps:nested_put(
+        emqx_rule_utils:unsafe_atom_key(split_nested_key(Key)), Val, Map).
+
 %%------------------------------------------------------------------------------
 %% Hash Funcs
 %%------------------------------------------------------------------------------
@@ -463,3 +479,6 @@ json_decode(Data) ->
 
 '$handle_undefined_function'(Fun, _Args) ->
     error({sql_function_not_supported, Fun}).
+
+split_nested_key(Key) ->
+    string:split(Key, ".", all).

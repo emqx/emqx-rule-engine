@@ -15,6 +15,7 @@
 -module(emqx_rule_maps).
 
 -export([ nested_get/2
+        , nested_get/3
         , nested_put/3
         , get_value/2
         , get_value/3
@@ -23,20 +24,23 @@
         , unsafe_atom_key_map/1
         ]).
 
-nested_get(Key, Map) when not is_map(Map) ->
-    nested_get(Key, #{});
-nested_get(Key, Map) when not is_list(Key) ->
-    get_value(Key, Map);
-nested_get([Key], Map) ->
-    get_value(Key, Map);
-nested_get([Key|More], Map) ->
+nested_get(Key, Map) ->
+    nested_get(Key, Map, undefined).
+
+nested_get(Key, Map, Default) when not is_map(Map) ->
+    nested_get(Key, #{}, Default);
+nested_get(Key, Map, Default) when not is_list(Key) ->
+    get_value(Key, Map, Default);
+nested_get([Key], Map, Default) ->
+    get_value(Key, Map, Default);
+nested_get([Key|More], Map, Default) ->
     general_map(Key, Map,
         fun
-            ({equivalent, {_EquiKey, Val}}) -> nested_get(More, Val);
-            ({found, {_Key, Val}}) -> nested_get(More, Val);
-            (not_found) -> undefined
+            ({equivalent, {_EquiKey, Val}}) -> nested_get(More, Val, Default);
+            ({found, {_Key, Val}}) -> nested_get(More, Val, Default);
+            (not_found) -> Default
         end);
-nested_get([], Val) ->
+nested_get([], Val, _Default) ->
     Val.
 
 nested_put(Key, Val, Map) when not is_map(Map) ->
