@@ -53,6 +53,11 @@
 %% Test list op
 -export([ t_nth/1 ]).
 
+%% Test map op
+-export([ t_map_get/1
+        , t_map_put/1
+        ]).
+
 %% Test hash fun
 -export([ t_hash_funcs/1 ]).
 
@@ -252,6 +257,18 @@ bin(S) -> iolist_to_binary(S).
 
 t_nth(_) ->
     ?assertEqual(2, lists:nth(2, [1,2,3,4])).
+
+t_map_get(_) ->
+    ?assertEqual(1, apply_func(map_get, [<<"a">>, #{a => 1}])),
+    ?assertEqual(undefined, apply_func(map_get, [<<"a">>, #{}])),
+    ?assertEqual(1, apply_func(map_get, [<<"a.b">>, #{a => #{b => 1}}])),
+    ?assertEqual(undefined, apply_func(map_get, [<<"a.c">>, #{a => #{b => 1}}])).
+
+t_map_put(_) ->
+    ?assertEqual(#{a => 1}, apply_func(map_put, [<<"a">>, 1, #{}])),
+    ?assertEqual(#{a => 2}, apply_func(map_put, [<<"a">>, 2, #{a => 1}])),
+    ?assertEqual(#{a => #{b => 1}}, apply_func(map_put, [<<"a.b">>, 1, #{}])),
+    ?assertEqual(#{a => #{b => 1, c => 1}}, apply_func(map_put, [<<"a.c">>, 1, #{a => #{b => 1}}])).
 
 %%------------------------------------------------------------------------------
 %% Test cases for Hash funcs
