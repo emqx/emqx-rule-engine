@@ -194,7 +194,7 @@
            description => #{en => <<"message publish">>, zh => <<"消息发布"/utf8>>},
            test_columns => ?TEST_COLUMNS('message.publish'),
            columns => ?COLUMNS('message.publish'),
-           sql_example => <<"SELECT * FROM \"message.publish\" WHERE topic =~ 't/#'">>
+           sql_example => <<"SELECT json_decode(payload) as p FROM \"message.publish\" WHERE topic =~ 't/#' and p.msg = 'hello'">>
         }).
 
 -define(EVENT_INFO_MESSAGE_DELIVER,
@@ -203,7 +203,7 @@
            description => #{en => <<"message deliver">>, zh => <<"消息投递"/utf8>>},
            test_columns => ?TEST_COLUMNS('message.deliver'),
            columns => ?COLUMNS('message.deliver'),
-           sql_example => <<"SELECT * FROM \"message.deliver\" WHERE topic =~ 't/#'">>
+           sql_example => <<"SELECT json_decode(payload) as p FROM \"message.deliver\" WHERE topic =~ 't/#' and p.msg = 'hello'">>
         }).
 
 -define(EVENT_INFO_MESSAGE_ACKED,
@@ -212,7 +212,7 @@
            description => #{en => <<"message acked">>, zh => <<"消息应答"/utf8>>},
            test_columns => ?TEST_COLUMNS('message.acked'),
            columns => ?COLUMNS('message.acked'),
-           sql_example => <<"SELECT * FROM \"message.acked\" WHERE topic =~ 't/#'">>
+           sql_example => <<"SELECT json_decode(payload) as p FROM \"message.acked\" WHERE topic =~ 't/#' and p.msg = 'hello'">>
         }).
 
 -define(EVENT_INFO_MESSAGE_DROPPED,
@@ -221,7 +221,7 @@
            description => #{en => <<"message dropped">>, zh => <<"消息丢弃"/utf8>>},
            test_columns => ?TEST_COLUMNS('message.dropped'),
            columns => ?COLUMNS('message.dropped'),
-           sql_example => <<"SELECT * FROM \"message.dropped\" WHERE topic =~ 't/#'">>
+           sql_example => <<"SELECT json_decode(payload) as p FROM \"message.dropped\" WHERE topic =~ 't/#' and p.msg = 'hello'">>
         }).
 
 -define(EVENT_INFO_CLIENT_CONNECTED,
