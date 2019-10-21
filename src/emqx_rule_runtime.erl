@@ -24,6 +24,8 @@
         , on_client_disconnected/3
         , on_client_subscribe/3
         , on_client_unsubscribe/3
+        , on_session_subscribed/4
+        , on_session_unsubscribed/4
         , on_message_publish/2
         , on_message_dropped/3
         , on_message_deliver/3
@@ -48,6 +50,8 @@ start(Env) ->
     hook_rules('client.disconnected', fun ?MODULE:on_client_disconnected/3, Env),
     hook_rules('client.subscribe', fun ?MODULE:on_client_subscribe/3, Env),
     hook_rules('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3, Env),
+    hook_rules('session.subscribed', fun ?MODULE:on_session_subscribed/4, Env),
+    hook_rules('session.unsubscribed', fun ?MODULE:on_session_unsubscribed/4, Env),
     hook_rules('message.publish', fun ?MODULE:on_message_publish/2, Env),
     hook_rules('message.dropped', fun ?MODULE:on_message_dropped/3, Env),
     hook_rules('message.deliver', fun ?MODULE:on_message_deliver/3, Env),
@@ -66,6 +70,8 @@ stop(_Env) ->
     emqx:unhook('client.disconnected', fun ?MODULE:on_client_disconnected/3),
     emqx:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/3),
     emqx:unhook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/3),
+    emqx:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/4),
+    emqx:unhook('session.unsubscribed', fun ?MODULE:on_session_unsubscribed/4),
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
     emqx:unhook('message.dropped', fun ?MODULE:on_message_dropped/3),
     emqx:unhook('message.deliver', fun ?MODULE:on_message_deliver/3),
@@ -89,6 +95,12 @@ on_client_subscribe(Credentials, TopicFilters, #{apply_fun := ApplyRules}) ->
 on_client_unsubscribe(Credentials, TopicFilters, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(Credentials, #{event => 'client.unsubscribe', topic_filters => TopicFilters, node => node(), timestamp => erlang:timestamp()})),
     {ok, TopicFilters}.
+
+on_session_subscribed(ClientInfo, Topic, SubOpts, #{apply_fun := ApplyRules}) ->
+    ApplyRules(maps:merge(ClientInfo, maps:merge(#{event => 'session.subscribed', topic => Topic, node => node(), timestamp => erlang:timestamp()}, SubOpts))).
+
+on_session_unsubscribed(ClientInfo, Topic, SubOpts, #{apply_fun := ApplyRules}) ->
+    ApplyRules(maps:merge(ClientInfo, maps:merge(#{event => 'session.unsubscribed', topic => Topic, node => node(), timestamp => erlang:timestamp()}, SubOpts))).
 
 on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
                    #{ignore_sys_message := true}) ->
@@ -311,13 +323,16 @@ columns(Input = #{connattrs := Conn}, Result) ->
                                  keepalive => maps:get(keepalive, Conn, null),
                                  proto_ver => maps:get(proto_ver, Conn, null)
                                 }));
+columns(Input = #{topic_filter := {Topic, Opts}}, Result) ->
+    columns(maps:remove(topic_filter, Input),
+            maps:merge(Result, Opts#{topic => Topic}));
 columns(Input = #{topic_filters := [{Topic, Opts} | _] = Filters}, Result) ->
-    Rusult1 = case maps:find(qos, Opts) of
+    Result1 = case maps:find(qos, Opts) of
                   {ok, QoS} -> Result#{qos => QoS};
                   error -> Result
               end,
     columns(maps:remove(topic_filters, Input),
-            Rusult1#{topic => Topic, topic_filters => Filters});
+            Result1#{topic => Topic, topic_filters => format_topic_filters(Filters)});
 columns(Input, Result) ->
     maps:merge(Result, Input).
 
@@ -328,3 +343,9 @@ peername({IPAddr, Port}) ->
 
 int(true) -> 1;
 int(false) -> 0.
+
+format_topic_filters(Filters) ->
+    [begin
+        maps:fold(fun(K, V, Map) -> Map#{K => V} end,
+            #{topic => Topic}, Opts)
+     end || {Topic, Opts} <- Filters].

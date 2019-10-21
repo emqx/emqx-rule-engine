@@ -30,6 +30,10 @@
                 , 'client.subscribe'
                 , 'client.unsubscribe'
                 ];
+           '$session' ->
+                [ 'session.subscribed'
+                , 'session.unsubscribed'
+                ];
            '$any' -> '$any';
            _ -> ['$any', ALIAS]
         end).
@@ -139,6 +143,32 @@
                 , <<"timestamp">>
                 , <<"node">>
                 ];
+        'session.subscribed' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"topic">>
+                , <<"qos">>
+                , <<"nl">>
+                , <<"rap">>
+                , <<"rc">>
+                , <<"rh">>
+                , <<"timestamp">>
+                , <<"node">>
+                ];
+        'session.unsubscribed' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"topic">>
+                , <<"qos">>
+                , <<"nl">>
+                , <<"rap">>
+                , <<"rc">>
+                , <<"rh">>
+                , <<"timestamp">>
+                , <<"node">>
+                ];
         RuleType ->
                 error({unknown_rule_type, RuleType})
         end).
@@ -183,6 +213,18 @@
                [ <<"t/a">>
                , <<"t/b">>
                ]}
+            ];
+        'session.subscribed' ->
+            [ {<<"client_id">>, <<"c_emqx">>}
+            , {<<"username">>, <<"u_emqx">>}
+            , {<<"topic">>, <<"t/a">>}
+            , {<<"qos">>, 1}
+            ];
+        'session.unsubscribed' ->
+            [ {<<"client_id">>, <<"c_emqx">>}
+            , {<<"username">>, <<"u_emqx">>}
+            , {<<"topic">>, <<"t/a">>}
+            , {<<"qos">>, 1}
             ];
         RuleType ->
             error({unknown_rule_type, RuleType})
@@ -260,6 +302,24 @@
            sql_example => <<"SELECT * FROM \"client.unsubscribe\" WHERE topic =~ 't/#'">>
         }).
 
+-define(EVENT_INFO_SESSION_SUBSCRIBED,
+        #{ event => 'session.subscribed',
+           title => #{en => <<"session subscribed">>, zh => <<"会话订阅完成"/utf8>>},
+           description => #{en => <<"session subscribed">>, zh => <<"会话订阅完成"/utf8>>},
+           test_columns => ?TEST_COLUMNS('session.subscribed'),
+           columns => ?COLUMNS('session.subscribed'),
+           sql_example => <<"SELECT * FROM \"session.subscribed\" WHERE topic =~ 't/#'">>
+        }).
+
+-define(EVENT_INFO_SESSION_UNSUBSCRIBED,
+        #{ event => 'session.unsubscribed',
+           title => #{en => <<"session unsubscribed">>, zh => <<"会话取消订阅完成"/utf8>>},
+           description => #{en => <<"session unsubscribed">>, zh => <<"会话取消订阅完成"/utf8>>},
+           test_columns => ?TEST_COLUMNS('session.unsubscribed'),
+           columns => ?COLUMNS('session.unsubscribed'),
+           sql_example => <<"SELECT * FROM \"session.unsubscribed\" WHERE topic =~ 't/#'">>
+        }).
+
 -define(EVENT_INFO,
         [ ?EVENT_INFO_MESSAGE_PUBLISH
         , ?EVENT_INFO_MESSAGE_DELIVER
@@ -269,6 +329,8 @@
         , ?EVENT_INFO_CLIENT_DISCONNECTED
         , ?EVENT_INFO_CLIENT_SUBSCRIBE
         , ?EVENT_INFO_CLIENT_UNSUBSCRIBE
+        , ?EVENT_INFO_SESSION_SUBSCRIBED
+        , ?EVENT_INFO_SESSION_UNSUBSCRIBED
         ]).
 
 -define(EG_ENVS(EVENT),
@@ -395,6 +457,22 @@
               node => node(),
               timestamp => erlang:timestamp(),
               zone => external};
+        'session.subscribed' ->
+            #{client_id => <<"c_emqx">>,
+              event => 'session.subscribed',
+              topic => <<"t1">>,
+              nl => 0,qos => 1,rap => 0,rc => 1,rh => 0,
+              username => <<"u_emqx">>,ws_cookie => undefined,
+              node => node(),
+              timestamp => erlang:timestamp()};
+        'session.unsubscribed' ->
+            #{client_id => <<"c_emqx">>,
+              event => 'session.unsubscribed',
+              topic => <<"t1">>,
+              nl => 0,qos => 1,rap => 0,rc => 1,rh => 0,
+              username => <<"u_emqx">>,ws_cookie => undefined,
+              node => node(),
+              timestamp => erlang:timestamp()};
         RuleType ->
               error({unknown_event_type, RuleType})
         end).
