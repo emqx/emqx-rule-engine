@@ -30,6 +30,8 @@
         , on_message_dropped/3
         , on_message_deliver/3
         , on_message_acked/3
+        , on_session_subscribed/4
+        , on_session_unsubscribed/4
         ]).
 
 -export([apply_rule/2]).
@@ -52,6 +54,8 @@ start(Env) ->
     hook_rules('message.dropped', fun ?MODULE:on_message_dropped/3, Env),
     hook_rules('message.delivered', fun ?MODULE:on_message_deliver/3, Env),
     hook_rules('message.acked', fun ?MODULE:on_message_acked/3, Env),
+    hook_rules('session.subscribed', fun ?MODULE:on_session_subscribed/4, Env),
+    hook_rules('session.unsubscribed', fun ?MODULE:on_session_unsubscribed/4, Env),
     ok.
 
 hook_rules(Name, Fun, Env) ->
@@ -74,6 +78,12 @@ on_client_subscribe(ClientInfo, _Properties, TopicFilters, #{apply_fun := ApplyR
 on_client_unsubscribe(ClientInfo, _Properties, TopicFilters, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(ClientInfo, #{event => 'client.unsubscribe', topic_filters => TopicFilters, node => node(), timestamp => erlang:timestamp()})),
     {ok, TopicFilters}.
+
+on_session_subscribed(ClientInfo, Topic, SubOpts, #{apply_fun := ApplyRules}) ->
+    ApplyRules(maps:merge(ClientInfo, maps:merge(#{event => 'session.subscribed', topic => Topic, node => node(), timestamp => erlang:timestamp()}, SubOpts))).
+
+on_session_unsubscribed(ClientInfo, Topic, SubOpts, #{apply_fun := ApplyRules}) ->
+    ApplyRules(maps:merge(ClientInfo, maps:merge(#{event => 'session.unsubscribed', topic => Topic, node => node(), timestamp => erlang:timestamp()}, SubOpts))).
 
 on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
                    #{ignore_sys_message := true}) ->
@@ -270,6 +280,8 @@ stop(_Env) ->
     emqx:unhook('message.dropped', fun ?MODULE:on_message_dropped/3),
     emqx:unhook('message.delivered', fun ?MODULE:on_message_deliver/3),
     emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3),
+    emqx:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/4),
+    emqx:unhook('session.unsubscribed', fun ?MODULE:on_session_unsubscribed/4),
     ok.
 
 %%------------------------------------------------------------------------------
@@ -312,13 +324,16 @@ columns(Input = #{connattrs := Conn}, Result) ->
                                  keepalive => maps:get(keepalive, Conn, null),
                                  proto_ver => maps:get(proto_ver, Conn, null)
                                 }));
+columns(Input = #{topic_filter := {Topic, Opts}}, Result) ->
+    columns(maps:remove(topic_filter, Input),
+            maps:merge(Result, Opts#{topic => Topic}));
 columns(Input = #{topic_filters := [{Topic, Opts} | _] = Filters}, Result) ->
-    Rusult1 = case maps:find(qos, Opts) of
+    Result1 = case maps:find(qos, Opts) of
                   {ok, QoS} -> Result#{qos => QoS};
                   error -> Result
               end,
     columns(maps:remove(topic_filters, Input),
-            Rusult1#{topic => Topic, topic_filters => Filters});
+            Result1#{topic => Topic, topic_filters => format_topic_filters(Filters)});
 columns(Input, Result) ->
     maps:merge(Result, Input).
 
@@ -329,3 +344,9 @@ peername({IPAddr, Port}) ->
 
 int(true) -> 1;
 int(false) -> 0.
+
+format_topic_filters(Filters) ->
+    [begin
+        maps:fold(fun(K, V, Map) -> Map#{K => V} end,
+            #{topic => Topic}, Opts)
+     end || {Topic, Opts} <- Filters].

@@ -137,6 +137,8 @@ init_per_testcase(t_events, Config) ->
                          , 'client.disconnected'
                          , 'client.subscribe'
                          , 'client.unsubscribe'
+                         , 'session.subscribed'
+                         , 'session.unsubscribed'
                          ]),
     ok = emqx_rule_registry:register_resource_types([make_simple_resource_type(simple_resource_type)]),
     ok = emqx_rule_registry:add_action(
@@ -152,7 +154,8 @@ init_per_testcase(t_events, Config) ->
                         "\"client.connected\", "
                         "\"client.disconnected\", "
                         "\"client.subscribe\", "
-                        "\"client.unsubscribe\"",
+                        "\"client.unsubscribe\" "
+                    ,
     {ok, Rule} = emqx_rule_engine:create_rule(
                     #{rawsql => SQL,
                       actions => [{'inspect', #{}},

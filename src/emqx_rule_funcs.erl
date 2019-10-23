@@ -243,7 +243,7 @@ find_topic_filter(Filter, TopicFilters) ->
         [case emqx_topic:match(Topic, Filter) of
             true -> throw(Result);
             false -> ok
-         end || Result = {Topic, _Opts} <- TopicFilters],
+         end || Result = #{topic := Topic} <- TopicFilters],
         not_found
     catch
         throw:Result -> Result

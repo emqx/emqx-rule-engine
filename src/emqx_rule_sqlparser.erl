@@ -184,6 +184,10 @@ hook(<<"client.subscribe">>) ->
     'client.subscribe';
 hook(<<"client.unsubscribe">>) ->
     'client.unsubscribe';
+hook(<<"session.subscribed">>) ->
+    'session.subscribed';
+hook(<<"session.unsubscribed">>) ->
+    'session.unsubscribed';
 hook(<<"message.publish">>) ->
     'message.publish';
 hook(<<"message.deliver">>) ->
