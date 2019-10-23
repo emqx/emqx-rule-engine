@@ -34,7 +34,9 @@
         , on_session_unsubscribed/4
         ]).
 
--export([apply_rule/2]).
+-export([ apply_rule/2
+        , columns/1
+        ]).
 
 -import(emqx_rule_maps,
         [ nested_get/2
@@ -299,22 +301,23 @@ columns(Input = #{from := From}, Result) ->
 columns(Input = #{flags := Flags}, Result) ->
     Retain = maps:get(retain, Flags, false),
     columns(maps:remove(flags, Input),
-            maps:merge(Result, #{retain => int(Retain)}));
+            maps:merge(Result, #{flags => Flags,
+                                 retain => int(Retain)}));
 columns(Input = #{headers := Headers}, Result) ->
     Username = maps:get(username, Headers, null),
-    Peername = peername(maps:get(peername, Headers, undefined)),
+    PeerHost = peerhost(maps:get(peerhost, Headers, undefined)),
     columns(maps:remove(headers, Input),
             maps:merge(Result, #{username => Username,
-                                 peername => Peername}));
+                                 peerhost => PeerHost}));
 columns(Input = #{timestamp := Timestamp}, Result) ->
     columns(maps:remove(timestamp, Input),
             Result#{timestamp => emqx_rule_utils:now_ms(Timestamp)});
-columns(Input = #{peername := Peername}, Result) ->
-    columns(maps:remove(peername, Input),
-            Result#{peername => peername(Peername)});
+columns(Input = #{peerhost := Peername}, Result) ->
+    columns(maps:remove(peerhost, Input),
+            Result#{peerhost => peerhost(Peername)});
 columns(Input = #{sockname := Peername}, Result) ->
     columns(maps:remove(sockname, Input),
-            Result#{sockname => peername(Peername)});
+            Result#{sockname => peerhost(Peername)});
 columns(Input = #{connattrs := Conn}, Result) ->
     ConnAt = maps:get(connected_at, Conn, erlang:timestamp()),
     columns(maps:remove(connattrs, Input),
@@ -337,10 +340,10 @@ columns(Input = #{topic_filters := [{Topic, Opts} | _] = Filters}, Result) ->
 columns(Input, Result) ->
     maps:merge(Result, Input).
 
-peername(undefined) ->
+peerhost(undefined) ->
     null;
-peername({IPAddr, Port}) ->
-    list_to_binary(inet:ntoa(IPAddr) ++ ":" ++ integer_to_list(Port)).
+peerhost(IPAddr) ->
+    list_to_binary(inet:ntoa(IPAddr)).
 
 int(true) -> 1;
 int(false) -> 0.

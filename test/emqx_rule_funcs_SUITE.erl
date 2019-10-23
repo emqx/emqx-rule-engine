@@ -28,12 +28,10 @@
         , t_qos/1
         , t_flags/1
         , t_flag/1
-        , t_headers/1
-        , t_header/1
         , t_topic/1
         , t_clientid/1
         , t_clientip/1
-        , t_peername/1
+        , t_peerhost/1
         , t_username/1
         , t_payload/1
         , t_timestamp/1
@@ -81,7 +79,7 @@
 t_msgid(_) ->
     Msg = message(),
     ?assertEqual(undefined, apply_func(msgid, [], #{})),
-    ?assertEqual(emqx_message:id(Msg), apply_func(msgid, [], Msg)).
+    ?assertEqual(emqx_guid:to_hexstr(emqx_message:id(Msg)), apply_func(msgid, [], Msg)).
 
 t_qos(_) ->
     ?assertEqual(undefined, apply_func(qos, [], #{})),
@@ -96,15 +94,6 @@ t_flag(_) ->
     ?assertNot(apply_func(flag, [dup], Msg)),
     ?assert(apply_func(flag, [retain], Msg1)).
 
-t_headers(_) ->
-    Msg = emqx_message:set_header(username, admin, message()),
-    ?assertEqual(#{}, apply_func(headers, [], #{})),
-    ?assertEqual(#{username => admin}, apply_func(headers, [], Msg)).
-
-t_header(_) ->
-    Msg = emqx_message:set_header(username, admin, message()),
-    ?assertEqual(admin, apply_func(header, [username], Msg)).
-
 t_topic(_) ->
     Msg = message(),
     ?assertEqual(<<"topic/#">>, apply_func(topic, [], Msg)),
@@ -116,23 +105,24 @@ t_clientid(_) ->
     ?assertEqual(<<"clientid">>, apply_func(clientid, [], Msg)).
 
 t_clientip(_) ->
-    Msg = emqx_message:set_header(peername, {{127,0,0,1}, 3333}, message()),
+    Msg = emqx_message:set_header(peerhost, {127,0,0,1}, message()),
     ?assertEqual(undefined, apply_func(clientip, [], #{})),
     ?assertEqual(<<"127.0.0.1">>, apply_func(clientip, [], Msg)).
 
-t_peername(_) ->
-    Msg = emqx_message:set_header(peername, {{127,0,0,1}, 3333}, message()),
-    ?assertEqual(undefined, apply_func(peername, [], #{})),
-    ?assertEqual(<<"127.0.0.1:3333">>, apply_func(peername, [], Msg)).
+t_peerhost(_) ->
+    Msg = emqx_message:set_header(peerhost, {127,0,0,1}, message()),
+    ?assertEqual(undefined, apply_func(peerhost, [], #{})),
+    ?assertEqual(<<"127.0.0.1">>, apply_func(peerhost, [], Msg)).
 
 t_username(_) ->
     Msg = emqx_message:set_header(username, <<"feng">>, message()),
     ?assertEqual(<<"feng">>, apply_func(username, [], Msg)).
 
 t_payload(_) ->
-    ?assertEqual(<<"payload">>, apply_func(payload, [], message())),
+    Input = emqx_message:to_map(message()),
     NestedMap = #{a => #{b => #{c => c}}},
-    ?assertEqual(c, apply_func(payload, [[a,b,c]], NestedMap)).
+    ?assertEqual(<<"hello">>, apply_func(payload, [], Input#{payload => <<"hello">>})),
+    ?assertEqual(c, apply_func(payload, [<<"a.b.c">>], Input#{payload => NestedMap})).
 
 t_timestamp(_) ->
     Now = emqx_time:now_ms(),
@@ -314,7 +304,7 @@ apply_func(Fun, Args) when is_function(Fun) ->
 apply_func(Name, Args, Input) when is_map(Input) ->
     apply_func(apply_func(Name, Args), [Input]);
 apply_func(Name, Args, Msg) ->
-    apply_func(Name, Args, emqx_message:to_map(Msg)).
+    apply_func(Name, Args, emqx_rule_runtime:columns(emqx_message:to_map(Msg))).
 
 message() ->
     emqx_message:make(<<"clientid">>, 1, <<"topic/#">>, <<"payload">>).

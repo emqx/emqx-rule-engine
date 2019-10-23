@@ -21,13 +21,11 @@
         , qos/0
         , flags/0
         , flag/1
-        , headers/0
-        , header/1
         , topic/0
         , topic/1
         , clientid/0
         , clientip/0
-        , peername/0
+        , peerhost/0
         , username/0
         , payload/0
         , payload/1
@@ -130,6 +128,7 @@
           , ceil/1
           , floor/1
           , round/1
+          , map_get/2
           ]}).
 
 -define(is_var(X), is_binary(X)).
@@ -163,50 +162,32 @@ flag(Name) ->
 
 %% @doc "clientid()" Func
 clientid() ->
-    fun(#{from := ClientId}) -> ClientId; (_) -> undefined end.
-
-%% @doc "clientip()" Func
-clientip() ->
-    fun(#{headers := #{peername := {Addr, _Port}}}) ->
-        iolist_to_binary(inet_parse:ntoa(Addr));
-        (_) -> undefined
-    end.
-
-%% @doc "peername()" Func
-peername() ->
-    fun(#{headers := #{peername := {Addr, Port}}}) ->
-        iolist_to_binary(io_lib:format("~s:~w", [inet_parse:ntoa(Addr), Port]));
-        (_) -> undefined
-    end.
+    fun(#{clientid := ClientId}) -> ClientId; (_) -> undefined end.
 
 %% @doc "username()" Func
 username() ->
-    header(username).
+    fun(#{username := Username}) -> Username; (_) -> undefined end.
 
-%% @doc "headers()" Func
-headers() ->
-    fun(#{headers := Headers}) -> Headers; (_) -> #{} end.
+%% @doc "clientip()" Func
+clientip() ->
+    peerhost().
 
-%% @doc "header(Name)" Func
-header(Name) ->
-    fun(#{headers := Headers}) ->
-            get_value(Name, Headers);
-       (_) -> undefined
-    end.
+peerhost() ->
+    fun(#{peerhost := Addr}) -> Addr; (_) -> undefined end.
 
 payload() ->
     fun(#{payload := Payload}) -> Payload; (_) -> undefined end.
 
-payload(Path) when is_list(Path) ->
-    fun(Payload) when is_map(Payload) ->
-            nested_get(Path, Payload);
+payload(Path) ->
+    fun(#{payload := Payload}) when is_map(Payload) ->
+            map_get(Path, Payload);
        (_) -> undefined
     end.
 
 %% @doc "timestamp()" Func
 timestamp() ->
     fun(#{timestamp := Ts}) ->
-            emqx_rule_utils:now_ms(Ts);
+            Ts;
        (_) -> emqx_rule_utils:now_ms()
     end.
 
