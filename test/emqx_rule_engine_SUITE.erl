@@ -883,4 +883,50 @@ print_mock() ->
     meck:expect(emqx_ctl, print, fun(Arg) -> emqx_ctl:format(Arg) end),
     meck:expect(emqx_ctl, print, fun(Msg, Arg) -> emqx_ctl:format(Msg, Arg) end),
     meck:expect(emqx_ctl, usage, fun(Usages) -> emqx_ctl:format_usage(Usages) end),
-    meck:expect(emqx_ctl, usage, fun(Cmd, Descr) -> emqx_ctl:format_usage(Cmd, Descr) end). 
+    meck:expect(emqx_ctl, usage, fun(Cmd, Descr) -> emqx_ctl:format_usage(Cmd, Descr) end).
+
+t_load_providers(_) ->
+    error('TODO').
+
+t_unload_providers(_) ->
+    error('TODO').
+
+t_delete_rule(_) ->
+    error('TODO').
+
+t_start_resource(_) ->
+    error('TODO').
+
+t_test_resource(_) ->
+    error('TODO').
+
+t_get_resource_status(_) ->
+    error('TODO').
+
+t_get_resource_params(_) ->
+    error('TODO').
+
+t_delete_resource(_) ->
+    error('TODO').
+
+t_refresh_resources(_) ->
+    error('TODO').
+
+t_refresh_rules(_) ->
+    error('TODO').
+
+t_refresh_resource_status(_) ->
+    error('TODO').
+
+t_init_resource(_) ->
+    error('TODO').
+
+t_init_action(_) ->
+    error('TODO').
+
+t_clear_resource(_) ->
+    error('TODO').
+
+t_clear_action(_) ->
+    error('TODO').
+
