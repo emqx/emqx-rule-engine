@@ -43,6 +43,7 @@
         , '/'/2
         , 'div'/2
         , mod/2
+        , eq/2
         ]).
 
 %% Math Funcs
@@ -196,32 +197,32 @@ timestamp() ->
 -spec(contains_topic(emqx_mqtt_types:topic_filters(), emqx_types:topic())
         -> true | false).
 contains_topic(TopicFilters, Topic) ->
-    case proplists:get_value(Topic, TopicFilters) of
-        undefined -> false;
+    case find_topic_filter(Topic, TopicFilters, fun eq/2) of
+        not_found -> false;
         _ -> true
     end.
 contains_topic(TopicFilters, Topic, QoS) ->
-    case proplists:get_value(Topic, TopicFilters) of
-        #{qos := QoS} -> true;
-        undefined -> false
+    case find_topic_filter(Topic, TopicFilters, fun eq/2) of
+        {_, #{qos := QoS}} -> true;
+        _ -> false
     end.
 
 -spec(contains_topic_match(emqx_mqtt_types:topic_filters(), emqx_types:topic())
         -> true | false).
 contains_topic_match(TopicFilters, Topic) ->
-    case find_topic_filter(Topic, TopicFilters) of
+    case find_topic_filter(Topic, TopicFilters, fun emqx_topic:match/2) of
         not_found -> false;
         _ -> true
     end.
 contains_topic_match(TopicFilters, Topic, QoS) ->
-    case find_topic_filter(Topic, TopicFilters) of
+    case find_topic_filter(Topic, TopicFilters, fun emqx_topic:match/2) of
         {_, #{qos := QoS}} -> true;
         _ -> false
     end.
 
-find_topic_filter(Filter, TopicFilters) ->
+find_topic_filter(Filter, TopicFilters, Func) ->
     try
-        [case emqx_topic:match(Topic, Filter) of
+        [case Func(Topic, Filter) of
             true -> throw(Result);
             false -> ok
          end || Result = #{topic := Topic} <- TopicFilters],
@@ -251,6 +252,9 @@ find_topic_filter(Filter, TopicFilters) ->
 
 mod(X, Y) when is_integer(X), is_integer(Y) ->
     X rem Y.
+
+eq(X, Y) ->
+    X == Y.
 
 %%------------------------------------------------------------------------------
 %% Math Funcs

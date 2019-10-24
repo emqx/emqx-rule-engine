@@ -70,8 +70,8 @@ hook_rules(Name, Fun, Env) ->
 on_client_connected(ClientInfo, ConnAck, ConnInfo, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(ClientInfo, #{event => 'client.connected', connack => ConnAck, conninfo => ConnInfo, node => node()})).
 
-on_client_disconnected(ClientInfo, ReasonCode, _ConnInfo, #{apply_fun := ApplyRules}) ->
-    ApplyRules(maps:merge(ClientInfo, #{event => 'client.disconnected', reason_code => ReasonCode, node => node(), timestamp => erlang:timestamp()})).
+on_client_disconnected(ClientInfo, ReasonCode, ConnInfo, #{apply_fun := ApplyRules}) ->
+    ApplyRules(maps:merge(ClientInfo, #{event => 'client.disconnected', reason_code => ReasonCode, conninfo => ConnInfo, node => node(), timestamp => erlang:timestamp()})).
 
 on_client_subscribe(ClientInfo, _Properties, TopicFilters, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(ClientInfo, #{event => 'client.subscribe', topic_filters => TopicFilters, node => node(), timestamp => erlang:timestamp()})),
@@ -305,7 +305,7 @@ columns(Input = #{flags := Flags}, Result) ->
                                  retain => int(Retain)}));
 columns(Input = #{headers := Headers}, Result) ->
     Username = maps:get(username, Headers, null),
-    PeerHost = peerhost(maps:get(peerhost, Headers, undefined)),
+    PeerHost = host_to_str(maps:get(peerhost, Headers, undefined)),
     columns(maps:remove(headers, Input),
             maps:merge(Result, #{username => Username,
                                  peerhost => PeerHost}));
@@ -314,16 +314,15 @@ columns(Input = #{timestamp := Timestamp}, Result) ->
             Result#{timestamp => emqx_rule_utils:now_ms(Timestamp)});
 columns(Input = #{peerhost := Peername}, Result) ->
     columns(maps:remove(peerhost, Input),
-            Result#{peerhost => peerhost(Peername)});
+            Result#{peerhost => host_to_str(Peername)});
 columns(Input = #{sockname := Peername}, Result) ->
     columns(maps:remove(sockname, Input),
-            Result#{sockname => peerhost(Peername)});
-columns(Input = #{connattrs := Conn}, Result) ->
-    ConnAt = maps:get(connected_at, Conn, erlang:timestamp()),
-    columns(maps:remove(connattrs, Input),
-            maps:merge(Result, #{connected_at => emqx_rule_utils:now_ms(ConnAt),
+            Result#{sockname => host_to_str(Peername)});
+columns(Input = #{conninfo := Conn}, Result) ->
+    ConnAt = maps:get(connected_at, Conn, erlang:system_time(second)),
+    columns(maps:remove(conninfo, Input),
+            maps:merge(Result, #{connected_at => ConnAt,
                                  clean_start => maps:get(clean_start, Conn, null),
-                                 is_bridge => maps:get(is_bridge, Conn, null),
                                  keepalive => maps:get(keepalive, Conn, null),
                                  proto_ver => maps:get(proto_ver, Conn, null)
                                 }));
@@ -340,9 +339,9 @@ columns(Input = #{topic_filters := [{Topic, Opts} | _] = Filters}, Result) ->
 columns(Input, Result) ->
     maps:merge(Result, Input).
 
-peerhost(undefined) ->
+host_to_str(undefined) ->
     null;
-peerhost(IPAddr) ->
+host_to_str(IPAddr) ->
     list_to_binary(inet:ntoa(IPAddr)).
 
 int(true) -> 1;

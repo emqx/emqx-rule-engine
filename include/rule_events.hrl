@@ -48,7 +48,7 @@
                 , <<"event">>
                 , <<"id">>
                 , <<"payload">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"qos">>
                 , <<"timestamp">>
                 , <<"topic">>
@@ -62,7 +62,7 @@
                 , <<"mountpoint">>
                 , <<"id">>
                 , <<"payload">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"topic">>
                 , <<"qos">>
                 , <<"timestamp">>
@@ -74,7 +74,7 @@
                 , <<"event">>
                 , <<"id">>
                 , <<"payload">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"topic">>
                 , <<"qos">>
                 , <<"timestamp">>
@@ -86,7 +86,7 @@
                 , <<"event">>
                 , <<"id">>
                 , <<"payload">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"qos">>
                 , <<"timestamp">>
                 , <<"topic">>
@@ -103,7 +103,7 @@
                 , <<"is_bridge">>
                 , <<"keepalive">>
                 , <<"mountpoint">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"proto_ver">>
                 , <<"timestamp">>
                 , <<"node">>
@@ -114,7 +114,7 @@
                 , <<"event">>
                 , <<"auth_result">>
                 , <<"mountpoint">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"reason_code">>
                 , <<"timestamp">>
                 , <<"node">>
@@ -125,7 +125,7 @@
                 , <<"event">>
                 , <<"auth_result">>
                 , <<"mountpoint">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"topic_filters">>
                 , <<"topic">>
                 , <<"qos">>
@@ -138,7 +138,7 @@
                 , <<"event">>
                 , <<"auth_result">>
                 , <<"mountpoint">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"topic_filters">>
                 , <<"topic">>
                 , <<"qos">>
@@ -193,7 +193,7 @@
             [ {<<"clientid">>, <<"c_emqx">>}
             , {<<"username">>, <<"u_emqx">>}
             , {<<"auth_result">>, <<"success">>}
-            , {<<"peername">>, <<"127.0.0.1:63412">>}
+            , {<<"peerhost">>, <<"127.0.0.1">>}
             ];
         'client.disconnected' ->
             [ {<<"clientid">>, <<"c_emqx">>}
@@ -343,7 +343,7 @@
               from => <<"c_emqx">>,
               headers =>
                   #{allow_publish => true,
-                    peername => {{127,0,0,1},50891},
+                    peerhost => {127,0,0,1},
                     username => <<"u_emqx">>},
               id => <<0,5,137,164,41,233,87,47,180,75,0,0,5,124,0,1>>,
               payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,qos => 1,
@@ -358,14 +358,13 @@
               from => <<"c_emqx">>,
               headers =>
                   #{allow_publish => true,
-                    peername => {{127,0,0,1},50891},
+                    peerhost => {127,0,0,1},
                     username => <<"u_emqx">>},
               id => <<0,5,137,164,41,233,87,47,180,75,0,0,5,124,0,1>>,
               mountpoint => undefined,
               payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,
-              peername => {{127,0,0,1},50891},
+              peerhost => {127,0,0,1},
               qos => 1,
-              sockname => {{127,0,0,1},1883},
               node => node(),
               timestamp => erlang:timestamp(),
               topic => <<"t1">>,username => <<"u_emqx">>,
@@ -377,7 +376,7 @@
               from => <<"c_emqx">>,
               headers =>
                   #{allow_publish => true,
-                    peername => {{127,0,0,1},50891},
+                    peerhost => {127,0,0,1},
                     username => <<"u_emqx">>},
               id => <<0,5,137,164,41,233,87,47,180,75,0,0,5,124,0,1>>,
               payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,qos => 1,
@@ -390,7 +389,7 @@
               from => <<"c_emqx">>,
               headers =>
                   #{allow_publish => true,
-                    peername => {{127,0,0,1},50891},
+                    peerhost => {127,0,0,1},
                     username => <<"u_emqx">>},
               id => <<0,5,137,164,41,236,124,3,180,75,0,0,5,124,0,2>>,
               node => node(),
@@ -401,27 +400,19 @@
             #{anonymous => true,auth_result => success,
               clientid => <<"c_emqx">>,
               connack => 0,
-              connattrs =>
+              conninfo =>
                   #{clean_start => true,
-                    clientid => <<"c_emqx">>,
+                    clientid => <<"emqtt-EMQ-8246dcc49220e7544aa4">>,
                     conn_mod => emqx_connection,
-                    connected_at => erlang:timestamp(),
-                    credentials =>
-                        #{anonymous => true,auth_result => success,
-                          clientid =>
-                              <<"c_emqx">>,
-                          mountpoint => undefined,
-                          peername => {{127,0,0,1},50891},
-                          sockname => {{127,0,0,1},1883},
-                          username => <<"u_emqx">>,ws_cookie => undefined,
-                          zone => external},
-                    is_bridge => false,keepalive => 60,peercert => nossl,
-                    peername => {{127,0,0,1},50891},
+                    conn_props => undefined,expiry_interval => 0,
+                    keepalive => 60,peercert => nossl,
+                    peername => {{127,0,0,1},51700},
                     proto_name => <<"MQTT">>,proto_ver => 4,
-                    username => <<"u_emqx">>,zone => external},
+                    receive_maximum => 32,
+                    sockname => {{127,0,0,1},1883},
+                    socktype => tcp,username => <<"emqx">>},
               event => 'client.connected',mountpoint => undefined,
-              peername => {{127,0,0,1},50891},
-              sockname => {{127,0,0,1},1883},
+              peerhost => {127,0,0,1},
               username => <<"u_emqx">>,ws_cookie => undefined,
               node => node(),
               zone => external};
@@ -429,9 +420,8 @@
             #{anonymous => true,auth_result => success,
               clientid => <<"c_emqx">>,
               event => 'client.disconnected',mountpoint => undefined,
-              peername => {{127,0,0,1},50891},
+              peerhost => {127,0,0,1},
               reason_code => closed,
-              sockname => {{127,0,0,1},1883},
               username => <<"u_emqx">>,ws_cookie => undefined,
               node => node(),
               timestamp => erlang:timestamp(),
@@ -440,8 +430,7 @@
             #{anonymous => true,auth_result => success,
               clientid => <<"c_emqx">>,
               event => 'client.subscribe',mountpoint => undefined,
-              peername => {{127,0,0,1},50891},
-              sockname => {{127,0,0,1},1883},
+              peerhost => {127,0,0,1},
               topic_filters =>
                   [{<<"t1">>,#{nl => 0,qos => 1,rap => 0,rc => 1,rh => 0}}],
               username => <<"u_emqx">>,ws_cookie => undefined,
@@ -452,8 +441,8 @@
             #{anonymous => true,auth_result => success,
               clientid => <<"c_emqx">>,
               event => 'client.unsubscribe',mountpoint => undefined,
-              peername => {{127,0,0,1},50891},
-              sockname => {{127,0,0,1},1883},
+              peerhost => {127,0,0,1},
+              sockname => {127,0,0,1},
               topic_filters => [{<<"t1">>,#{}}],
               username => <<"u_emqx">>,ws_cookie => undefined,
               node => node(),
