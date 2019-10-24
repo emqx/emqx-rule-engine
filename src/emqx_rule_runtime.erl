@@ -138,6 +138,7 @@ rules_for(Hook) ->
 
 -spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
 apply_rules([], _Input) ->
+    erlang:erase(rule_payload),
     ok;
 apply_rules([#rule{enabled = false}|More], Input) ->
     apply_rules(More, Input);
@@ -255,7 +256,15 @@ take_action(#action_instance{id = Id}, Selected, Envs) ->
             error({take_action_failed, {Id, Reason, Stack}})
     end.
 
-eval({var, Var}, Input) -> %% nested
+eval({var, [<<"payload">> | Vars]}, Input) ->
+    nested_get(Vars,
+        case erlang:get(rule_payload) of
+            undefined ->
+                Map = ensure_map(nested_get(<<"payload">>, Input)),
+                erlang:put(rule_payload, Map), Map;
+            Map -> Map
+        end);
+eval({var, Var}, Input) ->
     nested_get(Var, Input);
 eval({const, Val}, _Input) ->
     Val;
@@ -349,3 +358,12 @@ format_topic_filters(Filters) ->
         maps:fold(fun(K, V, Map) -> Map#{K => V} end,
             #{topic => Topic}, Opts)
      end || {Topic, Opts} <- Filters].
+
+ensure_map(Map) when is_map(Map) ->
+    Map;
+ensure_map(MaybeJson) ->
+    try jsx:decode(MaybeJson, [return_maps]) of
+        JsonMap when is_map(JsonMap) -> JsonMap;
+        _Val -> #{}
+    catch _:_ -> #{}
+    end.
