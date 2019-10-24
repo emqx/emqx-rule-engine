@@ -516,11 +516,11 @@ parse_peerhost(PeerhostStr) ->
 parse_topic_filters(TopicFilters) ->
     [ case TpcFtl of
         #{<<"topic">> := Topic, <<"qos">> := QoS} ->
-            #{topic => Topic, qos => QoS};
+            {Topic, #{qos => QoS}};
         #{<<"topic">> := Topic} ->
-            #{topic => Topic, qos => 0};
+            {Topic, #{}};
         Topic ->
-            #{topic => Topic, qos => 0}
+            {Topic, #{}}
       end || TpcFtl <- jsx:decode(TopicFilters, [return_maps])].
 
 parse_resource_params(Params) ->
