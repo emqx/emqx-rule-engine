@@ -62,6 +62,8 @@ t_nested_put(_) ->
 
 t_nested_get(_) ->
     ?assertEqual(undefined, nested_get(a, not_map)),
+    ?assertEqual(#{a => 1}, nested_get([], #{a => 1})),
+    ?assertEqual(#{b => c}, nested_get([a], #{a => #{b => c}})),
     ?assertEqual(undefined, nested_get([a,b,c], not_map)),
     ?assertEqual(undefined, nested_get([a,b,c], #{})),
     ?assertEqual(undefined, nested_get([a,b,c], #{a => #{}})),

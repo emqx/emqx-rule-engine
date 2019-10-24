@@ -121,7 +121,6 @@
 
 -import(emqx_rule_maps,
         [ get_value/2
-        , nested_get/2
         ]).
 
 -compile({no_auto_import,
