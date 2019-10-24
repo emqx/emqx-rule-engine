@@ -149,7 +149,7 @@ init_per_testcase(t_events, Config) ->
                     description = #{en => <<"Hook metrics action">>}}),
     SQL = "SELECT * FROM \"message.publish\", "
                         "\"message.dropped\", "
-                        "\"message.deliver\", "
+                        "\"message.delivered\", "
                         "\"message.acked\", "
                         "\"client.connected\", "
                         "\"client.disconnected\", "
