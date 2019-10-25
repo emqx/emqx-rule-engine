@@ -461,7 +461,7 @@
             #{client_id => <<"c_emqx">>,
               event => 'session.subscribed',
               topic => <<"t1">>,
-              nl => 0,qos => 1,rap => 0,rc => 1,rh => 0,
+              sub_opts => #{nl => 0,qos => 1,rap => 0,rc => 1,rh => 0},
               username => <<"u_emqx">>,ws_cookie => undefined,
               node => node(),
               timestamp => erlang:timestamp()};
@@ -469,7 +469,7 @@
             #{client_id => <<"c_emqx">>,
               event => 'session.unsubscribed',
               topic => <<"t1">>,
-              nl => 0,qos => 1,rap => 0,rc => 1,rh => 0,
+              sub_opts => #{nl => 0,qos => 1,rap => 0,rc => 1,rh => 0},
               username => <<"u_emqx">>,ws_cookie => undefined,
               node => node(),
               timestamp => erlang:timestamp()};

@@ -97,10 +97,10 @@ on_client_unsubscribe(Credentials, TopicFilters, #{apply_fun := ApplyRules}) ->
     {ok, TopicFilters}.
 
 on_session_subscribed(ClientInfo, Topic, SubOpts, #{apply_fun := ApplyRules}) ->
-    ApplyRules(maps:merge(ClientInfo, maps:merge(#{event => 'session.subscribed', topic => Topic, node => node(), timestamp => erlang:timestamp()}, SubOpts))).
+    ApplyRules(maps:merge(ClientInfo, #{event => 'session.subscribed', topic => Topic, node => node(), timestamp => erlang:timestamp(), sub_opts => SubOpts})).
 
 on_session_unsubscribed(ClientInfo, Topic, SubOpts, #{apply_fun := ApplyRules}) ->
-    ApplyRules(maps:merge(ClientInfo, maps:merge(#{event => 'session.unsubscribed', topic => Topic, node => node(), timestamp => erlang:timestamp()}, SubOpts))).
+    ApplyRules(maps:merge(ClientInfo, #{event => 'session.unsubscribed', topic => Topic, node => node(), timestamp => erlang:timestamp(), sub_opts => SubOpts})).
 
 on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
                    #{ignore_sys_message := true}) ->
@@ -332,16 +332,10 @@ columns(Input = #{connattrs := Conn}, Result) ->
                                  keepalive => maps:get(keepalive, Conn, null),
                                  proto_ver => maps:get(proto_ver, Conn, null)
                                 }));
-columns(Input = #{topic_filter := {Topic, Opts}}, Result) ->
-    columns(maps:remove(topic_filter, Input),
-            maps:merge(Result, Opts#{topic => Topic}));
 columns(Input = #{topic_filters := [{Topic, Opts} | _] = Filters}, Result) ->
-    Result1 = case maps:find(qos, Opts) of
-                  {ok, QoS} -> Result#{qos => QoS};
-                  error -> Result
-              end,
     columns(maps:remove(topic_filters, Input),
-            Result1#{topic => Topic, topic_filters => format_topic_filters(Filters)});
+            Result#{topic => Topic, qos => maps:get(qos, Opts, 0),
+                    topic_filters => format_topic_filters(Filters)});
 columns(Input, Result) ->
     maps:merge(Result, Input).
 
@@ -355,8 +349,7 @@ int(false) -> 0.
 
 format_topic_filters(Filters) ->
     [begin
-        maps:fold(fun(K, V, Map) -> Map#{K => V} end,
-            #{topic => Topic}, Opts)
+        #{topic => Topic, qos => maps:get(qos, Opts, 0), sub_opts => Opts}
      end || {Topic, Opts} <- Filters].
 
 ensure_map(Map) when is_map(Map) ->
