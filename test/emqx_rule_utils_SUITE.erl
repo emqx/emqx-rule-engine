@@ -21,44 +21,67 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-define(PORT, 9876).
+
 all() -> emqx_ct:all(?MODULE).
 
 t_preproc_sql(_) ->
-    error('TODO').
+    Selected = #{a => <<"1">>, b => 1, c => 1.0, d => #{d1 => <<"hi">>}},
+    {PrepareStatement, GetPrepareParams} = emqx_rule_utils:preproc_sql(<<"a:${a},b:${b},c:${c},d:${d}">>, '?'),
+    ?assertEqual(<<"a:?,b:?,c:?,d:?">>, PrepareStatement),
+    ?assertEqual([<<"1">>,1,1.0,<<"{\"d1\":\"hi\"}">>],
+                 GetPrepareParams(Selected)).
 
 t_http_connectivity(_) ->
-    error('TODO').
+    {ok, Socket} = gen_tcp:listen(?PORT, []),
+    ok = emqx_rule_utils:http_connectivity("http://127.0.0.1:"++emqx_rule_utils:str(?PORT), 1000),
+    gen_tcp:close(Socket),
+    {error, _} = emqx_rule_utils:http_connectivity("http://127.0.0.1:"++emqx_rule_utils:str(?PORT), 1000).
 
 t_tcp_connectivity(_) ->
-    error('TODO').
+    {ok, Socket} = gen_tcp:listen(?PORT, []),
+    ok = emqx_rule_utils:tcp_connectivity("127.0.0.1", ?PORT, 1000),
+    gen_tcp:close(Socket),
+    {error, _} = emqx_rule_utils:tcp_connectivity("127.0.0.1", ?PORT, 1000).
 
 t_str(_) ->
-    error('TODO').
-
-t_number_to_binary(_) ->
-    error('TODO').
-
-t_utf8_bin(_) ->
-    error('TODO').
-
-t_utf8_str(_) ->
-    error('TODO').
-
-t_atom_key(_) ->
-    error('TODO').
+    ?assertEqual("abc", emqx_rule_utils:str("abc")),
+    ?assertEqual("abc", emqx_rule_utils:str(abc)),
+    ?assertEqual("{\"a\":1}", emqx_rule_utils:str(#{a => 1})),
+    ?assertEqual("1", emqx_rule_utils:str(1)),
+    ?assertEqual("2.0", emqx_rule_utils:str(2.0)),
+    ?assertEqual("true", emqx_rule_utils:str(true)),
+    ?assertError(_, emqx_rule_utils:str({a, v})).
 
 t_bin(_) ->
-    error('TODO').
+    ?assertEqual(<<"abc">>, emqx_rule_utils:bin("abc")),
+    ?assertEqual(<<"abc">>, emqx_rule_utils:bin(abc)),
+    ?assertEqual(<<"{\"a\":1}">>, emqx_rule_utils:bin(#{a => 1})),
+    ?assertEqual(<<"1">>, emqx_rule_utils:bin(1)),
+    ?assertEqual(<<"2.0">>, emqx_rule_utils:bin(2.0)),
+    ?assertEqual(<<"true">>, emqx_rule_utils:bin(true)),
+    ?assertError(_, emqx_rule_utils:bin({a, v})).
 
-t_now_ms(_) ->
-    error('TODO').
+t_atom_key(_) ->
+    _ = erlang, _ = port,
+    ?assertEqual([erlang], emqx_rule_utils:atom_key([<<"erlang">>])),
+    ?assertEqual([erlang, port], emqx_rule_utils:atom_key([<<"erlang">>, port])),
+    ?assertEqual([erlang, port], emqx_rule_utils:atom_key([<<"erlang">>, <<"port">>])),
+    ?assertEqual(erlang, emqx_rule_utils:atom_key(<<"erlang">>)),
+    ?assertError({invalid_key, {a, v}}, emqx_rule_utils:atom_key({a, v})),
+    _ = xyz876gv123,
+    ?assertEqual([xyz876gv123, port], emqx_rule_utils:atom_key([<<"xyz876gv123">>, port])).
 
 t_unsafe_atom_key(_) ->
-    error('TODO').
+    ?assertEqual([xyz876gv], emqx_rule_utils:unsafe_atom_key([<<"xyz876gv">>])),
+    ?assertEqual([xyz876gv33, port], emqx_rule_utils:unsafe_atom_key([<<"xyz876gv33">>, port])),
+    ?assertEqual([xyz876gv331, port1221], emqx_rule_utils:unsafe_atom_key([<<"xyz876gv331">>, <<"port1221">>])),
+    ?assertEqual(xyz876gv3312, emqx_rule_utils:unsafe_atom_key(<<"xyz876gv3312">>)).
 
 t_proc_tmpl(_) ->
-    error('TODO').
+    Selected = #{a => <<"1">>, b => 1, c => 1.0, d => #{d1 => <<"hi">>}},
+    Tks = emqx_rule_utils:preproc_tmpl(<<"a:${a},b:${b},c:${c},d:${d}">>),
+    ?assertEqual(<<"a:1,b:1,c:1.0,d:{\"d1\":\"hi\"}">>,
+                 emqx_rule_utils:proc_tmpl(Tks, Selected)).
 
-t_preproc_tmpl(_) ->
-    error('TODO').
 

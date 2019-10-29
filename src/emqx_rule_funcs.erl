@@ -81,6 +81,15 @@
         , bitsr/2
         ]).
 
+%% Data Type Convertion
+-export([ str/1
+        , str_utf8/1
+        , bool/1
+        , int/1
+        , float/1
+        , map/1
+        ]).
+
 %% String Funcs
 -export([ lower/1
         , ltrim/1
@@ -349,6 +358,29 @@ bitsl(X, I) when is_integer(X), is_integer(I) ->
 
 bitsr(X, I) when is_integer(X), is_integer(I) ->
     X bsr I.
+
+%%------------------------------------------------------------------------------
+%% Data Type Convertion Funcs
+%%------------------------------------------------------------------------------
+
+str(Data) ->
+    emqx_rule_utils:bin(Data).
+
+str_utf8(Data) ->
+    emqx_rule_utils:utf8_bin(Data).
+
+bool(Data) ->
+    emqx_rule_utils:bool(Data).
+
+int(Data) ->
+    emqx_rule_utils:int(Data).
+
+float(Data) ->
+    emqx_rule_utils:float(Data).
+
+map(Data) ->
+    emqx_rule_utils:map(Data).
+
 
 %%------------------------------------------------------------------------------
 %% String Funcs
