@@ -62,24 +62,29 @@
 %% preprocess template string with place holders
 -spec(preproc_tmpl(binary()) -> tmpl_token()).
 preproc_tmpl(Str) ->
-    Tokens = re:split(Str, ?EX_PLACE_HOLDER, [{return,binary},group]),
+    Tokens = re:split(Str, ?EX_PLACE_HOLDER, [{return,binary},group,trim]),
     preproc_tmpl(Tokens, []).
 
 preproc_tmpl([], Acc) ->
     lists:reverse(Acc);
-preproc_tmpl([[Tkn, Phld]| Tokens], Acc) ->
+preproc_tmpl([[Str, Phld]| Tokens], Acc) ->
+    GetVarFun = fun(Data) -> get_phld_var(Phld, Data) end,
     preproc_tmpl(Tokens,
-        [{var, fun(Data) -> bin(get_phld_var(Phld, Data)) end},
-         {str, Tkn} | Acc]);
-preproc_tmpl([[Tkn]| Tokens], Acc) ->
-    preproc_tmpl(Tokens, [{str, Tkn} | Acc]).
+        put_head(var, GetVarFun,
+            put_head(str, Str, Acc)));
+preproc_tmpl([[Str]| Tokens], Acc) ->
+    preproc_tmpl(Tokens, put_head(str, Str, Acc)).
+
+put_head(_Type, <<>>, List) -> List;
+put_head(Type, Term, List) ->
+    [{Type, Term} | List].
 
 -spec(proc_tmpl(tmpl_token(), binary()) -> binary()).
 proc_tmpl(Tokens, Data) ->
     list_to_binary(
         lists:map(
-            fun ({str, Tkn}) -> Tkn;
-                ({var, GetVal}) -> GetVal(Data)
+            fun ({str, Str}) -> Str;
+                ({var, GetVal}) -> bin(GetVal(Data))
             end, Tokens)).
 
 %% preprocess SQL with place holders
