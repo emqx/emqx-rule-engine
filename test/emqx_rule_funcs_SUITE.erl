@@ -14,57 +14,12 @@
 
 -module(emqx_rule_funcs_SUITE).
 
+-compile(export_all).
+-compile(nowarn_export_all).
+
 -include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
-
-%% Test IoT funcs
--export([ t_msgid/1
-        , t_qos/1
-        , t_flags/1
-        , t_flag/1
-        , t_headers/1
-        , t_header/1
-        , t_topic/1
-        , t_clientid/1
-        , t_clientip/1
-        , t_peername/1
-        , t_username/1
-        , t_payload/1
-        , t_timestamp/1
-        ]).
-
-%% Test OP and math
--export([ t_arith_op/1
-        , t_math_fun/1
-        , t_bits_op/1
-        ]).
-
-%% Test string op
--export([ t_lower_upper/1
-        , t_reverse/1
-        , t_strlen/1
-        , t_substr/1
-        , t_trim/1
-        ]).
-
-%% Test list op
--export([ t_nth/1 ]).
-
-%% Test map op
--export([ t_map_get/1
-        , t_map_put/1
-        ]).
-
-%% Test hash fun
--export([ t_hash_funcs/1 ]).
-
-%% Test base64
--export([ t_base64_encode/1 ]).
-
--export([ all/0
-        , suite/0
-        ]).
 
 -define(PROPTEST(F), ?assert(proper:quickcheck(F()))).
 %%-define(PROPTEST(F), ?assert(proper:quickcheck(F(), [{on_output, fun ct:print/2}]))).
@@ -133,6 +88,68 @@ t_timestamp(_) ->
     Now = emqx_time:now_ms(),
     timer:sleep(100),
     ?assert(Now < apply_func(timestamp, [], message())).
+
+%%------------------------------------------------------------------------------
+%% Data Type Convertion Funcs
+%%------------------------------------------------------------------------------
+t_str(_) ->
+    ?assertEqual(<<"abc">>, emqx_rule_funcs:str("abc")),
+    ?assertEqual(<<"abc">>, emqx_rule_funcs:str(abc)),
+    ?assertEqual(<<"{\"a\":1}">>, emqx_rule_funcs:str(#{a => 1})),
+    ?assertEqual(<<"1">>, emqx_rule_funcs:str(1)),
+    ?assertEqual(<<"2.0">>, emqx_rule_funcs:str(2.0)),
+    ?assertEqual(<<"true">>, emqx_rule_funcs:str(true)),
+    ?assertError(_, emqx_rule_funcs:str({a, v})),
+
+    ?assertEqual(<<"abc">>, emqx_rule_funcs:str_utf8("abc")),
+    ?assertEqual(<<"abc 你好"/utf8>>, emqx_rule_funcs:str_utf8("abc 你好")),
+    ?assertEqual(<<"abc 你好"/utf8>>, emqx_rule_funcs:str_utf8(<<"abc 你好"/utf8>>)),
+    ?assertEqual(<<"abc">>, emqx_rule_funcs:str_utf8(abc)),
+    ?assertEqual(<<"{\"a\":\"abc 你好\"}"/utf8>>, emqx_rule_funcs:str_utf8(#{a => <<"abc 你好"/utf8>>})),
+    ?assertEqual(<<"1">>, emqx_rule_funcs:str_utf8(1)),
+    ?assertEqual(<<"2.0">>, emqx_rule_funcs:str_utf8(2.0)),
+    ?assertEqual(<<"true">>, emqx_rule_funcs:str_utf8(true)),
+    ?assertError(_, emqx_rule_funcs:str_utf8({a, v})).
+
+t_int(_) ->
+    ?assertEqual(1, emqx_rule_funcs:int("1")),
+    ?assertEqual(1, emqx_rule_funcs:int(<<"1.0">>)),
+    ?assertEqual(1, emqx_rule_funcs:int(1)),
+    ?assertEqual(1, emqx_rule_funcs:int(1.9)),
+    ?assertEqual(1, emqx_rule_funcs:int(1.0001)),
+    ?assertEqual(1, emqx_rule_funcs:int(true)),
+    ?assertEqual(0, emqx_rule_funcs:int(false)),
+    ?assertError({invalid_number, {a, v}}, emqx_rule_funcs:int({a, v})),
+    ?assertError(_, emqx_rule_funcs:int("a")).
+
+t_float(_) ->
+    ?assertEqual(1.0, emqx_rule_funcs:float("1.0")),
+    ?assertEqual(1.0, emqx_rule_funcs:float(<<"1.0">>)),
+    ?assertEqual(1.0, emqx_rule_funcs:float(1)),
+    ?assertEqual(1.0, emqx_rule_funcs:float(1.0)),
+    ?assertEqual(1.9, emqx_rule_funcs:float(1.9)),
+    ?assertEqual(1.0001, emqx_rule_funcs:float(1.0001)),
+    ?assertEqual(1.0000000001, emqx_rule_funcs:float(1.0000000001)),
+    ?assertError({invalid_number, {a, v}}, emqx_rule_funcs:float({a, v})),
+    ?assertError(_, emqx_rule_funcs:float("a")).
+
+t_map(_) ->
+    ?assertEqual(#{ver => <<"1.0">>, name => "emqx"}, emqx_rule_funcs:map([{ver, <<"1.0">>}, {name, "emqx"}])),
+    ?assertEqual(#{<<"a">> => 1}, emqx_rule_funcs:map(<<"{\"a\":1}">>)),
+    ?assertError(_, emqx_rule_funcs:map(<<"a">>)),
+    ?assertError(_, emqx_rule_funcs:map("a")),
+    ?assertError(_, emqx_rule_funcs:map(1.0)).
+
+t_bool(_) ->
+    ?assertEqual(true, emqx_rule_funcs:bool(1)),
+    ?assertEqual(true, emqx_rule_funcs:bool(1.0)),
+    ?assertEqual(false, emqx_rule_funcs:bool(0)),
+    ?assertEqual(false, emqx_rule_funcs:bool(0.0)),
+    ?assertEqual(true, emqx_rule_funcs:bool(true)),
+    ?assertEqual(true, emqx_rule_funcs:bool(<<"true">>)),
+    ?assertEqual(false, emqx_rule_funcs:bool(false)),
+    ?assertEqual(false, emqx_rule_funcs:bool(<<"false">>)),
+    ?assertError({invalid_boolean, _}, emqx_rule_funcs:bool(3)).
 
 %%------------------------------------------------------------------------------
 %% Test cases for arith op
