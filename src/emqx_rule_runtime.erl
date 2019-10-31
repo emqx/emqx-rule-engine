@@ -313,7 +313,7 @@ columns(Input = #{flags := Flags}, Result) ->
             maps:merge(Result, #{flags => Flags,
                                  retain => int(Retain)}));
 columns(Input = #{headers := Headers}, Result) ->
-    Username = maps:get(username, Headers, null),
+    Username = maps:get(username, Headers, undefined),
     PeerHost = host_to_str(maps:get(peerhost, Headers, undefined)),
     columns(maps:remove(headers, Input),
             maps:merge(Result, #{username => Username,
@@ -331,9 +331,9 @@ columns(Input = #{conninfo := Conn}, Result) ->
     ConnAt = maps:get(connected_at, Conn, erlang:system_time(second)),
     columns(maps:remove(conninfo, Input),
             maps:merge(Result, #{connected_at => ConnAt,
-                                 clean_start => maps:get(clean_start, Conn, null),
-                                 keepalive => maps:get(keepalive, Conn, null),
-                                 proto_ver => maps:get(proto_ver, Conn, null)
+                                 clean_start => maps:get(clean_start, Conn, undefined),
+                                 keepalive => maps:get(keepalive, Conn, undefined),
+                                 proto_ver => maps:get(proto_ver, Conn, undefined)
                                 }));
 columns(Input = #{topic_filters := [{Topic, Opts} | _] = Filters}, Result) ->
     columns(maps:remove(topic_filters, Input),
@@ -343,7 +343,7 @@ columns(Input, Result) ->
     maps:merge(Result, Input).
 
 host_to_str(undefined) ->
-    null;
+    undefined;
 host_to_str(IPAddr) ->
     list_to_binary(inet:ntoa(IPAddr)).
 
