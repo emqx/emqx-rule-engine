@@ -32,6 +32,10 @@
                 , 'client.subscribe'
                 , 'client.unsubscribe'
                 ];
+           '$session' ->
+                [ 'session.subscribed'
+                , 'session.unsubscribed'
+                ];
            '$any' -> '$any';
            _ -> ['$any', ALIAS]
         end).
@@ -44,7 +48,7 @@
                 , <<"event">>
                 , <<"id">>
                 , <<"payload">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"qos">>
                 , <<"timestamp">>
                 , <<"topic">>
@@ -58,7 +62,7 @@
                 , <<"mountpoint">>
                 , <<"id">>
                 , <<"payload">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"topic">>
                 , <<"qos">>
                 , <<"timestamp">>
@@ -70,7 +74,7 @@
                 , <<"event">>
                 , <<"id">>
                 , <<"payload">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"topic">>
                 , <<"qos">>
                 , <<"timestamp">>
@@ -82,7 +86,7 @@
                 , <<"event">>
                 , <<"id">>
                 , <<"payload">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"qos">>
                 , <<"timestamp">>
                 , <<"topic">>
@@ -99,7 +103,7 @@
                 , <<"is_bridge">>
                 , <<"keepalive">>
                 , <<"mountpoint">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"proto_ver">>
                 , <<"timestamp">>
                 , <<"node">>
@@ -110,7 +114,7 @@
                 , <<"event">>
                 , <<"auth_result">>
                 , <<"mountpoint">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"reason_code">>
                 , <<"timestamp">>
                 , <<"node">>
@@ -121,7 +125,7 @@
                 , <<"event">>
                 , <<"auth_result">>
                 , <<"mountpoint">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"topic_filters">>
                 , <<"topic">>
                 , <<"qos">>
@@ -134,10 +138,36 @@
                 , <<"event">>
                 , <<"auth_result">>
                 , <<"mountpoint">>
-                , <<"peername">>
+                , <<"peerhost">>
                 , <<"topic_filters">>
                 , <<"topic">>
                 , <<"qos">>
+                , <<"timestamp">>
+                , <<"node">>
+                ];
+        'session.subscribed' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"topic">>
+                , <<"qos">>
+                , <<"nl">>
+                , <<"rap">>
+                , <<"rc">>
+                , <<"rh">>
+                , <<"timestamp">>
+                , <<"node">>
+                ];
+        'session.unsubscribed' ->
+                [ <<"client_id">>
+                , <<"username">>
+                , <<"event">>
+                , <<"topic">>
+                , <<"qos">>
+                , <<"nl">>
+                , <<"rap">>
+                , <<"rc">>
+                , <<"rh">>
                 , <<"timestamp">>
                 , <<"node">>
                 ];
@@ -163,7 +193,7 @@
             [ {<<"clientid">>, <<"c_emqx">>}
             , {<<"username">>, <<"u_emqx">>}
             , {<<"auth_result">>, <<"success">>}
-            , {<<"peername">>, <<"127.0.0.1:63412">>}
+            , {<<"peerhost">>, <<"127.0.0.1">>}
             ];
         'client.disconnected' ->
             [ {<<"clientid">>, <<"c_emqx">>}
@@ -186,6 +216,18 @@
                , <<"t/b">>
                ]}
             ];
+        'session.subscribed' ->
+            [ {<<"client_id">>, <<"c_emqx">>}
+            , {<<"username">>, <<"u_emqx">>}
+            , {<<"topic">>, <<"t/a">>}
+            , {<<"qos">>, 1}
+            ];
+        'session.unsubscribed' ->
+            [ {<<"client_id">>, <<"c_emqx">>}
+            , {<<"username">>, <<"u_emqx">>}
+            , {<<"topic">>, <<"t/a">>}
+            , {<<"qos">>, 1}
+            ];
         RuleType ->
             error({unknown_rule_type, RuleType})
         end).
@@ -196,16 +238,16 @@
            description => #{en => <<"message publish">>, zh => <<"消息发布"/utf8>>},
            test_columns => ?TEST_COLUMNS('message.publish'),
            columns => ?COLUMNS('message.publish'),
-           sql_example => <<"SELECT * FROM \"message.publish\" WHERE topic =~ 't/#'">>
+           sql_example => <<"SELECT payload.msg as msg FROM \"message.publish\" WHERE topic =~ 't/#' and msg = 'hello'">>
         }).
 
 -define(EVENT_INFO_MESSAGE_DELIVER,
         #{ event => 'message.delivered',
-           title => #{en => <<"message deliver">>, zh => <<"消息投递"/utf8>>},
-           description => #{en => <<"message deliver">>, zh => <<"消息投递"/utf8>>},
+           title => #{en => <<"message delivered">>, zh => <<"消息投递"/utf8>>},
+           description => #{en => <<"message delivered">>, zh => <<"消息投递"/utf8>>},
            test_columns => ?TEST_COLUMNS('message.delivered'),
            columns => ?COLUMNS('message.delivered'),
-           sql_example => <<"SELECT * FROM \"message.deliver\" WHERE topic =~ 't/#'">>
+           sql_example => <<"SELECT payload.msg as msg FROM \"message.delivered\" WHERE topic =~ 't/#' and msg = 'hello'">>
         }).
 
 -define(EVENT_INFO_MESSAGE_ACKED,
@@ -214,7 +256,7 @@
            description => #{en => <<"message acked">>, zh => <<"消息应答"/utf8>>},
            test_columns => ?TEST_COLUMNS('message.acked'),
            columns => ?COLUMNS('message.acked'),
-           sql_example => <<"SELECT * FROM \"message.acked\" WHERE topic =~ 't/#'">>
+           sql_example => <<"SELECT payload.msg as msg FROM \"message.acked\" WHERE topic =~ 't/#' and msg = 'hello'">>
         }).
 
 -define(EVENT_INFO_MESSAGE_DROPPED,
@@ -223,7 +265,7 @@
            description => #{en => <<"message dropped">>, zh => <<"消息丢弃"/utf8>>},
            test_columns => ?TEST_COLUMNS('message.dropped'),
            columns => ?COLUMNS('message.dropped'),
-           sql_example => <<"SELECT * FROM \"message.dropped\" WHERE topic =~ 't/#'">>
+           sql_example => <<"SELECT payload.msg as msg FROM \"message.dropped\" WHERE topic =~ 't/#' and msg = 'hello'">>
         }).
 
 -define(EVENT_INFO_CLIENT_CONNECTED,
@@ -262,6 +304,24 @@
            sql_example => <<"SELECT * FROM \"client.unsubscribe\" WHERE topic =~ 't/#'">>
         }).
 
+-define(EVENT_INFO_SESSION_SUBSCRIBED,
+        #{ event => 'session.subscribed',
+           title => #{en => <<"session subscribed">>, zh => <<"会话订阅完成"/utf8>>},
+           description => #{en => <<"session subscribed">>, zh => <<"会话订阅完成"/utf8>>},
+           test_columns => ?TEST_COLUMNS('session.subscribed'),
+           columns => ?COLUMNS('session.subscribed'),
+           sql_example => <<"SELECT * FROM \"session.subscribed\" WHERE topic =~ 't/#'">>
+        }).
+
+-define(EVENT_INFO_SESSION_UNSUBSCRIBED,
+        #{ event => 'session.unsubscribed',
+           title => #{en => <<"session unsubscribed">>, zh => <<"会话取消订阅完成"/utf8>>},
+           description => #{en => <<"session unsubscribed">>, zh => <<"会话取消订阅完成"/utf8>>},
+           test_columns => ?TEST_COLUMNS('session.unsubscribed'),
+           columns => ?COLUMNS('session.unsubscribed'),
+           sql_example => <<"SELECT * FROM \"session.unsubscribed\" WHERE topic =~ 't/#'">>
+        }).
+
 -define(EVENT_INFO,
         [ ?EVENT_INFO_MESSAGE_PUBLISH
         , ?EVENT_INFO_MESSAGE_DELIVER
@@ -271,6 +331,8 @@
         , ?EVENT_INFO_CLIENT_DISCONNECTED
         , ?EVENT_INFO_CLIENT_SUBSCRIBE
         , ?EVENT_INFO_CLIENT_UNSUBSCRIBE
+        , ?EVENT_INFO_SESSION_SUBSCRIBED
+        , ?EVENT_INFO_SESSION_UNSUBSCRIBED
         ]).
 
 -define(EG_ENVS(EVENT),
@@ -281,7 +343,7 @@
               from => <<"c_emqx">>,
               headers =>
                   #{allow_publish => true,
-                    peername => {{127,0,0,1},50891},
+                    peerhost => {127,0,0,1},
                     username => <<"u_emqx">>},
               id => <<0,5,137,164,41,233,87,47,180,75,0,0,5,124,0,1>>,
               payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,qos => 1,
@@ -296,14 +358,13 @@
               from => <<"c_emqx">>,
               headers =>
                   #{allow_publish => true,
-                    peername => {{127,0,0,1},50891},
+                    peerhost => {127,0,0,1},
                     username => <<"u_emqx">>},
               id => <<0,5,137,164,41,233,87,47,180,75,0,0,5,124,0,1>>,
               mountpoint => undefined,
               payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,
-              peername => {{127,0,0,1},50891},
+              peerhost => {127,0,0,1},
               qos => 1,
-              sockname => {{127,0,0,1},1883},
               node => node(),
               timestamp => erlang:timestamp(),
               topic => <<"t1">>,username => <<"u_emqx">>,
@@ -315,7 +376,7 @@
               from => <<"c_emqx">>,
               headers =>
                   #{allow_publish => true,
-                    peername => {{127,0,0,1},50891},
+                    peerhost => {127,0,0,1},
                     username => <<"u_emqx">>},
               id => <<0,5,137,164,41,233,87,47,180,75,0,0,5,124,0,1>>,
               payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,qos => 1,
@@ -328,7 +389,7 @@
               from => <<"c_emqx">>,
               headers =>
                   #{allow_publish => true,
-                    peername => {{127,0,0,1},50891},
+                    peerhost => {127,0,0,1},
                     username => <<"u_emqx">>},
               id => <<0,5,137,164,41,236,124,3,180,75,0,0,5,124,0,2>>,
               node => node(),
@@ -339,27 +400,19 @@
             #{anonymous => true,auth_result => success,
               clientid => <<"c_emqx">>,
               connack => 0,
-              connattrs =>
+              conninfo =>
                   #{clean_start => true,
-                    clientid => <<"c_emqx">>,
+                    clientid => <<"emqtt-EMQ-8246dcc49220e7544aa4">>,
                     conn_mod => emqx_connection,
-                    connected_at => erlang:timestamp(),
-                    credentials =>
-                        #{anonymous => true,auth_result => success,
-                          clientid =>
-                              <<"c_emqx">>,
-                          mountpoint => undefined,
-                          peername => {{127,0,0,1},50891},
-                          sockname => {{127,0,0,1},1883},
-                          username => <<"u_emqx">>,ws_cookie => undefined,
-                          zone => external},
-                    is_bridge => false,keepalive => 60,peercert => nossl,
-                    peername => {{127,0,0,1},50891},
+                    conn_props => undefined,expiry_interval => 0,
+                    keepalive => 60,peercert => nossl,
+                    peername => {{127,0,0,1},51700},
                     proto_name => <<"MQTT">>,proto_ver => 4,
-                    username => <<"u_emqx">>,zone => external},
+                    receive_maximum => 32,
+                    sockname => {{127,0,0,1},1883},
+                    socktype => tcp,username => <<"emqx">>},
               event => 'client.connected',mountpoint => undefined,
-              peername => {{127,0,0,1},50891},
-              sockname => {{127,0,0,1},1883},
+              peerhost => {127,0,0,1},
               username => <<"u_emqx">>,ws_cookie => undefined,
               node => node(),
               zone => external};
@@ -367,9 +420,8 @@
             #{anonymous => true,auth_result => success,
               clientid => <<"c_emqx">>,
               event => 'client.disconnected',mountpoint => undefined,
-              peername => {{127,0,0,1},50891},
+              peerhost => {127,0,0,1},
               reason_code => closed,
-              sockname => {{127,0,0,1},1883},
               username => <<"u_emqx">>,ws_cookie => undefined,
               node => node(),
               timestamp => erlang:timestamp(),
@@ -378,8 +430,7 @@
             #{anonymous => true,auth_result => success,
               clientid => <<"c_emqx">>,
               event => 'client.subscribe',mountpoint => undefined,
-              peername => {{127,0,0,1},50891},
-              sockname => {{127,0,0,1},1883},
+              peerhost => {127,0,0,1},
               topic_filters =>
                   [{<<"t1">>,#{nl => 0,qos => 1,rap => 0,rc => 1,rh => 0}}],
               username => <<"u_emqx">>,ws_cookie => undefined,
@@ -390,13 +441,29 @@
             #{anonymous => true,auth_result => success,
               clientid => <<"c_emqx">>,
               event => 'client.unsubscribe',mountpoint => undefined,
-              peername => {{127,0,0,1},50891},
-              sockname => {{127,0,0,1},1883},
+              peerhost => {127,0,0,1},
+              sockname => {127,0,0,1},
               topic_filters => [{<<"t1">>,#{}}],
               username => <<"u_emqx">>,ws_cookie => undefined,
               node => node(),
               timestamp => erlang:timestamp(),
               zone => external};
+        'session.subscribed' ->
+            #{client_id => <<"c_emqx">>,
+              event => 'session.subscribed',
+              topic => <<"t1">>,
+              sub_opts => #{nl => 0,qos => 1,rap => 0,rc => 1,rh => 0},
+              username => <<"u_emqx">>,ws_cookie => undefined,
+              node => node(),
+              timestamp => erlang:timestamp()};
+        'session.unsubscribed' ->
+            #{client_id => <<"c_emqx">>,
+              event => 'session.unsubscribed',
+              topic => <<"t1">>,
+              sub_opts => #{nl => 0,qos => 1,rap => 0,rc => 1,rh => 0},
+              username => <<"u_emqx">>,ws_cookie => undefined,
+              node => node(),
+              timestamp => erlang:timestamp()};
         RuleType ->
               error({unknown_event_type, RuleType})
         end).

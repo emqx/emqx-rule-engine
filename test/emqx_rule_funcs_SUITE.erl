@@ -16,57 +16,12 @@
 
 -module(emqx_rule_funcs_SUITE).
 
+-compile(export_all).
+-compile(nowarn_export_all).
+
 -include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
-
-%% Test IoT funcs
--export([ t_msgid/1
-        , t_qos/1
-        , t_flags/1
-        , t_flag/1
-        , t_headers/1
-        , t_header/1
-        , t_topic/1
-        , t_clientid/1
-        , t_clientip/1
-        , t_peername/1
-        , t_username/1
-        , t_payload/1
-        , t_timestamp/1
-        ]).
-
-%% Test OP and math
--export([ t_arith_op/1
-        , t_math_fun/1
-        , t_bits_op/1
-        ]).
-
-%% Test string op
--export([ t_lower_upper/1
-        , t_reverse/1
-        , t_strlen/1
-        , t_substr/1
-        , t_trim/1
-        ]).
-
-%% Test list op
--export([ t_nth/1 ]).
-
-%% Test map op
--export([ t_map_get/1
-        , t_map_put/1
-        ]).
-
-%% Test hash fun
--export([ t_hash_funcs/1 ]).
-
-%% Test base64
--export([ t_base64_encode/1 ]).
-
--export([ all/0
-        , suite/0
-        ]).
 
 -define(PROPTEST(F), ?assert(proper:quickcheck(F()))).
 %%-define(PROPTEST(F), ?assert(proper:quickcheck(F(), [{on_output, fun ct:print/2}]))).
@@ -78,7 +33,7 @@
 t_msgid(_) ->
     Msg = message(),
     ?assertEqual(undefined, apply_func(msgid, [], #{})),
-    ?assertEqual(emqx_message:id(Msg), apply_func(msgid, [], Msg)).
+    ?assertEqual(emqx_guid:to_hexstr(emqx_message:id(Msg)), apply_func(msgid, [], Msg)).
 
 t_qos(_) ->
     ?assertEqual(undefined, apply_func(qos, [], #{})),
@@ -93,15 +48,6 @@ t_flag(_) ->
     ?assertNot(apply_func(flag, [dup], Msg)),
     ?assert(apply_func(flag, [retain], Msg1)).
 
-t_headers(_) ->
-    Msg = emqx_message:set_header(username, admin, message()),
-    ?assertEqual(#{}, apply_func(headers, [], #{})),
-    ?assertEqual(#{username => admin}, apply_func(headers, [], Msg)).
-
-t_header(_) ->
-    Msg = emqx_message:set_header(username, admin, message()),
-    ?assertEqual(admin, apply_func(header, [username], Msg)).
-
 t_topic(_) ->
     Msg = message(),
     ?assertEqual(<<"topic/#">>, apply_func(topic, [], Msg)),
@@ -113,28 +59,91 @@ t_clientid(_) ->
     ?assertEqual(<<"clientid">>, apply_func(clientid, [], Msg)).
 
 t_clientip(_) ->
-    Msg = emqx_message:set_header(peername, {{127,0,0,1}, 3333}, message()),
+    Msg = emqx_message:set_header(peerhost, {127,0,0,1}, message()),
     ?assertEqual(undefined, apply_func(clientip, [], #{})),
     ?assertEqual(<<"127.0.0.1">>, apply_func(clientip, [], Msg)).
 
-t_peername(_) ->
-    Msg = emqx_message:set_header(peername, {{127,0,0,1}, 3333}, message()),
-    ?assertEqual(undefined, apply_func(peername, [], #{})),
-    ?assertEqual(<<"127.0.0.1:3333">>, apply_func(peername, [], Msg)).
+t_peerhost(_) ->
+    Msg = emqx_message:set_header(peerhost, {127,0,0,1}, message()),
+    ?assertEqual(undefined, apply_func(peerhost, [], #{})),
+    ?assertEqual(<<"127.0.0.1">>, apply_func(peerhost, [], Msg)).
 
 t_username(_) ->
     Msg = emqx_message:set_header(username, <<"feng">>, message()),
     ?assertEqual(<<"feng">>, apply_func(username, [], Msg)).
 
 t_payload(_) ->
-    ?assertEqual(<<"payload">>, apply_func(payload, [], message())),
+    Input = emqx_message:to_map(message()),
     NestedMap = #{a => #{b => #{c => c}}},
-    ?assertEqual(c, apply_func(payload, [[a,b,c]], NestedMap)).
+    ?assertEqual(<<"hello">>, apply_func(payload, [], Input#{payload => <<"hello">>})),
+    ?assertEqual(c, apply_func(payload, [<<"a.b.c">>], Input#{payload => NestedMap})).
 
 t_timestamp(_) ->
     Now = emqx_time:now_ms(),
     timer:sleep(100),
     ?assert(Now < apply_func(timestamp, [], message())).
+
+%%------------------------------------------------------------------------------
+%% Data Type Convertion Funcs
+%%------------------------------------------------------------------------------
+t_str(_) ->
+    ?assertEqual(<<"abc">>, emqx_rule_funcs:str("abc")),
+    ?assertEqual(<<"abc">>, emqx_rule_funcs:str(abc)),
+    ?assertEqual(<<"{\"a\":1}">>, emqx_rule_funcs:str(#{a => 1})),
+    ?assertEqual(<<"1">>, emqx_rule_funcs:str(1)),
+    ?assertEqual(<<"2.0">>, emqx_rule_funcs:str(2.0)),
+    ?assertEqual(<<"true">>, emqx_rule_funcs:str(true)),
+    ?assertError(_, emqx_rule_funcs:str({a, v})),
+
+    ?assertEqual(<<"abc">>, emqx_rule_funcs:str_utf8("abc")),
+    ?assertEqual(<<"abc 你好"/utf8>>, emqx_rule_funcs:str_utf8("abc 你好")),
+    ?assertEqual(<<"abc 你好"/utf8>>, emqx_rule_funcs:str_utf8(<<"abc 你好"/utf8>>)),
+    ?assertEqual(<<"abc">>, emqx_rule_funcs:str_utf8(abc)),
+    ?assertEqual(<<"{\"a\":\"abc 你好\"}"/utf8>>, emqx_rule_funcs:str_utf8(#{a => <<"abc 你好"/utf8>>})),
+    ?assertEqual(<<"1">>, emqx_rule_funcs:str_utf8(1)),
+    ?assertEqual(<<"2.0">>, emqx_rule_funcs:str_utf8(2.0)),
+    ?assertEqual(<<"true">>, emqx_rule_funcs:str_utf8(true)),
+    ?assertError(_, emqx_rule_funcs:str_utf8({a, v})).
+
+t_int(_) ->
+    ?assertEqual(1, emqx_rule_funcs:int("1")),
+    ?assertEqual(1, emqx_rule_funcs:int(<<"1.0">>)),
+    ?assertEqual(1, emqx_rule_funcs:int(1)),
+    ?assertEqual(1, emqx_rule_funcs:int(1.9)),
+    ?assertEqual(1, emqx_rule_funcs:int(1.0001)),
+    ?assertEqual(1, emqx_rule_funcs:int(true)),
+    ?assertEqual(0, emqx_rule_funcs:int(false)),
+    ?assertError({invalid_number, {a, v}}, emqx_rule_funcs:int({a, v})),
+    ?assertError(_, emqx_rule_funcs:int("a")).
+
+t_float(_) ->
+    ?assertEqual(1.0, emqx_rule_funcs:float("1.0")),
+    ?assertEqual(1.0, emqx_rule_funcs:float(<<"1.0">>)),
+    ?assertEqual(1.0, emqx_rule_funcs:float(1)),
+    ?assertEqual(1.0, emqx_rule_funcs:float(1.0)),
+    ?assertEqual(1.9, emqx_rule_funcs:float(1.9)),
+    ?assertEqual(1.0001, emqx_rule_funcs:float(1.0001)),
+    ?assertEqual(1.0000000001, emqx_rule_funcs:float(1.0000000001)),
+    ?assertError({invalid_number, {a, v}}, emqx_rule_funcs:float({a, v})),
+    ?assertError(_, emqx_rule_funcs:float("a")).
+
+t_map(_) ->
+    ?assertEqual(#{ver => <<"1.0">>, name => "emqx"}, emqx_rule_funcs:map([{ver, <<"1.0">>}, {name, "emqx"}])),
+    ?assertEqual(#{<<"a">> => 1}, emqx_rule_funcs:map(<<"{\"a\":1}">>)),
+    ?assertError(_, emqx_rule_funcs:map(<<"a">>)),
+    ?assertError(_, emqx_rule_funcs:map("a")),
+    ?assertError(_, emqx_rule_funcs:map(1.0)).
+
+t_bool(_) ->
+    ?assertEqual(true, emqx_rule_funcs:bool(1)),
+    ?assertEqual(true, emqx_rule_funcs:bool(1.0)),
+    ?assertEqual(false, emqx_rule_funcs:bool(0)),
+    ?assertEqual(false, emqx_rule_funcs:bool(0.0)),
+    ?assertEqual(true, emqx_rule_funcs:bool(true)),
+    ?assertEqual(true, emqx_rule_funcs:bool(<<"true">>)),
+    ?assertEqual(false, emqx_rule_funcs:bool(false)),
+    ?assertEqual(false, emqx_rule_funcs:bool(<<"false">>)),
+    ?assertError({invalid_boolean, _}, emqx_rule_funcs:bool(3)).
 
 %%------------------------------------------------------------------------------
 %% Test cases for arith op
@@ -311,10 +320,140 @@ apply_func(Fun, Args) when is_function(Fun) ->
 apply_func(Name, Args, Input) when is_map(Input) ->
     apply_func(apply_func(Name, Args), [Input]);
 apply_func(Name, Args, Msg) ->
-    apply_func(Name, Args, emqx_message:to_map(Msg)).
+    apply_func(Name, Args, emqx_rule_runtime:columns(emqx_message:to_map(Msg))).
 
 message() ->
     emqx_message:make(<<"clientid">>, 1, <<"topic/#">>, <<"payload">>).
+
+t_contains_topic(_) ->
+    error('TODO').
+
+t_contains_topic_match(_) ->
+    error('TODO').
+
+t_div(_) ->
+    error('TODO').
+
+t_mod(_) ->
+    error('TODO').
+
+t_abs(_) ->
+    error('TODO').
+
+t_acos(_) ->
+    error('TODO').
+
+t_acosh(_) ->
+    error('TODO').
+
+t_asin(_) ->
+    error('TODO').
+
+t_asinh(_) ->
+    error('TODO').
+
+t_atan(_) ->
+    error('TODO').
+
+t_atanh(_) ->
+    error('TODO').
+
+t_ceil(_) ->
+    error('TODO').
+
+t_cos(_) ->
+    error('TODO').
+
+t_cosh(_) ->
+    error('TODO').
+
+t_exp(_) ->
+    error('TODO').
+
+t_floor(_) ->
+    error('TODO').
+
+t_fmod(_) ->
+    error('TODO').
+
+t_log(_) ->
+    error('TODO').
+
+t_log10(_) ->
+    error('TODO').
+
+t_log2(_) ->
+    error('TODO').
+
+t_power(_) ->
+    error('TODO').
+
+t_round(_) ->
+    error('TODO').
+
+t_sin(_) ->
+    error('TODO').
+
+t_sinh(_) ->
+    error('TODO').
+
+t_sqrt(_) ->
+    error('TODO').
+
+t_tan(_) ->
+    error('TODO').
+
+t_tanh(_) ->
+    error('TODO').
+
+t_bitnot(_) ->
+    error('TODO').
+
+t_bitand(_) ->
+    error('TODO').
+
+t_bitor(_) ->
+    error('TODO').
+
+t_bitxor(_) ->
+    error('TODO').
+
+t_bitsl(_) ->
+    error('TODO').
+
+t_bitsr(_) ->
+    error('TODO').
+
+t_lower(_) ->
+    error('TODO').
+
+t_ltrim(_) ->
+    error('TODO').
+
+t_rtrim(_) ->
+    error('TODO').
+
+t_upper(_) ->
+    error('TODO').
+
+t_split(_) ->
+    error('TODO').
+
+t_md5(_) ->
+    error('TODO').
+
+t_sha(_) ->
+    error('TODO').
+
+t_sha256(_) ->
+    error('TODO').
+
+t_json_encode(_) ->
+    error('TODO').
+
+t_json_decode(_) ->
+    error('TODO').
+
 
 %%------------------------------------------------------------------------------
 %% CT functions

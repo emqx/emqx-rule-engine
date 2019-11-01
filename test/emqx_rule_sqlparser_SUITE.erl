@@ -78,6 +78,26 @@ t_sqlparse_op(_) ->
     {ok, Select} = emqx_rule_sqlparser:parse_select(Sql),
     Ops = [Op || {as, Op, _} <- emqx_rule_sqlparser:select_fields(Select)],
     ?assertMatch([{'+', _, _}, {'div', _, _}], Ops).
+    
+    
+t_unquote(_) ->
+    error('TODO').
+
+t_hook(_) ->
+    error('TODO').
+
+t_select_where(_) ->
+    error('TODO').
+
+t_select_fields(_) ->
+    error('TODO').
+
+t_select_from(_) ->
+    error('TODO').
+
+t_parse_select(_) ->
+    error('TODO').
+
 
 all() ->
     IsTestCase = fun("t_" ++ _) -> true; (_) -> false end,

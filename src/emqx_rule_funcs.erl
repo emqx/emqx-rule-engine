@@ -21,13 +21,11 @@
         , qos/0
         , flags/0
         , flag/1
-        , headers/0
-        , header/1
         , topic/0
         , topic/1
         , clientid/0
         , clientip/0
-        , peername/0
+        , peerhost/0
         , username/0
         , payload/0
         , payload/1
@@ -45,6 +43,7 @@
         , '/'/2
         , 'div'/2
         , mod/2
+        , eq/2
         ]).
 
 %% Math Funcs
@@ -80,6 +79,15 @@
         , bitxor/2
         , bitsl/2
         , bitsr/2
+        ]).
+
+%% Data Type Convertion
+-export([ str/1
+        , str_utf8/1
+        , bool/1
+        , int/1
+        , float/1
+        , map/1
         ]).
 
 %% String Funcs
@@ -122,7 +130,6 @@
 
 -import(emqx_rule_maps,
         [ get_value/2
-        , nested_get/2
         ]).
 
 -compile({no_auto_import,
@@ -130,6 +137,7 @@
           , ceil/1
           , floor/1
           , round/1
+          , map_get/2
           ]}).
 
 -define(is_var(X), is_binary(X)).
@@ -163,50 +171,32 @@ flag(Name) ->
 
 %% @doc "clientid()" Func
 clientid() ->
-    fun(#{from := ClientId}) -> ClientId; (_) -> undefined end.
-
-%% @doc "clientip()" Func
-clientip() ->
-    fun(#{headers := #{peername := {Addr, _Port}}}) ->
-        iolist_to_binary(inet_parse:ntoa(Addr));
-        (_) -> undefined
-    end.
-
-%% @doc "peername()" Func
-peername() ->
-    fun(#{headers := #{peername := {Addr, Port}}}) ->
-        iolist_to_binary(io_lib:format("~s:~w", [inet_parse:ntoa(Addr), Port]));
-        (_) -> undefined
-    end.
+    fun(#{clientid := ClientId}) -> ClientId; (_) -> undefined end.
 
 %% @doc "username()" Func
 username() ->
-    header(username).
+    fun(#{username := Username}) -> Username; (_) -> undefined end.
 
-%% @doc "headers()" Func
-headers() ->
-    fun(#{headers := Headers}) -> Headers; (_) -> #{} end.
+%% @doc "clientip()" Func
+clientip() ->
+    peerhost().
 
-%% @doc "header(Name)" Func
-header(Name) ->
-    fun(#{headers := Headers}) ->
-            get_value(Name, Headers);
-       (_) -> undefined
-    end.
+peerhost() ->
+    fun(#{peerhost := Addr}) -> Addr; (_) -> undefined end.
 
 payload() ->
     fun(#{payload := Payload}) -> Payload; (_) -> undefined end.
 
-payload(Path) when is_list(Path) ->
-    fun(Payload) when is_map(Payload) ->
-            nested_get(Path, Payload);
+payload(Path) ->
+    fun(#{payload := Payload}) when is_map(Payload) ->
+            map_get(Path, Payload);
        (_) -> undefined
     end.
 
 %% @doc "timestamp()" Func
 timestamp() ->
     fun(#{timestamp := Ts}) ->
-            emqx_rule_utils:now_ms(Ts);
+            Ts;
        (_) -> emqx_rule_utils:now_ms()
     end.
 
@@ -215,35 +205,35 @@ timestamp() ->
 -spec(contains_topic(emqx_mqtt_types:topic_filters(), emqx_types:topic())
         -> true | false).
 contains_topic(TopicFilters, Topic) ->
-    case proplists:get_value(Topic, TopicFilters) of
-        undefined -> false;
+    case find_topic_filter(Topic, TopicFilters, fun eq/2) of
+        not_found -> false;
         _ -> true
     end.
 contains_topic(TopicFilters, Topic, QoS) ->
-    case proplists:get_value(Topic, TopicFilters) of
-        #{qos := QoS} -> true;
-        undefined -> false
+    case find_topic_filter(Topic, TopicFilters, fun eq/2) of
+        {_, #{qos := QoS}} -> true;
+        _ -> false
     end.
 
 -spec(contains_topic_match(emqx_mqtt_types:topic_filters(), emqx_types:topic())
         -> true | false).
 contains_topic_match(TopicFilters, Topic) ->
-    case find_topic_filter(Topic, TopicFilters) of
+    case find_topic_filter(Topic, TopicFilters, fun emqx_topic:match/2) of
         not_found -> false;
         _ -> true
     end.
 contains_topic_match(TopicFilters, Topic, QoS) ->
-    case find_topic_filter(Topic, TopicFilters) of
+    case find_topic_filter(Topic, TopicFilters, fun emqx_topic:match/2) of
         {_, #{qos := QoS}} -> true;
         _ -> false
     end.
 
-find_topic_filter(Filter, TopicFilters) ->
+find_topic_filter(Filter, TopicFilters, Func) ->
     try
-        [case emqx_topic:match(Topic, Filter) of
+        [case Func(Topic, Filter) of
             true -> throw(Result);
             false -> ok
-         end || Result = {Topic, _Opts} <- TopicFilters],
+         end || Result = #{topic := Topic} <- TopicFilters],
         not_found
     catch
         throw:Result -> Result
@@ -270,6 +260,9 @@ find_topic_filter(Filter, TopicFilters) ->
 
 mod(X, Y) when is_integer(X), is_integer(Y) ->
     X rem Y.
+
+eq(X, Y) ->
+    X == Y.
 
 %%------------------------------------------------------------------------------
 %% Math Funcs
@@ -365,6 +358,29 @@ bitsl(X, I) when is_integer(X), is_integer(I) ->
 
 bitsr(X, I) when is_integer(X), is_integer(I) ->
     X bsr I.
+
+%%------------------------------------------------------------------------------
+%% Data Type Convertion Funcs
+%%------------------------------------------------------------------------------
+
+str(Data) ->
+    emqx_rule_utils:bin(Data).
+
+str_utf8(Data) ->
+    emqx_rule_utils:utf8_bin(Data).
+
+bool(Data) ->
+    emqx_rule_utils:bool(Data).
+
+int(Data) ->
+    emqx_rule_utils:int(Data).
+
+float(Data) ->
+    emqx_rule_utils:float(Data).
+
+map(Data) ->
+    emqx_rule_utils:map(Data).
+
 
 %%------------------------------------------------------------------------------
 %% String Funcs
