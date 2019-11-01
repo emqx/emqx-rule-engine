@@ -84,6 +84,7 @@ groups() ->
      {runtime, [],
       [t_events,
        t_sqlselect_0,
+       t_sqlselect_01,
        t_sqlselect_1,
        t_sqlselect_2,
        t_sqlselect_3
@@ -137,6 +138,8 @@ init_per_testcase(t_events, Config) ->
                          , 'client.disconnected'
                          , 'client.subscribe'
                          , 'client.unsubscribe'
+                         , 'session.subscribed'
+                         , 'session.unsubscribed'
                          ]),
     ok = emqx_rule_registry:register_resource_types([make_simple_resource_type(simple_resource_type)]),
     ok = emqx_rule_registry:add_action(
@@ -147,12 +150,13 @@ init_per_testcase(t_events, Config) ->
                     description = #{en => <<"Hook metrics action">>}}),
     SQL = "SELECT * FROM \"message.publish\", "
                         "\"message.dropped\", "
-                        "\"message.deliver\", "
+                        "\"message.delivered\", "
                         "\"message.acked\", "
                         "\"client.connected\", "
                         "\"client.disconnected\", "
                         "\"client.subscribe\", "
-                        "\"client.unsubscribe\"",
+                        "\"client.unsubscribe\" "
+                    ,
     {ok, Rule} = emqx_rule_engine:create_rule(
                     #{rawsql => SQL,
                       actions => [{'inspect', #{}},
@@ -670,6 +674,43 @@ t_sqlselect_0(_Config) ->
     emqtt:stop(Client),
     emqx_rule_registry:remove_rule(TopicRule).
 
+t_sqlselect_01(_Config) ->
+    ok = emqx_rule_engine:load_providers(),
+    TopicRule = create_simple_repub_rule(
+                    <<"t2">>,
+                    "SELECT * "
+                    "FROM \"message.publish\" "
+                    "WHERE (topic =~ 't3/#' or topic = 't1') and payload.x = 1"),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqtt:connect(Client),
+    {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
+    emqtt:publish(Client, <<"t1">>, <<"{\"x\":1}">>, 0),
+    ct:sleep(100),
+    receive {publish, #{topic := T, payload := Payload}} ->
+        ?assertEqual(<<"t2">>, T),
+        ?assertEqual(<<"{\"x\":1}">>, Payload)
+    after 1000 ->
+        ct:fail(wait_for_t2)
+    end,
+
+    emqtt:publish(Client, <<"t1">>, <<"{\"x\":2}">>, 0),
+    receive {publish, #{topic := <<"t2">>, payload := Payload0}} ->
+        ct:fail({unexpected_t2, Payload0})
+    after 1000 ->
+        ok
+    end,
+
+    emqtt:publish(Client, <<"t3/a">>, <<"{\"x\":1}">>, 0),
+    receive {publish, #{topic := T3, payload := Payload3}} ->
+        ?assertEqual(<<"t2">>, T3),
+        ?assertEqual(<<"{\"x\":1}">>, Payload3)
+    after 1000 ->
+        ct:fail(wait_for_t2)
+    end,
+
+    emqtt:stop(Client),
+    emqx_rule_registry:remove_rule(TopicRule).
+
 t_sqlselect_1(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     TopicRule = create_simple_repub_rule(
@@ -883,4 +924,50 @@ print_mock() ->
     meck:expect(emqx_ctl, print, fun(Arg) -> emqx_ctl:format(Arg) end),
     meck:expect(emqx_ctl, print, fun(Msg, Arg) -> emqx_ctl:format(Msg, Arg) end),
     meck:expect(emqx_ctl, usage, fun(Usages) -> emqx_ctl:format_usage(Usages) end),
-    meck:expect(emqx_ctl, usage, fun(Cmd, Descr) -> emqx_ctl:format_usage(Cmd, Descr) end). 
+    meck:expect(emqx_ctl, usage, fun(Cmd, Descr) -> emqx_ctl:format_usage(Cmd, Descr) end).
+
+t_load_providers(_) ->
+    error('TODO').
+
+t_unload_providers(_) ->
+    error('TODO').
+
+t_delete_rule(_) ->
+    error('TODO').
+
+t_start_resource(_) ->
+    error('TODO').
+
+t_test_resource(_) ->
+    error('TODO').
+
+t_get_resource_status(_) ->
+    error('TODO').
+
+t_get_resource_params(_) ->
+    error('TODO').
+
+t_delete_resource(_) ->
+    error('TODO').
+
+t_refresh_resources(_) ->
+    error('TODO').
+
+t_refresh_rules(_) ->
+    error('TODO').
+
+t_refresh_resource_status(_) ->
+    error('TODO').
+
+t_init_resource(_) ->
+    error('TODO').
+
+t_init_action(_) ->
+    error('TODO').
+
+t_clear_resource(_) ->
+    error('TODO').
+
+t_clear_action(_) ->
+    error('TODO').
+

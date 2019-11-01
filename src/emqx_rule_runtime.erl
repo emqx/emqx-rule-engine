@@ -30,9 +30,13 @@
         , on_message_dropped/3
         , on_message_deliver/3
         , on_message_acked/3
+        , on_session_subscribed/4
+        , on_session_unsubscribed/4
         ]).
 
--export([apply_rule/2]).
+-export([ apply_rule/2
+        , columns/1
+        ]).
 
 -import(emqx_rule_maps,
         [ nested_get/2
@@ -52,6 +56,8 @@ start(Env) ->
     hook_rules('message.dropped', fun ?MODULE:on_message_dropped/3, Env),
     hook_rules('message.delivered', fun ?MODULE:on_message_deliver/3, Env),
     hook_rules('message.acked', fun ?MODULE:on_message_acked/3, Env),
+    hook_rules('session.subscribed', fun ?MODULE:on_session_subscribed/4, Env),
+    hook_rules('session.unsubscribed', fun ?MODULE:on_session_unsubscribed/4, Env),
     ok.
 
 hook_rules(Name, Fun, Env) ->
@@ -64,8 +70,8 @@ hook_rules(Name, Fun, Env) ->
 on_client_connected(ClientInfo, ConnAck, ConnInfo, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(ClientInfo, #{event => 'client.connected', connack => ConnAck, conninfo => ConnInfo, node => node()})).
 
-on_client_disconnected(ClientInfo, ReasonCode, _ConnInfo, #{apply_fun := ApplyRules}) ->
-    ApplyRules(maps:merge(ClientInfo, #{event => 'client.disconnected', reason_code => ReasonCode, node => node(), timestamp => erlang:timestamp()})).
+on_client_disconnected(ClientInfo, ReasonCode, ConnInfo, #{apply_fun := ApplyRules}) ->
+    ApplyRules(maps:merge(ClientInfo, #{event => 'client.disconnected', reason_code => ReasonCode, conninfo => ConnInfo, node => node(), timestamp => erlang:timestamp()})).
 
 on_client_subscribe(ClientInfo, _Properties, TopicFilters, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(ClientInfo, #{event => 'client.subscribe', topic_filters => TopicFilters, node => node(), timestamp => erlang:timestamp()})),
@@ -74,6 +80,12 @@ on_client_subscribe(ClientInfo, _Properties, TopicFilters, #{apply_fun := ApplyR
 on_client_unsubscribe(ClientInfo, _Properties, TopicFilters, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(ClientInfo, #{event => 'client.unsubscribe', topic_filters => TopicFilters, node => node(), timestamp => erlang:timestamp()})),
     {ok, TopicFilters}.
+
+on_session_subscribed(ClientInfo, Topic, SubOpts, #{apply_fun := ApplyRules}) ->
+    ApplyRules(maps:merge(ClientInfo, #{event => 'session.subscribed', topic => Topic, node => node(), timestamp => erlang:timestamp(), sub_opts => SubOpts})).
+
+on_session_unsubscribed(ClientInfo, Topic, SubOpts, #{apply_fun := ApplyRules}) ->
+    ApplyRules(maps:merge(ClientInfo, #{event => 'session.unsubscribed', topic => Topic, node => node(), timestamp => erlang:timestamp(), sub_opts => SubOpts})).
 
 on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
                    #{ignore_sys_message := true}) ->
@@ -111,6 +123,7 @@ rules_for(Hook) ->
 
 -spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
 apply_rules([], _Input) ->
+    erlang:erase(rule_payload),
     ok;
 apply_rules([#rule{enabled = false}|More], Input) ->
     apply_rules(More, Input);
@@ -228,7 +241,15 @@ take_action(#action_instance{id = Id}, Selected, Envs) ->
             error({take_action_failed, {Id, Reason, Stack}})
     end.
 
-eval({var, Var}, Input) -> %% nested
+eval({var, [<<"payload">> | Vars]}, Input) ->
+    nested_get(Vars,
+        case erlang:get(rule_payload) of
+            undefined ->
+                Map = ensure_map(nested_get(<<"payload">>, Input)),
+                erlang:put(rule_payload, Map), Map;
+            Map -> Map
+        end);
+eval({var, Var}, Input) ->
     nested_get(Var, Input);
 eval({const, Val}, _Input) ->
     Val;
@@ -270,6 +291,8 @@ stop(_Env) ->
     emqx:unhook('message.dropped', fun ?MODULE:on_message_dropped/3),
     emqx:unhook('message.delivered', fun ?MODULE:on_message_deliver/3),
     emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3),
+    emqx:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/4),
+    emqx:unhook('session.unsubscribed', fun ?MODULE:on_session_unsubscribed/4),
     ok.
 
 %%------------------------------------------------------------------------------
@@ -287,45 +310,56 @@ columns(Input = #{from := From}, Result) ->
 columns(Input = #{flags := Flags}, Result) ->
     Retain = maps:get(retain, Flags, false),
     columns(maps:remove(flags, Input),
-            maps:merge(Result, #{retain => int(Retain)}));
+            maps:merge(Result, #{flags => Flags,
+                                 retain => int(Retain)}));
 columns(Input = #{headers := Headers}, Result) ->
-    Username = maps:get(username, Headers, null),
-    Peername = peername(maps:get(peername, Headers, undefined)),
+    Username = maps:get(username, Headers, undefined),
+    PeerHost = host_to_str(maps:get(peerhost, Headers, undefined)),
     columns(maps:remove(headers, Input),
             maps:merge(Result, #{username => Username,
-                                 peername => Peername}));
+                                 peerhost => PeerHost}));
 columns(Input = #{timestamp := Timestamp}, Result) ->
     columns(maps:remove(timestamp, Input),
             Result#{timestamp => emqx_rule_utils:now_ms(Timestamp)});
-columns(Input = #{peername := Peername}, Result) ->
-    columns(maps:remove(peername, Input),
-            Result#{peername => peername(Peername)});
+columns(Input = #{peerhost := Peername}, Result) ->
+    columns(maps:remove(peerhost, Input),
+            Result#{peerhost => host_to_str(Peername)});
 columns(Input = #{sockname := Peername}, Result) ->
     columns(maps:remove(sockname, Input),
-            Result#{sockname => peername(Peername)});
-columns(Input = #{connattrs := Conn}, Result) ->
-    ConnAt = maps:get(connected_at, Conn, erlang:timestamp()),
-    columns(maps:remove(connattrs, Input),
-            maps:merge(Result, #{connected_at => emqx_rule_utils:now_ms(ConnAt),
-                                 clean_start => maps:get(clean_start, Conn, null),
-                                 is_bridge => maps:get(is_bridge, Conn, null),
-                                 keepalive => maps:get(keepalive, Conn, null),
-                                 proto_ver => maps:get(proto_ver, Conn, null)
+            Result#{sockname => host_to_str(Peername)});
+columns(Input = #{conninfo := Conn}, Result) ->
+    ConnAt = maps:get(connected_at, Conn, erlang:system_time(second)),
+    columns(maps:remove(conninfo, Input),
+            maps:merge(Result, #{connected_at => ConnAt,
+                                 clean_start => maps:get(clean_start, Conn, undefined),
+                                 keepalive => maps:get(keepalive, Conn, undefined),
+                                 proto_ver => maps:get(proto_ver, Conn, undefined)
                                 }));
 columns(Input = #{topic_filters := [{Topic, Opts} | _] = Filters}, Result) ->
-    Rusult1 = case maps:find(qos, Opts) of
-                  {ok, QoS} -> Result#{qos => QoS};
-                  error -> Result
-              end,
     columns(maps:remove(topic_filters, Input),
-            Rusult1#{topic => Topic, topic_filters => Filters});
+            Result#{topic => Topic, qos => maps:get(qos, Opts, 0),
+                    topic_filters => format_topic_filters(Filters)});
 columns(Input, Result) ->
     maps:merge(Result, Input).
 
-peername(undefined) ->
-    null;
-peername({IPAddr, Port}) ->
-    list_to_binary(inet:ntoa(IPAddr) ++ ":" ++ integer_to_list(Port)).
+host_to_str(undefined) ->
+    undefined;
+host_to_str(IPAddr) ->
+    list_to_binary(inet:ntoa(IPAddr)).
 
 int(true) -> 1;
 int(false) -> 0.
+
+format_topic_filters(Filters) ->
+    [begin
+        #{topic => Topic, qos => maps:get(qos, Opts, 0), sub_opts => Opts}
+     end || {Topic, Opts} <- Filters].
+
+ensure_map(Map) when is_map(Map) ->
+    Map;
+ensure_map(MaybeJson) ->
+    try jsx:decode(MaybeJson, [return_maps]) of
+        JsonMap when is_map(JsonMap) -> JsonMap;
+        _Val -> #{}
+    catch _:_ -> #{}
+    end.

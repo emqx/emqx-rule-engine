@@ -184,13 +184,17 @@ hook(<<"client.subscribe">>) ->
     'client.subscribe';
 hook(<<"client.unsubscribe">>) ->
     'client.unsubscribe';
+hook(<<"session.subscribed">>) ->
+    'session.subscribed';
+hook(<<"session.unsubscribed">>) ->
+    'session.unsubscribed';
 hook(<<"message.publish">>) ->
     'message.publish';
-hook(<<"message.deliver">>) ->
+hook(<<"message.delivered">>) ->
     'message.delivered';
 hook(<<"message.acked">>) ->
     'message.acked';
 hook(<<"message.dropped">>) ->
     'message.dropped';
-hook(_) ->
-    error(unknown_event_type).
+hook(EventType) ->
+    error({unknown_event_type, EventType}).

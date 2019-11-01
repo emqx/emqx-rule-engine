@@ -501,22 +501,16 @@ sql_test_action() ->
 fill_default_values(Event, #{topic_filters := TopicFilters} = Context, Result) ->
     fill_default_values(Event, maps:remove(topic_filters, Context),
                         Result#{topic_filters => parse_topic_filters(TopicFilters)});
-fill_default_values(Event, #{peername := Peername} = Context, Result) ->
-    fill_default_values(Event, maps:remove(peername, Context),
-                        Result#{peername => parse_peername(Peername)});
+fill_default_values(Event, #{peerhost := Peerhost} = Context, Result) ->
+    fill_default_values(Event, maps:remove(peerhost, Context),
+                        Result#{peerhost => parse_peerhost(Peerhost)});
 fill_default_values(Event, Context, Acc) ->
     maps:merge(?EG_ENVS(Event), maps:merge(Context, Acc)).
 
-parse_peername(Peername) ->
-    case string:split(Peername, [$:]) of
-        [IPAddrStr, PortStr] ->
-            IPAddr = case inet:parse_address("127.0.0.1") of
-                        {ok, IPAddr0} -> IPAddr0;
-                        {error, Error} -> error({Error, IPAddrStr})
-                     end,
-            {IPAddr, binary_to_integer(PortStr)};
-        [IPAddrStr] ->
-            error({invalid_ip_port, IPAddrStr})
+parse_peerhost(PeerhostStr) ->
+    case inet:parse_address("127.0.0.1") of
+        {ok, IPAddr0} -> IPAddr0;
+        {error, Error} -> error({Error, PeerhostStr})
     end.
 
 parse_topic_filters(TopicFilters) ->

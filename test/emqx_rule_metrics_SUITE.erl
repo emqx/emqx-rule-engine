@@ -116,3 +116,31 @@ rule_speed(_) ->
          {?assert(Max =< 3),
           ?assert(Current == 0),
           ?assert(Last5Min == 0)}).
+
+t_create(_) ->
+    error('TODO').
+
+t_get(_) ->
+    error('TODO').
+
+t_get_overall(_) ->
+    error('TODO').
+
+t_get_rule_speed(_) ->
+    error('TODO').
+
+t_get_overall_rule_speed(_) ->
+    error('TODO').
+
+t_get_rule_metrics(_) ->
+    error('TODO').
+
+t_get_action_metrics(_) ->
+    error('TODO').
+
+t_inc(_) ->
+    error('TODO').
+
+t_overall_metrics(_) ->
+    error('TODO').
+
