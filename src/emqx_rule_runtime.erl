@@ -144,11 +144,33 @@ apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
     apply_rules(More, Input).
 
 apply_rule(#rule{id = RuleId,
-                 selects = Selects,
+                 is_foreach = true,
+                 fields = Fields,
+                 doeach = DoEach,
+                 incase = InCase,
                  conditions = Conditions,
                  actions = Actions}, Input) ->
     Columns = columns(Input),
-    Selected = ?RAISE(select_and_transform(Selects, Columns),
+    {Selected, Collection} = ?RAISE(select_and_collect(Fields, Columns),
+                                        {select_and_collect_error, _REASON_}),
+    ColumnsAndSelected = maps:merge(Columns, Selected),
+    case ?RAISE(match_conditions(Conditions, ColumnsAndSelected),
+                {match_conditions_error, _REASON_}) of
+        true ->
+            ok = emqx_rule_metrics:inc(RuleId, 'rules.matched'),
+            Collection2 = filter_collection(Input, InCase, DoEach, Collection),
+            {ok, [take_actions(Actions, Coll, Input) || Coll <- Collection2]};
+        false ->
+            {error, nomatch}
+    end;
+
+apply_rule(#rule{id = RuleId,
+                 is_foreach = false,
+                 fields = Fields,
+                 conditions = Conditions,
+                 actions = Actions}, Input) ->
+    Columns = columns(Input),
+    Selected = ?RAISE(select_and_transform(Fields, Columns),
                       {select_and_transform_error, _REASON_}),
     case ?RAISE(match_conditions(Conditions, maps:merge(Columns, Selected)),
                 {match_conditions_error, _REASON_}) of
@@ -179,6 +201,46 @@ select_and_transform([Field|More], Input, Output) ->
     select_and_transform(More,
         nested_put(Key, Val, Input),
         nested_put(Key, Val, Output)).
+
+%% foreach clause
+select_and_collect(Fields, Input) ->
+    select_and_collect(Fields, Input, {#{}, {'$item', []}}).
+
+select_and_collect([{as, Field, Alias}], Input, {Output, _}) ->
+    Key = emqx_rule_utils:unsafe_atom_key(Alias),
+    Val = eval(Field, Input),
+    {nested_put(Key, Val, Output), {Key, Val}};
+select_and_collect([{as, Field, Alias}|More], Input, {Output, LastKV}) ->
+    Key = emqx_rule_utils:unsafe_atom_key(Alias),
+    Val = eval(Field, Input),
+    select_and_collect(More,
+        nested_put(Key, Val, Input),
+        {nested_put(Key, Val, Output), LastKV});
+select_and_collect([Field], Input, {Output, _}) ->
+    Val = eval(Field, Input),
+    Key = alias(Field, Val),
+    {nested_put(Key, Val, Output), {'$item', Val}};
+select_and_collect([Field|More], Input, {Output, LastKV}) ->
+    Val = eval(Field, Input),
+    Key = alias(Field, Val),
+    select_and_collect(More,
+        nested_put(Key, Val, Input),
+        {nested_put(Key, Val, Output), LastKV}).
+
+%% filter each item
+filter_collection(Input, InCase, DoEach, {CollKey, CollVal}) ->
+    lists:filtermap(
+        fun(Item) ->
+            InputAndItem = maps:merge(Input, #{CollKey => Item}),
+            case ?RAISE(match_conditions(InCase, InputAndItem),
+                    {match_conditions_error, _REASON_}) of
+                true when DoEach == [] -> true;
+                true ->
+                    {true, ?RAISE(select_and_transform(DoEach, InputAndItem),
+                                  {doeach_error, _REASON_})};
+                false -> false
+            end
+        end, CollVal).
 
 %% Step2 -> Match selected data with conditions
 match_conditions({'and', L, R}, Data) ->
