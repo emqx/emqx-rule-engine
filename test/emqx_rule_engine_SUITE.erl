@@ -85,7 +85,8 @@ groups() ->
        t_sqlselect_01,
        t_sqlselect_1,
        t_sqlselect_2,
-       t_sqlselect_3
+       t_sqlselect_3,
+       t_sqlparse_foreach
       ]}
     ].
 
@@ -794,6 +795,23 @@ t_sqlselect_3(_Config) ->
     emqx_client:stop(Client),
     emqx_rule_registry:remove_rule(TopicRule).
 
+t_sqlparse_foreach(_Config) ->
+    Sql = "foreach payload.sensors as s "
+          "do s.cmd as msg_type "
+          "incase is_not_null(s.cmd) "
+          "from \"message.publish\" "
+          "where topic =~ 't/#'",
+    {ok, Select} = emqx_rule_sqlparser:parse_select(Sql),
+    ct:log("======Select: ~p", [Select]),
+    Res = emqx_rule_sqltester:test(
+        #{<<"rawsql">> => Sql,
+          <<"ctx">> =>
+            #{<<"payload">> =>
+                <<"{\"sensors\": [{\"cmd\":\"1\"}, {\"cmd\":\"2\"}]}">>,
+              <<"topic">> => <<"t/a">>}}),
+    ct:log("======Result: ~p", [Res]),
+    ok.
+
 %%------------------------------------------------------------------------------
 %% Internal helpers
 %%------------------------------------------------------------------------------
@@ -802,7 +820,8 @@ make_simple_rule(RuleId) when is_binary(RuleId) ->
     #rule{id = RuleId,
           rawsql = <<"select * from \"message.publish\" where topic='simple/topic'">>,
           for = ['message.publish'],
-          selects = [<<"*">>],
+          fields = [<<"*">>],
+          is_foreach = false,
           conditions = {},
           actions = [{'inspect', #{}}],
           description = <<"simple rule">>}.

@@ -89,6 +89,11 @@
         , map/1
         ]).
 
+%% Null Funcs
+-export([ is_null/1
+        , is_not_null/1
+        ]).
+
 %% String Funcs
 -export([ lower/1
         , ltrim/1
@@ -395,6 +400,15 @@ float(Data) ->
 map(Data) ->
     emqx_rule_utils:map(Data).
 
+%%------------------------------------------------------------------------------
+%% NULL Funcs
+%%------------------------------------------------------------------------------
+
+is_null(undefined) -> true;
+is_null(_Data) -> false.
+
+is_not_null(Data) ->
+    not is_null(Data).
 
 %%------------------------------------------------------------------------------
 %% String Funcs
