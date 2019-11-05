@@ -54,6 +54,7 @@ test(#{<<"rawsql">> := Sql, <<"ctx">> := Context}) ->
         Error -> error(Error)
     end.
 
+flatten([]) -> [];
 flatten([D1]) -> D1;
 flatten([D1 | L]) when is_list(D1) ->
     D1 ++ flatten(L).
