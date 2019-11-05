@@ -86,7 +86,8 @@ groups() ->
        t_sqlselect_1,
        t_sqlselect_2,
        t_sqlselect_3,
-       t_sqlparse_foreach
+       t_sqlparse_foreach,
+       t_sqlparse_case_when
       ]}
     ].
 
@@ -801,15 +802,42 @@ t_sqlparse_foreach(_Config) ->
           "incase is_not_null(s.cmd) "
           "from \"message.publish\" "
           "where topic =~ 't/#'",
-    {ok, Select} = emqx_rule_sqlparser:parse_select(Sql),
-    ct:log("======Select: ~p", [Select]),
     Res = emqx_rule_sqltester:test(
         #{<<"rawsql">> => Sql,
           <<"ctx">> =>
             #{<<"payload">> =>
                 <<"{\"sensors\": [{\"cmd\":\"1\"}, {\"cmd\":\"2\"}]}">>,
               <<"topic">> => <<"t/a">>}}),
-    ct:log("======Result: ~p", [Res]),
+    ?assertMatch({ok,[#{msg_type := <<"1">>},#{msg_type := <<"2">>}]}, Res).
+
+t_sqlparse_case_when(_Config) ->
+    Sql = "select "
+          "  case when payload.x < 0 then 0 "
+          "       when payload.x > 7 then 7 "
+          "       else payload.x "
+          "  end as y "
+          "from \"message.publish\" "
+          "where topic =~ 't/#'",
+    ?assertMatch({ok, #{y := 1}}, emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql,
+                      <<"ctx">> => #{<<"payload">> => <<"{\"x\": 1}">>,
+                                     <<"topic">> => <<"t/a">>}})),
+    ?assertMatch({ok, #{y := 0}}, emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql,
+                      <<"ctx">> => #{<<"payload">> => <<"{\"x\": 0}">>,
+                                     <<"topic">> => <<"t/a">>}})),
+    ?assertMatch({ok, #{y := 0}}, emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql,
+                      <<"ctx">> => #{<<"payload">> => <<"{\"x\": -1}">>,
+                                     <<"topic">> => <<"t/a">>}})),
+    ?assertMatch({ok, #{y := 7}}, emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql,
+                      <<"ctx">> => #{<<"payload">> => <<"{\"x\": 7}">>,
+                                     <<"topic">> => <<"t/a">>}})),
+    ?assertMatch({ok, #{y := 7}}, emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql,
+                      <<"ctx">> => #{<<"payload">> => <<"{\"x\": 8}">>,
+                                     <<"topic">> => <<"t/a">>}})),
     ok.
 
 %%------------------------------------------------------------------------------

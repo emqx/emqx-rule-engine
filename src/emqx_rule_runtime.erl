@@ -32,7 +32,9 @@
         , on_message_acked/3
         ]).
 
--export([apply_rule/2]).
+-export([ apply_rule/2
+        , clear_rule_payload/0
+        ]).
 
 -import(emqx_rule_maps,
         [ nested_get/2
@@ -136,7 +138,7 @@ rules_for(Hook) ->
 
 -spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
 apply_rules([], _Input) ->
-    erlang:erase(rule_payload),
+    clear_rule_payload(),
     ok;
 apply_rules([#rule{enabled = false}|More], Input) ->
     apply_rules(More, Input);
@@ -193,6 +195,9 @@ apply_rule(#rule{id = RuleId,
         false ->
             {error, nomatch}
     end.
+
+clear_rule_payload() ->
+    erlang:erase(rule_payload).
 
 %% Step1 -> Select and transform data
 select_and_transform(Fields, Input) ->
@@ -330,6 +335,10 @@ eval({const, Val}, _Input) ->
     Val;
 eval({Op, L, R}, Input) when ?is_arith(Op) ->
     apply_func(Op, [eval(L, Input), eval(R, Input)], Input);
+eval({'case', undefined, CaseClauses, ElseClauses}, Input) ->
+    eval_case_clauses(CaseClauses, ElseClauses, Input);
+eval({'case', CaseOn, CaseClauses, ElseClauses}, Input) ->
+    eval_switch_clauses(CaseOn, CaseClauses, ElseClauses, Input);
 eval({'fun', Name, Args}, Input) ->
     apply_func(Name, [eval(Arg, Input) || Arg <- Args], Input).
 
@@ -344,6 +353,33 @@ alias({var, Var}) ->
 alias({const, Val}) ->
     Val;
 alias(_) -> undefined.
+
+eval_case_clauses([], ElseClauses, Input) ->
+    case ElseClauses of
+        undefined -> undefined;
+        _ -> eval(ElseClauses, Input)
+    end;
+eval_case_clauses([{Cond, Clause} | CaseClauses], ElseClauses, Input) ->
+    case match_conditions(Cond, Input) of
+        true ->
+            eval(Clause, Input);
+        _ ->
+            eval_case_clauses(CaseClauses, ElseClauses, Input)
+    end.
+
+eval_switch_clauses(_CaseOn, [], ElseClauses, Input) ->
+    case ElseClauses of
+        undefined -> undefined;
+        _ -> eval(ElseClauses, Input)
+    end;
+eval_switch_clauses(CaseOn, [{Cond, Clause} | CaseClauses], ElseClauses, Input) ->
+    ConResult = eval(Cond, Input),
+    case eval(CaseOn, Input) of
+        ConResult ->
+            eval(Clause, Input);
+        _ ->
+            eval_switch_clauses(CaseOn, CaseClauses, ElseClauses, Input)
+    end.
 
 apply_func(Name, Args, Input) when is_atom(Name) ->
     case erlang:apply(emqx_rule_funcs, Name, Args) of
