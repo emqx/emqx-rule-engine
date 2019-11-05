@@ -178,7 +178,7 @@ create_rule(_Bindings, Params) ->
             Params).
 
 test_rule_sql(Params) ->
-    try rule_sql_test(jsx:decode(jsx:encode(Params), [return_maps])) of
+    try emqx_rule_sqltester:test(jsx:decode(jsx:encode(Params), [return_maps])) of
         {ok, Result} -> return({ok, Result});
         {error, nomatch} -> return({error, 404, <<"SQL Not Match">>})
     catch
@@ -186,7 +186,7 @@ test_rule_sql(Params) ->
             return({error, 400, ?ERR_NO_HOOK(Hook)});
         throw:Reason ->
             return({error, 400, ?ERR_BADARGS(Reason)});
-        _:{parse_error,{unknown_column, Column}} ->
+        _:{parse_error,{unknown_column, Column}, _} ->
             return({error, 400, ?ERR_UNKNOWN_COLUMN(Column)});
         _Error:Reason:StackT ->
             ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
@@ -461,71 +461,6 @@ parse_action(Actions) ->
             {binary_to_existing_atom(maps:get(<<"name">>, Actions), utf8),
              Params}
     end.
-
--spec(rule_sql_test(#{}) -> {ok, Result::map()} | no_return()).
-rule_sql_test(#{<<"rawsql">> := Sql, <<"ctx">> := Context}) ->
-    case emqx_rule_sqlparser:parse_select(Sql) of
-        {ok, Select} ->
-            Event = emqx_rule_sqlparser:select_from(Select),
-            ActInstId = {test_rule_sql, self()},
-            Rule = #rule{rawsql = Sql,
-                         for = Event,
-                         selects = emqx_rule_sqlparser:select_fields(Select),
-                         conditions = emqx_rule_sqlparser:select_where(Select),
-                         actions = [#action_instance{
-                                        id = ActInstId,
-                                        name = test_rule_sql}]},
-            FullContext = fill_default_values(hd(Event), emqx_rule_maps:atom_key_map(Context), #{}),
-            try
-                ok = emqx_rule_registry:add_action_instance_params(
-                        #action_instance_params{id = ActInstId,
-                                                params = #{},
-                                                apply = sql_test_action()}),
-                emqx_rule_runtime:apply_rule(Rule, FullContext)
-            of
-                {ok, [Data]} -> {ok, Data};
-                {error, nomatch} -> {error, nomatch}
-            after
-                ok = emqx_rule_registry:remove_action_instance_params(ActInstId)
-            end;
-        Error -> error(Error)
-    end.
-
-sql_test_action() ->
-    fun(Data, _Envs) ->
-        ?LOG(info, "Testing Rule SQL OK"), Data
-    end.
-
-fill_default_values(Event, #{topic_filters := TopicFilters} = Context, Result) ->
-    fill_default_values(Event, maps:remove(topic_filters, Context),
-                        Result#{topic_filters => parse_topic_filters(TopicFilters)});
-fill_default_values(Event, #{peername := Peername} = Context, Result) ->
-    fill_default_values(Event, maps:remove(peername, Context),
-                        Result#{peername => parse_peername(Peername)});
-fill_default_values(Event, Context, Acc) ->
-    maps:merge(?EG_ENVS(Event), maps:merge(Context, Acc)).
-
-parse_peername(Peername) ->
-    case string:split(Peername, [$:]) of
-        [IPAddrStr, PortStr] ->
-            IPAddr = case inet:parse_address("127.0.0.1") of
-                        {ok, IPAddr0} -> IPAddr0;
-                        {error, Error} -> error({Error, IPAddrStr})
-                     end,
-            {IPAddr, binary_to_integer(PortStr)};
-        [IPAddrStr] ->
-            error({invalid_ip_port, IPAddrStr})
-    end.
-
-parse_topic_filters(TopicFilters) ->
-    [ case TpcFtl of
-        #{<<"topic">> := Topic, <<"qos">> := QoS} ->
-            {Topic, #{qos => QoS}};
-        #{<<"topic">> := Topic} ->
-            {Topic, #{}};
-        Topic ->
-            {Topic, #{}}
-      end || TpcFtl <- jsx:decode(TopicFilters, [return_maps])].
 
 parse_resource_params(Params) ->
     parse_resource_params(Params, #{config => #{}, description => <<"">>}).

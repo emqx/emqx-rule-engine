@@ -14,21 +14,12 @@
 
 -module(emqx_rule_sqlparser_SUITE).
 
+-compile(export_all).
+-compile(nowarn_export_all).
+
 %%-include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
-
-%% test cases for emqx_rule_sqlparser
--export([ t_sqlparse/1
-        , t_sqlparse_error/1
-        , t_sqlparse_op/1
-        , t_sqlparse_where_in/1
-        , t_sqlparse_where_not/1
-        ]).
-
--export([ all/0
-        , suite/0
-        ]).
 
 %%------------------------------------------------------------------------------
 %% Test cases for sqlparser

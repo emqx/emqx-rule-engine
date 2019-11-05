@@ -32,12 +32,12 @@
         , on_message_acked/3
         ]).
 
--export([apply_rule/2]).
+-export([ apply_rule/2
+        , clear_rule_payload/0
+        ]).
 
 -import(emqx_rule_maps,
-        [ get_value/2
-        , get_value/3
-        , nested_get/2
+        [ nested_get/2
         , nested_put/3
         ]).
 
@@ -138,7 +138,7 @@ rules_for(Hook) ->
 
 -spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
 apply_rules([], _Input) ->
-    erlang:erase(rule_payload),
+    clear_rule_payload(),
     ok;
 apply_rules([#rule{enabled = false}|More], Input) ->
     apply_rules(More, Input);
@@ -159,11 +159,33 @@ apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
     apply_rules(More, Input).
 
 apply_rule(#rule{id = RuleId,
-                 selects = Selects,
+                 is_foreach = true,
+                 fields = Fields,
+                 doeach = DoEach,
+                 incase = InCase,
                  conditions = Conditions,
                  actions = Actions}, Input) ->
     Columns = columns(Input),
-    Selected = ?RAISE(select_and_transform(Selects, Columns),
+    {Selected, Collection} = ?RAISE(select_and_collect(Fields, Columns),
+                                        {select_and_collect_error, _REASON_}),
+    ColumnsAndSelected = maps:merge(Columns, Selected),
+    case ?RAISE(match_conditions(Conditions, ColumnsAndSelected),
+                {match_conditions_error, _REASON_}) of
+        true ->
+            ok = emqx_rule_metrics:inc(RuleId, 'rules.matched'),
+            Collection2 = filter_collection(Input, InCase, DoEach, Collection),
+            {ok, [take_actions(Actions, Coll, Input) || Coll <- Collection2]};
+        false ->
+            {error, nomatch}
+    end;
+
+apply_rule(#rule{id = RuleId,
+                 is_foreach = false,
+                 fields = Fields,
+                 conditions = Conditions,
+                 actions = Actions}, Input) ->
+    Columns = columns(Input),
+    Selected = ?RAISE(select_and_transform(Fields, Columns),
                       {select_and_transform_error, _REASON_}),
     case ?RAISE(match_conditions(Conditions, maps:merge(Columns, Selected)),
                 {match_conditions_error, _REASON_}) of
@@ -173,6 +195,9 @@ apply_rule(#rule{id = RuleId,
         false ->
             {error, nomatch}
     end.
+
+clear_rule_payload() ->
+    erlang:erase(rule_payload).
 
 %% Step1 -> Select and transform data
 select_and_transform(Fields, Input) ->
@@ -194,6 +219,46 @@ select_and_transform([Field|More], Input, Output) ->
     select_and_transform(More,
         nested_put(Key, Val, Input),
         nested_put(Key, Val, Output)).
+
+%% foreach clause
+select_and_collect(Fields, Input) ->
+    select_and_collect(Fields, Input, {#{}, {'$item', []}}).
+
+select_and_collect([{as, Field, Alias}], Input, {Output, _}) ->
+    Key = emqx_rule_utils:unsafe_atom_key(Alias),
+    Val = eval(Field, Input),
+    {nested_put(Key, Val, Output), {Key, Val}};
+select_and_collect([{as, Field, Alias}|More], Input, {Output, LastKV}) ->
+    Key = emqx_rule_utils:unsafe_atom_key(Alias),
+    Val = eval(Field, Input),
+    select_and_collect(More,
+        nested_put(Key, Val, Input),
+        {nested_put(Key, Val, Output), LastKV});
+select_and_collect([Field], Input, {Output, _}) ->
+    Val = eval(Field, Input),
+    Key = alias(Field, Val),
+    {nested_put(Key, Val, Output), {'$item', Val}};
+select_and_collect([Field|More], Input, {Output, LastKV}) ->
+    Val = eval(Field, Input),
+    Key = alias(Field, Val),
+    select_and_collect(More,
+        nested_put(Key, Val, Input),
+        {nested_put(Key, Val, Output), LastKV}).
+
+%% filter each item
+filter_collection(Input, InCase, DoEach, {CollKey, CollVal}) ->
+    lists:filtermap(
+        fun(Item) ->
+            InputAndItem = maps:merge(Input, #{CollKey => Item}),
+            case ?RAISE(match_conditions(InCase, InputAndItem),
+                    {match_conditions_error, _REASON_}) of
+                true when DoEach == [] -> true;
+                true ->
+                    {true, ?RAISE(select_and_transform(DoEach, InputAndItem),
+                                  {doeach_error, _REASON_})};
+                false -> false
+            end
+        end, CollVal).
 
 %% Step2 -> Match selected data with conditions
 match_conditions({'and', L, R}, Data) ->
@@ -270,6 +335,10 @@ eval({const, Val}, _Input) ->
     Val;
 eval({Op, L, R}, Input) when ?is_arith(Op) ->
     apply_func(Op, [eval(L, Input), eval(R, Input)], Input);
+eval({'case', undefined, CaseClauses, ElseClauses}, Input) ->
+    eval_case_clauses(CaseClauses, ElseClauses, Input);
+eval({'case', CaseOn, CaseClauses, ElseClauses}, Input) ->
+    eval_switch_clauses(CaseOn, CaseClauses, ElseClauses, Input);
 eval({'fun', Name, Args}, Input) ->
     apply_func(Name, [eval(Arg, Input) || Arg <- Args], Input).
 
@@ -284,6 +353,33 @@ alias({var, Var}) ->
 alias({const, Val}) ->
     Val;
 alias(_) -> undefined.
+
+eval_case_clauses([], ElseClauses, Input) ->
+    case ElseClauses of
+        undefined -> undefined;
+        _ -> eval(ElseClauses, Input)
+    end;
+eval_case_clauses([{Cond, Clause} | CaseClauses], ElseClauses, Input) ->
+    case match_conditions(Cond, Input) of
+        true ->
+            eval(Clause, Input);
+        _ ->
+            eval_case_clauses(CaseClauses, ElseClauses, Input)
+    end.
+
+eval_switch_clauses(_CaseOn, [], ElseClauses, Input) ->
+    case ElseClauses of
+        undefined -> undefined;
+        _ -> eval(ElseClauses, Input)
+    end;
+eval_switch_clauses(CaseOn, [{Cond, Clause} | CaseClauses], ElseClauses, Input) ->
+    ConResult = eval(Cond, Input),
+    case eval(CaseOn, Input) of
+        ConResult ->
+            eval(Clause, Input);
+        _ ->
+            eval_switch_clauses(CaseOn, CaseClauses, ElseClauses, Input)
+    end.
 
 apply_func(Name, Args, Input) when is_atom(Name) ->
     case erlang:apply(emqx_rule_funcs, Name, Args) of
