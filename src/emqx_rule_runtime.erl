@@ -208,7 +208,7 @@ select_and_transform([Field|More], Input, Output) ->
 
 %% foreach clause
 select_and_collect(Fields, Input) ->
-    select_and_collect(Fields, Input, {#{}, {'$item', []}}).
+    select_and_collect(Fields, Input, {#{}, {'item', []}}).
 
 select_and_collect([{as, Field, Alias}], Input, {Output, _}) ->
     Key = emqx_rule_utils:unsafe_atom_key(Alias),
@@ -223,7 +223,7 @@ select_and_collect([{as, Field, Alias}|More], Input, {Output, LastKV}) ->
 select_and_collect([Field], Input, {Output, _}) ->
     Val = eval(Field, Input),
     Key = alias(Field, Val),
-    {nested_put(Key, Val, Output), {'$item', Val}};
+    {nested_put(Key, Val, Output), {'item', Val}};
 select_and_collect([Field|More], Input, {Output, LastKV}) ->
     Val = eval(Field, Input),
     Key = alias(Field, Val),
@@ -335,7 +335,7 @@ alias(Field, Val) ->
     end.
 
 alias({var, Var}) ->
-    emqx_rule_utils:atom_key(Var);
+    emqx_rule_utils:unsafe_atom_key(Var);
 alias({const, Val}) ->
     Val;
 alias(_) -> undefined.

@@ -69,7 +69,7 @@ parse_select(Sql) ->
                 {ok, preprocess(#select{is_foreach = true,
                                         fields = get_value(fields, Clauses),
                                         doeach = get_value(do, Clauses, []),
-                                        incase = get_value(incase, Clauses, []),
+                                        incase = get_value(incase, Clauses, {}),
                                         from = get_value(from, Clauses),
                                         where = get_value(where, Clauses)})};
             Error -> Error
@@ -207,7 +207,7 @@ as_columns([_ | Selected], Acc) ->
     as_columns(Selected, Acc).
 
 fixed_columns(Columns) when is_list(Columns) ->
-    lists:flatten([?COLUMNS(Col) || Col <- Columns]).
+    lists:flatten([?COLUMNS(Col) || Col <- Columns]) ++ [<<"item">>].
 
 transform_alias(Alias) ->
     parse_nested(unquote(Alias)).
