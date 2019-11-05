@@ -104,22 +104,23 @@ select_where(#select{where = Where}) ->
     Where.
 
 preprocess(#select{fields = Fields, is_foreach = IsForeach, doeach = DoEach, incase = InCase, from = Hooks, where = Conditions}) ->
-    Selected = [preprocess_field(Field) || Field <- Fields],
     Froms = [hook(unquote(H)) || H <- Hooks],
-    FullColumns = as_columns(Selected) ++ fixed_columns(Froms),
+    FixedColumns = fixed_columns(Froms),
+    Selected = [preprocess_field(Field, FixedColumns) || Field <- Fields],
+    FullColumns = as_columns(Selected) ++ FixedColumns,
     #select{is_foreach = IsForeach,
             fields = Selected,
-            doeach = [preprocess_field(Each) || Each <- DoEach],
+            doeach = [preprocess_field(Each, FullColumns) || Each <- DoEach],
             incase = preprocess_condition(InCase, FullColumns),
             from   = Froms,
             where  = preprocess_condition(Conditions, FullColumns)}.
 
-preprocess_field(<<"*">>) ->
+preprocess_field(<<"*">>, _Columns) ->
     '*';
-preprocess_field({'as', Field, Alias}) when is_binary(Alias) ->
-    {'as', transform_select_field(Field), transform_alias(Alias)};
-preprocess_field(Field) ->
-    transform_select_field(Field).
+preprocess_field({'as', Field, Alias}, Columns) when is_binary(Alias) ->
+    {'as', transform_select_field(Field, Columns), transform_alias(Alias)};
+preprocess_field(Field, Columns) ->
+    transform_select_field(Field, Columns).
 
 preprocess_condition({Op, L, R}, Columns) when ?is_logical(Op) orelse ?is_comp(Op) ->
     {Op, preprocess_condition(L, Columns), preprocess_condition(R, Columns)};
@@ -151,15 +152,31 @@ do_transform_field({'fun', Name, Args}, Columns) when is_binary(Name) ->
     Fun = list_to_existing_atom(binary_to_list(Name)),
     {'fun', Fun, [transform_field(Arg, Columns) || Arg <- Args]}.
 
-transform_select_field({const, Val}) ->
+transform_select_field({const, Val}, _Columns) ->
     {const, Val};
-transform_select_field({Op, Arg1, Arg2}) when ?is_arith(Op) ->
-    {Op, transform_select_field(Arg1), transform_select_field(Arg2)};
-transform_select_field(Var) when is_binary(Var) ->
-    {var, escape(parse_nested(Var))};
-transform_select_field({'fun', Name, Args}) when is_binary(Name) ->
+transform_select_field({Op, Arg1, Arg2}, Columns) when ?is_arith(Op) ->
+    {Op, transform_select_field(Arg1, Columns), transform_select_field(Arg2, Columns)};
+transform_select_field(Var, Columns) when is_binary(Var) ->
+    {var, validate_var(escape(parse_nested(Var)), Columns)};
+transform_select_field({'case', CaseOn, CaseClauses, ElseClause}, Columns) ->
+    {'case', transform_caseon(CaseOn, Columns),
+             transform_case_clause(CaseClauses, Columns),
+             transform_caseelse(ElseClause, Columns)};
+transform_select_field({'fun', Name, Args}, Columns) when is_binary(Name) ->
     Fun = list_to_existing_atom(binary_to_list(Name)),
-    {'fun', Fun, [transform_select_field(Arg) || Arg <- Args]}.
+    {'fun', Fun, [transform_select_field(Arg, Columns) || Arg <- Args]}.
+
+transform_caseon(<<>>, _Columns) -> undefined;
+transform_caseon(CaseOn, Columns) ->
+    transform_select_field(CaseOn, Columns).
+
+transform_case_clause(CaseClauses, Columns) ->
+    [{preprocess_condition(Cond, Columns), transform_select_field(Return, Columns)}
+     || {Cond, Return} <- CaseClauses].
+
+transform_caseelse({}, _Columns) -> undefined;
+transform_caseelse(ElseClause, Columns) ->
+    transform_select_field(ElseClause, Columns).
 
 validate_var(Var, SupportedColumns) ->
     case {Var, lists:member(Var, SupportedColumns)} of
