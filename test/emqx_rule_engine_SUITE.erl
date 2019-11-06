@@ -92,6 +92,7 @@ groups() ->
        t_sqlparse_foreach_2,
        t_sqlparse_foreach_3,
        t_sqlparse_foreach_4,
+       t_sqlparse_foreach_5,
        t_sqlparse_case_when_1,
        t_sqlparse_case_when_2,
        t_sqlparse_case_when_3
@@ -925,6 +926,32 @@ t_sqlparse_foreach_4(_Config) ->
                     #{<<"rawsql">> => Sql,
                       <<"ctx">> =>
                         #{<<"payload">> => <<"{\"sensors\": [1, 2]}">>,
+                          <<"topic">> => <<"t/a">>}})).
+
+t_sqlparse_foreach_5(_Config) ->
+    %% Verify foreach on a empty-list or non-list variable
+    Sql = "foreach payload.sensors as s "
+          "do s.cmd as msg_type, s.name as name "
+          "from \"message.publish\" "
+          "where topic =~ 't/#'",
+    ?assertMatch({ok,[]}, emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql,
+                      <<"ctx">> =>
+                        #{<<"payload">> => <<"{\"sensors\": 1}">>,
+                          <<"topic">> => <<"t/a">>}})),
+    ?assertMatch({ok,[]},
+                 emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql,
+                      <<"ctx">> =>
+                        #{<<"payload">> => <<"{\"sensors\": []}">>,
+                          <<"topic">> => <<"t/a">>}})),
+    Sql2 = "foreach payload.sensors "
+          "from \"message.publish\" "
+          "where topic =~ 't/#'",
+    ?assertMatch({ok,[]}, emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql2,
+                      <<"ctx">> =>
+                        #{<<"payload">> => <<"{\"sensors\": 1}">>,
                           <<"topic">> => <<"t/a">>}})).
 
 t_sqlparse_case_when_1(_Config) ->

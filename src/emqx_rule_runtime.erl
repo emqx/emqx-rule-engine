@@ -44,6 +44,10 @@
         , nested_put/3
         ]).
 
+-type(input() :: map()).
+-type(alias() :: atom()).
+-type(collection() :: {alias(), [term()]}).
+
 %%------------------------------------------------------------------------------
 %% Start
 %%------------------------------------------------------------------------------
@@ -122,7 +126,7 @@ apply_rules_fun(Hook) ->
 rules_for(Hook) ->
     emqx_rule_registry:get_rules_for(Hook).
 
--spec(apply_rules(list(emqx_rule_engine:rule()), map()) -> ok).
+-spec(apply_rules(list(emqx_rule_engine:rule()), input()) -> ok).
 apply_rules([], _Input) ->
     clear_rule_payload(),
     ok;
@@ -185,7 +189,7 @@ apply_rule(#rule{id = RuleId,
 clear_rule_payload() ->
     erlang:erase(rule_payload).
 
-%% Step1 -> Select and transform data
+%% SELECT Clause
 select_and_transform(Fields, Input) ->
     select_and_transform(Fields, Input, #{}).
 
@@ -206,14 +210,15 @@ select_and_transform([Field|More], Input, Output) ->
         nested_put(Key, Val, Input),
         nested_put(Key, Val, Output)).
 
-%% foreach clause
+%% FOREACH Clause
+-spec select_and_collect(list(), input()) -> {input(), collection()}.
 select_and_collect(Fields, Input) ->
     select_and_collect(Fields, Input, {#{}, {'item', []}}).
 
 select_and_collect([{as, Field, Alias}], Input, {Output, _}) ->
     Key = emqx_rule_utils:unsafe_atom_key(Alias),
     Val = eval(Field, Input),
-    {nested_put(Key, Val, Output), {Key, Val}};
+    {nested_put(Key, Val, Output), {Key, ensure_list(Val)}};
 select_and_collect([{as, Field, Alias}|More], Input, {Output, LastKV}) ->
     Key = emqx_rule_utils:unsafe_atom_key(Alias),
     Val = eval(Field, Input),
@@ -223,7 +228,7 @@ select_and_collect([{as, Field, Alias}|More], Input, {Output, LastKV}) ->
 select_and_collect([Field], Input, {Output, _}) ->
     Val = eval(Field, Input),
     Key = alias(Field, Val),
-    {nested_put(Key, Val, Output), {'item', Val}};
+    {nested_put(Key, Val, Output), {'item', ensure_list(Val)}};
 select_and_collect([Field|More], Input, {Output, LastKV}) ->
     Val = eval(Field, Input),
     Key = alias(Field, Val),
@@ -231,7 +236,7 @@ select_and_collect([Field|More], Input, {Output, LastKV}) ->
         nested_put(Key, Val, Input),
         {nested_put(Key, Val, Output), LastKV}).
 
-%% filter each item
+%% Filter each item got from FOREACH
 filter_collection(Input, InCase, DoEach, {CollKey, CollVal}) ->
     lists:filtermap(
         fun(Item) ->
@@ -246,7 +251,7 @@ filter_collection(Input, InCase, DoEach, {CollKey, CollVal}) ->
             end
         end, CollVal).
 
-%% Step2 -> Match selected data with conditions
+%% Conditional Clauses such as WHERE, WHEN.
 match_conditions({'and', L, R}, Data) ->
     match_conditions(L, Data) andalso match_conditions(R, Data);
 match_conditions({'or', L, R}, Data) ->
@@ -460,3 +465,6 @@ ensure_map(MaybeJson) ->
         _Val -> #{}
     catch _:_ -> #{}
     end.
+
+ensure_list(List) when is_list(List) -> List;
+ensure_list(_NotList) -> [].
