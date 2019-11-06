@@ -240,7 +240,7 @@ select_and_collect([Field|More], Input, {Output, LastKV}) ->
 filter_collection(Input, InCase, DoEach, {CollKey, CollVal}) ->
     lists:filtermap(
         fun(Item) ->
-            InputAndItem = maps:merge(Input, #{CollKey => Item}),
+            InputAndItem = maps:merge(columns(Input), #{CollKey => Item}),
             case ?RAISE(match_conditions(InCase, InputAndItem),
                     {match_conditions_error, _REASON_}) of
                 true when DoEach == [] -> true;
