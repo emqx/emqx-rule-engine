@@ -91,6 +91,7 @@ groups() ->
        t_sqlparse_foreach_3,
        t_sqlparse_foreach_4,
        t_sqlparse_foreach_5,
+       t_sqlparse_foreach_6,
        t_sqlparse_case_when_1,
        t_sqlparse_case_when_2,
        t_sqlparse_case_when_3
@@ -947,6 +948,22 @@ t_sqlparse_foreach_5(_Config) ->
                       <<"ctx">> =>
                         #{<<"payload">> => <<"{\"sensors\": 1}">>,
                           <<"topic">> => <<"t/a">>}})).
+
+t_sqlparse_foreach_6(_Config) ->
+    %% Verify foreach on a empty-list or non-list variable
+    Sql = "foreach json_decode(payload) "
+          "do item.id as zid, * "
+          "from \"message.publish\" "
+          "where topic =~ 't/#'",
+    {ok, Res} = emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql,
+                      <<"ctx">> =>
+                        #{<<"payload">> => <<"[{\"id\": 5},{\"id\": 15}]">>,
+                          <<"topic">> => <<"t/a">>}}),
+    [#{event := 'message.publish', timestamp := Ts1},
+     #{event := 'message.publish', timestamp := Ts2}] = Res,
+    ?assertEqual(true, is_integer(Ts1)),
+    ?assertEqual(true, is_integer(Ts2)).
 
 t_sqlparse_case_when_1(_Config) ->
     %% case-when-else clause
