@@ -960,10 +960,12 @@ t_sqlparse_foreach_6(_Config) ->
                       <<"ctx">> =>
                         #{<<"payload">> => <<"[{\"id\": 5},{\"id\": 15}]">>,
                           <<"topic">> => <<"t/a">>}}),
-    [#{event := 'message.publish', timestamp := Ts1},
-     #{event := 'message.publish', timestamp := Ts2}] = Res,
+    [#{event := 'message.publish', timestamp := Ts1, zid := Zid1},
+     #{event := 'message.publish', timestamp := Ts2, zid := Zid2}] = Res,
     ?assertEqual(true, is_integer(Ts1)),
-    ?assertEqual(true, is_integer(Ts2)).
+    ?assertEqual(true, is_integer(Ts2)),
+    ?assert(Zid1 == 5 orelse Zid1 == 15),
+    ?assert(Zid2 == 5 orelse Zid2 == 15).
 
 t_sqlparse_case_when_1(_Config) ->
     %% case-when-else clause
