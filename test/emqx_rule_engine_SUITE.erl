@@ -85,6 +85,7 @@ groups() ->
       [t_events,
        t_sqlselect_0,
        t_sqlselect_01,
+       t_sqlselect_02,
        t_sqlselect_1,
        t_sqlselect_2,
        t_sqlselect_3,
@@ -94,6 +95,7 @@ groups() ->
        t_sqlparse_foreach_4,
        t_sqlparse_foreach_5,
        t_sqlparse_foreach_6,
+       t_sqlparse_foreach_7,
        t_sqlparse_case_when_1,
        t_sqlparse_case_when_2,
        t_sqlparse_case_when_3
@@ -647,6 +649,55 @@ client_disconnected(Client) ->
     ok.
 
 t_sqlselect_0(_Config) ->
+    %% Verify SELECT with and without 'AS'
+    Sql = "select * "
+          "from \"message.publish\" "
+          "where topic =~ 't/#' and payload.cmd.info = 'tt'",
+    ?assertMatch({ok,#{payload := <<"{\"cmd\": {\"info\":\"tt\"}}">>,
+                       event := 'message.publish'}},
+                 emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql,
+                      <<"ctx">> =>
+                        #{<<"payload">> =>
+                            <<"{\"cmd\": {\"info\":\"tt\"}}">>,
+                          <<"topic">> => <<"t/a">>}})),
+    Sql2 = "select payload.cmd as cmd, event "
+           "from \"message.publish\" "
+           "where topic =~ 't/#' and cmd.info = 'tt'",
+    ?assertMatch({ok,#{cmd := #{<<"info">> := <<"tt">>}, event := 'message.publish'}},
+                 emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql2,
+                      <<"ctx">> =>
+                        #{<<"payload">> =>
+                            <<"{\"cmd\": {\"info\":\"tt\"}}">>,
+                          <<"topic">> => <<"t/a">>}})),
+    Sql3 = "select payload.cmd as cmd, cmd.info as info, event "
+           "from \"message.publish\" "
+           "where topic =~ 't/#' and cmd.info = 'tt' and info = 'tt'",
+    ?assertMatch({ok,#{cmd := #{<<"info">> := <<"tt">>},
+                       info := <<"tt">>,
+                       event := 'message.publish'}},
+                 emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql3,
+                      <<"ctx">> =>
+                        #{<<"payload">> =>
+                            <<"{\"cmd\": {\"info\":\"tt\"}}">>,
+                          <<"topic">> => <<"t/a">>}})),
+    %% cascaded as
+    Sql4 = "select payload.cmd as cmd, cmd.info as meta.info, event "
+           "from \"message.publish\" "
+           "where topic =~ 't/#' and cmd.info = 'tt' and meta.info = 'tt'",
+    ?assertMatch({ok,#{cmd := #{<<"info">> := <<"tt">>},
+                       meta := #{info := <<"tt">>},
+                       event := 'message.publish'}},
+                 emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql4,
+                      <<"ctx">> =>
+                        #{<<"payload">> =>
+                            <<"{\"cmd\": {\"info\":\"tt\"}}">>,
+                          <<"topic">> => <<"t/a">>}})).
+
+t_sqlselect_01(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     TopicRule = create_simple_repub_rule(
                     <<"t2">>,
@@ -683,7 +734,7 @@ t_sqlselect_0(_Config) ->
     emqtt:stop(Client),
     emqx_rule_registry:remove_rule(TopicRule).
 
-t_sqlselect_01(_Config) ->
+t_sqlselect_02(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     TopicRule = create_simple_repub_rule(
                     <<"t2">>,
@@ -972,6 +1023,32 @@ t_sqlparse_foreach_6(_Config) ->
     ?assertEqual(true, is_integer(Ts2)),
     ?assert(Zid1 == 5 orelse Zid1 == 15),
     ?assert(Zid2 == 5 orelse Zid2 == 15).
+
+t_sqlparse_foreach_7(_Config) ->
+    %% Verify foreach-do-incase and cascaded AS
+    Sql = "foreach json_decode(payload) as p, p.sensors as s, s.collection as c, c.info as info "
+          "do info.cmd as msg_type, info.name as name "
+          "incase is_not_null(info.cmd) "
+          "from \"message.publish\" "
+          "where topic =~ 't/#' and s.page = '2' ",
+    Payload  = <<"{\"sensors\": {\"page\": 2, \"collection\": {\"info\":[{\"name\":\"cmd1\", \"cmd\":\"1\"}, {\"cmd\":\"2\"}]} } }">>,
+    ?assertMatch({ok,[#{name := <<"cmd1">>, msg_type := <<"1">>}, #{msg_type := <<"2">>}]},
+                 emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql,
+                      <<"ctx">> =>
+                        #{<<"payload">> => Payload,
+                          <<"topic">> => <<"t/a">>}})),
+    Sql2 = "foreach json_decode(payload) as p, p.sensors as s, s.collection as c, c.info as info "
+          "do info.cmd as msg_type, info.name as name "
+          "incase is_not_null(info.cmd) "
+          "from \"message.publish\" "
+          "where topic =~ 't/#' and s.page = '3' ",
+    ?assertMatch({error, nomatch},
+                 emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql2,
+                      <<"ctx">> =>
+                        #{<<"payload">> => Payload,
+                          <<"topic">> => <<"t/a">>}})).
 
 t_sqlparse_case_when_1(_Config) ->
     %% case-when-else clause
