@@ -284,6 +284,10 @@ compare(Op, L, R) when is_number(L), is_binary(R) ->
     do_compare(Op, L, number(R));
 compare(Op, L, R) when is_binary(L), is_number(R) ->
     do_compare(Op, number(L), R);
+compare(Op, L, R) when is_atom(L), is_binary(R) ->
+    do_compare(Op, atom_to_binary(L, utf8), R);
+compare(Op, L, R) when is_binary(L), is_atom(R) ->
+    do_compare(Op, L, atom_to_binary(R, utf8));
 compare(Op, L, R) ->
     do_compare(Op, L, R).
 
