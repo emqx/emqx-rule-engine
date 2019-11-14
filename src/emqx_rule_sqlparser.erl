@@ -105,22 +105,32 @@ select_where(#select{where = Where}) ->
 
 preprocess(#select{fields = Fields, is_foreach = IsForeach, doeach = DoEach, incase = InCase, from = Hooks, where = Conditions}) ->
     Froms = [hook(unquote(H)) || H <- Hooks],
-    FixedColumns = fixed_columns(Froms),
-    Selected = [preprocess_field(Field, FixedColumns) || Field <- Fields],
-    FullColumns = as_columns(Selected) ++ FixedColumns,
+    {SelectedFileds, KnownColmuns1} = preprocess_columns(Fields, fixed_columns(Froms)),
+    {SelectedEach, KnownColmuns2} = preprocess_columns(DoEach, KnownColmuns1),
     #select{is_foreach = IsForeach,
-            fields = Selected,
-            doeach = [preprocess_field(Each, FullColumns) || Each <- DoEach],
-            incase = preprocess_condition(InCase, FullColumns),
+            fields = SelectedFileds,
+            doeach = SelectedEach,
+            incase = preprocess_condition(InCase, KnownColmuns2),
             from   = Froms,
-            where  = preprocess_condition(Conditions, FullColumns)}.
+            where  = preprocess_condition(Conditions, KnownColmuns2)}.
+
+preprocess_columns(Fields, KnownColumns) ->
+    lists:foldl(
+        fun(Field, {Slct0, KnwnClmn0}) ->
+            case preprocess_field(Field, KnwnClmn0) of
+                {Slct1, no_as_column} ->
+                    {Slct0 ++ [Slct1], KnwnClmn0};
+                {Slct1, AsColumn} ->
+                    {Slct0 ++ [Slct1], KnwnClmn0 ++ [AsColumn]}
+            end
+        end, {[], KnownColumns}, Fields).
 
 preprocess_field(<<"*">>, _Columns) ->
-    '*';
+    {'*', no_as_column};
 preprocess_field({'as', Field, Alias}, Columns) when is_binary(Alias) ->
-    {'as', transform_select_field(Field, Columns), transform_alias(Alias)};
+    {{'as', transform_select_field(Field, Columns), transform_alias(Alias)}, head(transform_alias(Alias))};
 preprocess_field(Field, Columns) ->
-    transform_select_field(Field, Columns).
+    {transform_select_field(Field, Columns), no_as_column}.
 
 preprocess_condition({Op, L, R}, Columns) when ?is_logical(Op) orelse ?is_comp(Op) ->
     {Op, preprocess_condition(L, Columns), preprocess_condition(R, Columns)};
@@ -224,6 +234,9 @@ escape(Var) -> Var.
 
 unquote(Topic) ->
     string:trim(Topic, both, "\"'").
+
+head([H | _]) -> H;
+head(Var) -> Var.
 
 hook(<<"client.connected">>) ->
     'client.connected';
