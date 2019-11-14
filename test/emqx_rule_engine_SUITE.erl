@@ -81,6 +81,7 @@ groups() ->
       ]},
      {runtime, [],
       [t_events,
+       t_match_atom_and_binary,
        t_sqlselect_0,
        t_sqlselect_01,
        t_sqlselect_02,
@@ -641,6 +642,30 @@ client_disconnected(Client) ->
     ok = emqx_client:stop(Client),
     verify_events_counter('client.disconnected'),
     ok.
+
+t_match_atom_and_binary(_Config) ->
+    ok = emqx_rule_engine:load_providers(),
+    TopicRule = create_simple_repub_rule(
+                    <<"t2">>,
+                    "SELECT * "
+                    "FROM \"client.connected\" "
+                    "WHERE username = 'emqx2' and auth_result = 'success' ",
+                    <<"user:${username}">>),
+    {ok, Client} = emqx_client:start_link([{username, <<"emqx1">>}]),
+    {ok, _} = emqx_client:connect(Client),
+    {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
+    ct:sleep(100),
+    {ok, Client2} = emqx_client:start_link([{username, <<"emqx2">>}]),
+    {ok, _} = emqx_client:connect(Client2),
+    receive {publish, #{topic := T, payload := Payload}} ->
+        ?assertEqual(<<"t2">>, T),
+        ?assertEqual(<<"user:emqx2">>, Payload)
+    after 1000 ->
+        ct:fail(wait_for_t2)
+    end,
+
+    emqx_client:stop(Client),
+    emqx_rule_registry:remove_rule(TopicRule).
 
 t_sqlselect_0(_Config) ->
     %% Verify SELECT with and without 'AS'
