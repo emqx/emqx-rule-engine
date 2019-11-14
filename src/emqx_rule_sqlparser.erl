@@ -208,14 +208,6 @@ is_number_str(Str) when is_binary(Str) ->
 is_number_str(_NonStr) ->
     false.
 
-as_columns(Selected) ->
-    as_columns(Selected, []).
-as_columns([], Acc) -> Acc;
-as_columns([{as, _, Val} | Selected], Acc) ->
-    as_columns(Selected, [Val | Acc]);
-as_columns([_ | Selected], Acc) ->
-    as_columns(Selected, Acc).
-
 fixed_columns(Columns) when is_list(Columns) ->
     lists:flatten([?COLUMNS(Col) || Col <- Columns]) ++ [<<"item">>].
 
