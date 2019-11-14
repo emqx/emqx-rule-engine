@@ -84,15 +84,6 @@
 
 -define(REGISTRY, ?MODULE).
 
-%% Tables
--define(RULE_TAB, emqx_rule).
--define(ACTION_TAB, emqx_rule_action).
--define(ACTION_INST_PARAMS_TAB, emqx_action_instance_params).
--define(RES_TAB, emqx_resource).
--define(RES_PARAMS_TAB, emqx_resource_params).
--define(RULE_HOOKS, emqx_rule_hooks).
--define(RES_TYPE_TAB, emqx_resource_type).
-
 %% Statistics
 -define(STATS,
         [ {?RULE_TAB, 'rules.count', 'rules.max'}
@@ -416,9 +407,6 @@ delete_resource_type(Type) ->
 %%------------------------------------------------------------------------------
 
 init([]) ->
-    Opts = [public, named_table, set, {read_concurrency, true}],
-    ets:new(?ACTION_INST_PARAMS_TAB, [{keypos, #action_instance_params.id}|Opts]),
-    ets:new(?RES_PARAMS_TAB, [{keypos, #resource_params.id}|Opts]),
     %% Enable stats timer
     ok = emqx_stats:update_interval(rule_registery_stats, fun update_stats/0),
     {ok, #{}}.
