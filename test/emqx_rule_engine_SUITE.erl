@@ -657,12 +657,12 @@ t_match_atom_and_binary(_Config) ->
                     "FROM \"client.connected\" "
                     "WHERE username = 'emqx2' and auth_result = 'success' ",
                     <<"user:${username}">>),
-    {ok, Client} = emqx_client:start_link([{username, <<"emqx1">>}]),
-    {ok, _} = emqx_client:connect(Client),
-    {ok, _, _} = emqx_client:subscribe(Client, <<"t2">>, 0),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx1">>}]),
+    {ok, _} = emqtt:connect(Client),
+    {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
     ct:sleep(100),
-    {ok, Client2} = emqx_client:start_link([{username, <<"emqx2">>}]),
-    {ok, _} = emqx_client:connect(Client2),
+    {ok, Client2} = emqtt:start_link([{username, <<"emqx2">>}]),
+    {ok, _} = emqtt:connect(Client2),
     receive {publish, #{topic := T, payload := Payload}} ->
         ?assertEqual(<<"t2">>, T),
         ?assertEqual(<<"user:emqx2">>, Payload)
@@ -670,7 +670,7 @@ t_match_atom_and_binary(_Config) ->
         ct:fail(wait_for_t2)
     end,
 
-    emqx_client:stop(Client),
+    emqtt:stop(Client),
     emqx_rule_registry:remove_rule(TopicRule).
 
 t_sqlselect_0(_Config) ->
