@@ -142,6 +142,12 @@ apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
         _:{match_conditions_error, Error} ->
             ?LOG(debug, "WHERE clause exception for ~s failed: ~p",
                  [RuleID, Error]);
+        _:{select_and_collect_error, Error} ->
+            ?LOG(debug, "FOREACH clause exception for ~s failed: ~p",
+                 [RuleID, Error]);
+        _:{match_incase_error, Error} ->
+            ?LOG(debug, "INCASE clause exception for ~s failed: ~p",
+                 [RuleID, Error]);
         _:Error:StkTrace ->
             ?LOG(error, "Apply rule ~s failed: ~p. Stacktrace:~n~p",
                  [RuleID, Error, StkTrace])
@@ -242,7 +248,7 @@ filter_collection(Input, InCase, DoEach, {CollKey, CollVal}) ->
         fun(Item) ->
             InputAndItem = maps:merge(columns(Input), #{CollKey => Item}),
             case ?RAISE(match_conditions(InCase, InputAndItem),
-                    {match_conditions_error, _REASON_}) of
+                    {match_incase_error, _REASON_}) of
                 true when DoEach == [] -> true;
                 true ->
                     {true, ?RAISE(select_and_transform(DoEach, InputAndItem),
