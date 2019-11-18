@@ -63,7 +63,10 @@
         { id :: rule_id()
         , for :: hook()
         , rawsql :: binary()
-        , selects :: list()
+        , is_foreach :: boolean()
+        , fields :: list()
+        , doeach :: term()
+        , incase :: list()
         , conditions :: tuple()
         , actions :: list(#action_instance{})
         , enabled :: boolean()
@@ -137,3 +140,12 @@
         begin
             try (_EXP_) catch _:_ -> throw(_ERROR_) end
         end).
+
+%% Tables
+-define(RULE_TAB, emqx_rule).
+-define(ACTION_TAB, emqx_rule_action).
+-define(ACTION_INST_PARAMS_TAB, emqx_action_instance_params).
+-define(RES_TAB, emqx_resource).
+-define(RES_PARAMS_TAB, emqx_resource_params).
+-define(RULE_HOOKS, emqx_rule_hooks).
+-define(RES_TYPE_TAB, emqx_resource_type).
