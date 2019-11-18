@@ -22,6 +22,9 @@
 -export([parse_select/1]).
 
 -export([ select_fields/1
+        , select_is_foreach/1
+        , select_doeach/1
+        , select_incase/1
         , select_from/1
         , select_where/1
         ]).
@@ -30,7 +33,11 @@
         , unquote/1
         ]).
 
--record(select, {fields, from, where}).
+-import(proplists, [ get_value/2
+                   , get_value/3
+                   ]).
+
+-record(select, {fields, from, where, is_foreach, doeach, incase}).
 
 -opaque(select() :: #select{}).
 
@@ -46,26 +53,47 @@
 
 -export_type([select/0]).
 
--define(SELECT(Fields, From, Where),
-        {select, [{fields, Fields}, {from, From}, {where, Where}|_]}).
-
 %% Parse one select statement.
 -spec(parse_select(string() | binary())
       -> {ok, select()} | {parse_error, term()} | {lex_error, term()}).
 parse_select(Sql) ->
     try case sqlparse:parsetree(Sql) of
-            {ok, [{?SELECT(Fields, From, Where), _Extra}]} ->
-                {ok, preprocess(#select{fields = Fields, from = From, where = Where})};
+            {ok, [{{select, Clauses}, _Extra}]} ->
+                {ok, preprocess(#select{is_foreach = false,
+                                        fields = get_value(fields, Clauses),
+                                        doeach = [],
+                                        incase = {},
+                                        from = get_value(from, Clauses),
+                                        where = get_value(where, Clauses)})};
+            {ok, [{{foreach, Clauses}, _Extra}]} ->
+                {ok, preprocess(#select{is_foreach = true,
+                                        fields = get_value(fields, Clauses),
+                                        doeach = get_value(do, Clauses, []),
+                                        incase = get_value(incase, Clauses, {}),
+                                        from = get_value(from, Clauses),
+                                        where = get_value(where, Clauses)})};
             Error -> Error
         end
     catch
-        _Error:Reason ->
-            {parse_error, Reason}
+        _Error:Reason:StackTrace ->
+            {parse_error, Reason, StackTrace}
     end.
 
 -spec(select_fields(select()) -> list(field())).
 select_fields(#select{fields = Fields}) ->
     Fields.
+
+-spec(select_is_foreach(select()) -> boolean()).
+select_is_foreach(#select{is_foreach = IsForeach}) ->
+    IsForeach.
+
+-spec(select_doeach(select()) -> list(field())).
+select_doeach(#select{doeach = DoEach}) ->
+    DoEach.
+
+-spec(select_incase(select()) -> list(field())).
+select_incase(#select{incase = InCase}) ->
+    InCase.
 
 -spec(select_from(select()) -> list(binary())).
 select_from(#select{from = From}) ->
@@ -75,19 +103,34 @@ select_from(#select{from = From}) ->
 select_where(#select{where = Where}) ->
     Where.
 
-preprocess(#select{fields = Fields, from = Hooks, where = Conditions}) ->
-    Selected = [preprocess_field(Field) || Field <- Fields],
+preprocess(#select{fields = Fields, is_foreach = IsForeach, doeach = DoEach, incase = InCase, from = Hooks, where = Conditions}) ->
     Froms = [hook(unquote(H)) || H <- Hooks],
-    #select{fields = Selected,
+    {SelectedFileds, KnownColmuns1} = preprocess_columns(Fields, fixed_columns(Froms)),
+    {SelectedEach, KnownColmuns2} = preprocess_columns(DoEach, KnownColmuns1),
+    #select{is_foreach = IsForeach,
+            fields = SelectedFileds,
+            doeach = SelectedEach,
+            incase = preprocess_condition(InCase, KnownColmuns2),
             from   = Froms,
-            where  = preprocess_condition(Conditions, as_columns(Selected) ++ fixed_columns(Froms))}.
+            where  = preprocess_condition(Conditions, KnownColmuns2)}.
 
-preprocess_field(<<"*">>) ->
-    '*';
-preprocess_field({'as', Field, Alias}) when is_binary(Alias) ->
-    {'as', transform_select_field(Field), transform_alias(Alias)};
-preprocess_field(Field) ->
-    transform_select_field(Field).
+preprocess_columns(Fields, KnownColumns) ->
+    lists:foldl(
+        fun(Field, {Slct0, KnwnClmn0}) ->
+            case preprocess_field(Field, KnwnClmn0) of
+                {Slct1, no_as_column} ->
+                    {Slct0 ++ [Slct1], KnwnClmn0};
+                {Slct1, AsColumn} ->
+                    {Slct0 ++ [Slct1], KnwnClmn0 ++ [AsColumn]}
+            end
+        end, {[], KnownColumns}, Fields).
+
+preprocess_field(<<"*">>, _Columns) ->
+    {'*', no_as_column};
+preprocess_field({'as', Field, Alias}, Columns) when is_binary(Alias) ->
+    {{'as', transform_select_field(Field, Columns), transform_alias(Alias)}, head(transform_alias(Alias))};
+preprocess_field(Field, Columns) ->
+    {transform_select_field(Field, Columns), no_as_column}.
 
 preprocess_condition({Op, L, R}, Columns) when ?is_logical(Op) orelse ?is_comp(Op) ->
     {Op, preprocess_condition(L, Columns), preprocess_condition(R, Columns)};
@@ -119,15 +162,31 @@ do_transform_field({'fun', Name, Args}, Columns) when is_binary(Name) ->
     Fun = list_to_existing_atom(binary_to_list(Name)),
     {'fun', Fun, [transform_field(Arg, Columns) || Arg <- Args]}.
 
-transform_select_field({const, Val}) ->
+transform_select_field({const, Val}, _Columns) ->
     {const, Val};
-transform_select_field({Op, Arg1, Arg2}) when ?is_arith(Op) ->
-    {Op, transform_select_field(Arg1), transform_select_field(Arg2)};
-transform_select_field(Var) when is_binary(Var) ->
-    {var, escape(parse_nested(Var))};
-transform_select_field({'fun', Name, Args}) when is_binary(Name) ->
+transform_select_field({Op, Arg1, Arg2}, Columns) when ?is_arith(Op) ->
+    {Op, transform_select_field(Arg1, Columns), transform_select_field(Arg2, Columns)};
+transform_select_field(Var, Columns) when is_binary(Var) ->
+    {var, validate_var(escape(parse_nested(Var)), Columns)};
+transform_select_field({'case', CaseOn, CaseClauses, ElseClause}, Columns) ->
+    {'case', transform_caseon(CaseOn, Columns),
+             transform_case_clause(CaseClauses, Columns),
+             transform_caseelse(ElseClause, Columns)};
+transform_select_field({'fun', Name, Args}, Columns) when is_binary(Name) ->
     Fun = list_to_existing_atom(binary_to_list(Name)),
-    {'fun', Fun, [transform_select_field(Arg) || Arg <- Args]}.
+    {'fun', Fun, [transform_select_field(Arg, Columns) || Arg <- Args]}.
+
+transform_caseon(<<>>, _Columns) -> undefined;
+transform_caseon(CaseOn, Columns) ->
+    transform_select_field(CaseOn, Columns).
+
+transform_case_clause(CaseClauses, Columns) ->
+    [{preprocess_condition(Cond, Columns), transform_select_field(Return, Columns)}
+     || {Cond, Return} <- CaseClauses].
+
+transform_caseelse({}, _Columns) -> undefined;
+transform_caseelse(ElseClause, Columns) ->
+    transform_select_field(ElseClause, Columns).
 
 validate_var(Var, SupportedColumns) ->
     case {Var, lists:member(Var, SupportedColumns)} of
@@ -149,16 +208,8 @@ is_number_str(Str) when is_binary(Str) ->
 is_number_str(_NonStr) ->
     false.
 
-as_columns(Selected) ->
-    as_columns(Selected, []).
-as_columns([], Acc) -> Acc;
-as_columns([{as, _, Val} | Selected], Acc) ->
-    as_columns(Selected, [Val | Acc]);
-as_columns([_ | Selected], Acc) ->
-    as_columns(Selected, Acc).
-
 fixed_columns(Columns) when is_list(Columns) ->
-    lists:flatten([?COLUMNS(Col) || Col <- Columns]).
+    lists:flatten([?COLUMNS(Col) || Col <- Columns]) ++ [<<"item">>].
 
 transform_alias(Alias) ->
     parse_nested(unquote(Alias)).
@@ -175,6 +226,9 @@ escape(Var) -> Var.
 
 unquote(Topic) ->
     string:trim(Topic, both, "\"'").
+
+head([H | _]) -> H;
+head(Var) -> Var.
 
 hook(<<"client.connected">>) ->
     'client.connected';

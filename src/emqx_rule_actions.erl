@@ -151,7 +151,7 @@ on_action_create_republish(Id, #{<<"target_topic">> := TargetTopic, <<"target_qo
                     id = emqx_guid:gen(),
                     qos = if TargetQoS =:= -1 -> 0; true -> TargetQoS end,
                     from = Id,
-                    flags = #{},
+                    flags = #{dup => false, retain => false},
                     headers = #{republish_by => Id},
                     topic = emqx_rule_utils:proc_tmpl(TopicTks, Selected),
                     payload = emqx_rule_utils:proc_tmpl(PayloadTks, Selected),
