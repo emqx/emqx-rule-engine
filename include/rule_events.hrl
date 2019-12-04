@@ -146,7 +146,7 @@
                 , <<"node">>
                 ];
         'session.subscribed' ->
-                [ <<"client_id">>
+                [ <<"clientid">>
                 , <<"username">>
                 , <<"event">>
                 , <<"topic">>
@@ -159,7 +159,7 @@
                 , <<"node">>
                 ];
         'session.unsubscribed' ->
-                [ <<"client_id">>
+                [ <<"clientid">>
                 , <<"username">>
                 , <<"event">>
                 , <<"topic">>
@@ -217,13 +217,13 @@
                ]}
             ];
         'session.subscribed' ->
-            [ {<<"client_id">>, <<"c_emqx">>}
+            [ {<<"clientid">>, <<"c_emqx">>}
             , {<<"username">>, <<"u_emqx">>}
             , {<<"topic">>, <<"t/a">>}
             , {<<"qos">>, 1}
             ];
         'session.unsubscribed' ->
-            [ {<<"client_id">>, <<"c_emqx">>}
+            [ {<<"clientid">>, <<"c_emqx">>}
             , {<<"username">>, <<"u_emqx">>}
             , {<<"topic">>, <<"t/a">>}
             , {<<"qos">>, 1}
@@ -449,7 +449,7 @@
               timestamp => erlang:timestamp(),
               zone => external};
         'session.subscribed' ->
-            #{client_id => <<"c_emqx">>,
+            #{clientid => <<"c_emqx">>,
               event => 'session.subscribed',
               topic => <<"t1">>,
               sub_opts => #{nl => 0,qos => 1,rap => 0,rc => 1,rh => 0},
@@ -457,7 +457,7 @@
               node => node(),
               timestamp => erlang:timestamp()};
         'session.unsubscribed' ->
-            #{client_id => <<"c_emqx">>,
+            #{clientid => <<"c_emqx">>,
               event => 'session.unsubscribed',
               topic => <<"t1">>,
               sub_opts => #{nl => 0,qos => 1,rap => 0,rc => 1,rh => 0},
