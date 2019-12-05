@@ -325,134 +325,134 @@ apply_func(Name, Args, Msg) ->
 message() ->
     emqx_message:make(<<"clientid">>, 1, <<"topic/#">>, <<"payload">>).
 
-t_contains_topic(_) ->
-    error('TODO').
+% t_contains_topic(_) ->
+%     error('TODO').
 
-t_contains_topic_match(_) ->
-    error('TODO').
+% t_contains_topic_match(_) ->
+%     error('TODO').
 
-t_div(_) ->
-    error('TODO').
+% t_div(_) ->
+%     error('TODO').
 
-t_mod(_) ->
-    error('TODO').
+% t_mod(_) ->
+%     error('TODO').
 
-t_abs(_) ->
-    error('TODO').
+% t_abs(_) ->
+%     error('TODO').
 
-t_acos(_) ->
-    error('TODO').
+% t_acos(_) ->
+%     error('TODO').
 
-t_acosh(_) ->
-    error('TODO').
+% t_acosh(_) ->
+%     error('TODO').
 
-t_asin(_) ->
-    error('TODO').
+% t_asin(_) ->
+%     error('TODO').
 
-t_asinh(_) ->
-    error('TODO').
+% t_asinh(_) ->
+%     error('TODO').
 
-t_atan(_) ->
-    error('TODO').
+% t_atan(_) ->
+%     error('TODO').
 
-t_atanh(_) ->
-    error('TODO').
+% t_atanh(_) ->
+%     error('TODO').
 
-t_ceil(_) ->
-    error('TODO').
+% t_ceil(_) ->
+%     error('TODO').
 
-t_cos(_) ->
-    error('TODO').
+% t_cos(_) ->
+%     error('TODO').
 
-t_cosh(_) ->
-    error('TODO').
+% t_cosh(_) ->
+%     error('TODO').
 
-t_exp(_) ->
-    error('TODO').
+% t_exp(_) ->
+%     error('TODO').
 
-t_floor(_) ->
-    error('TODO').
+% t_floor(_) ->
+%     error('TODO').
 
-t_fmod(_) ->
-    error('TODO').
+% t_fmod(_) ->
+%     error('TODO').
 
-t_log(_) ->
-    error('TODO').
+% t_log(_) ->
+%     error('TODO').
 
-t_log10(_) ->
-    error('TODO').
+% t_log10(_) ->
+%     error('TODO').
 
-t_log2(_) ->
-    error('TODO').
+% t_log2(_) ->
+%     error('TODO').
 
-t_power(_) ->
-    error('TODO').
+% t_power(_) ->
+%     error('TODO').
 
-t_round(_) ->
-    error('TODO').
+% t_round(_) ->
+%     error('TODO').
 
-t_sin(_) ->
-    error('TODO').
+% t_sin(_) ->
+%     error('TODO').
 
-t_sinh(_) ->
-    error('TODO').
+% t_sinh(_) ->
+%     error('TODO').
 
-t_sqrt(_) ->
-    error('TODO').
+% t_sqrt(_) ->
+%     error('TODO').
 
-t_tan(_) ->
-    error('TODO').
+% t_tan(_) ->
+%     error('TODO').
 
-t_tanh(_) ->
-    error('TODO').
+% t_tanh(_) ->
+%     error('TODO').
 
-t_bitnot(_) ->
-    error('TODO').
+% t_bitnot(_) ->
+%     error('TODO').
 
-t_bitand(_) ->
-    error('TODO').
+% t_bitand(_) ->
+%     error('TODO').
 
-t_bitor(_) ->
-    error('TODO').
+% t_bitor(_) ->
+%     error('TODO').
 
-t_bitxor(_) ->
-    error('TODO').
+% t_bitxor(_) ->
+%     error('TODO').
 
-t_bitsl(_) ->
-    error('TODO').
+% t_bitsl(_) ->
+%     error('TODO').
 
-t_bitsr(_) ->
-    error('TODO').
+% t_bitsr(_) ->
+%     error('TODO').
 
-t_lower(_) ->
-    error('TODO').
+% t_lower(_) ->
+%     error('TODO').
 
-t_ltrim(_) ->
-    error('TODO').
+% t_ltrim(_) ->
+%     error('TODO').
 
-t_rtrim(_) ->
-    error('TODO').
+% t_rtrim(_) ->
+%     error('TODO').
 
-t_upper(_) ->
-    error('TODO').
+% t_upper(_) ->
+%     error('TODO').
 
-t_split(_) ->
-    error('TODO').
+% t_split(_) ->
+%     error('TODO').
 
-t_md5(_) ->
-    error('TODO').
+% t_md5(_) ->
+%     error('TODO').
 
-t_sha(_) ->
-    error('TODO').
+% t_sha(_) ->
+%     error('TODO').
 
-t_sha256(_) ->
-    error('TODO').
+% t_sha256(_) ->
+%     error('TODO').
 
-t_json_encode(_) ->
-    error('TODO').
+% t_json_encode(_) ->
+%     error('TODO').
 
-t_json_decode(_) ->
-    error('TODO').
+% t_json_decode(_) ->
+%     error('TODO').
 
 
 %%------------------------------------------------------------------------------

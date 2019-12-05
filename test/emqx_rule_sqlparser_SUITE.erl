@@ -71,23 +71,23 @@ t_sqlparse_op(_) ->
     ?assertMatch([{'+', _, _}, {'div', _, _}], Ops).
     
     
-t_unquote(_) ->
-    error('TODO').
+% t_unquote(_) ->
+%     error('TODO').
 
-t_hook(_) ->
-    error('TODO').
+% t_hook(_) ->
+%     error('TODO').
 
-t_select_where(_) ->
-    error('TODO').
+% t_select_where(_) ->
+%     error('TODO').
 
-t_select_fields(_) ->
-    error('TODO').
+% t_select_fields(_) ->
+%     error('TODO').
 
-t_select_from(_) ->
-    error('TODO').
+% t_select_from(_) ->
+%     error('TODO').
 
-t_parse_select(_) ->
-    error('TODO').
+% t_parse_select(_) ->
+%     error('TODO').
 
 
 all() ->

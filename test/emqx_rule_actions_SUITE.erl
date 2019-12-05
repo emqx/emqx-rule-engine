@@ -23,14 +23,14 @@
 
 all() -> emqx_ct:all(?MODULE).
 
-t_on_resource_create(_) ->
-    error('TODO').
+% t_on_resource_create(_) ->
+%     error('TODO').
 
-t_on_action_create_inspect(_) ->
-    error('TODO').
+% t_on_action_create_inspect(_) ->
+%     error('TODO').
 
-t_on_action_create_republish(_) ->
-    error('TODO').
+% t_on_action_create_republish(_) ->
+%     error('TODO').
 
-t_on_action_do_nothing(_) ->
-    error('TODO').
+% t_on_action_do_nothing(_) ->
+%     error('TODO').
