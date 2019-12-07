@@ -29,24 +29,24 @@ init_per_testcase(_TestCase, Config) ->
 end_per_testcase(_TestCase, Config) ->
     Config.
 
-t_commands(_) ->
-    error('TODO').
+% t_commands(_) ->
+%     error('TODO').
 
-t_rules(_) ->
-    error('TODO').
+% t_rules(_) ->
+%     error('TODO').
 
-t_actions(_) ->
-    error('TODO').
+% t_actions(_) ->
+%     error('TODO').
 
-t_resources(_) ->
-    error('TODO').
+% t_resources(_) ->
+%     error('TODO').
 
-t_resource_types(_) ->
-    error('TODO').
+% t_resource_types(_) ->
+%     error('TODO').
 
-t_unload(_) ->
-    error('TODO').
+% t_unload(_) ->
+%     error('TODO').
 
-t_load(_) ->
-    error('TODO').
+% t_load(_) ->
+%     error('TODO').
 
