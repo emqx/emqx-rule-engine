@@ -23,9 +23,9 @@
 
 all() -> emqx_ct:all(?MODULE).
 
-t_validate_params(_) ->
-    error('TODO').
+% t_validate_params(_) ->
+%     error('TODO').
 
-t_validate_spec(_) ->
-    error('TODO').
+% t_validate_spec(_) ->
+%     error('TODO').
 

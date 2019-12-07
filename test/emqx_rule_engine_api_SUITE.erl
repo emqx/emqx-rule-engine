@@ -29,50 +29,50 @@ init_per_testcase(_TestCase, Config) ->
 end_per_testcase(_TestCase, Config) ->
     Config.
 
-t_create_rule(_) ->
-    error('TODO').
+% t_create_rule(_) ->
+%     error('TODO').
 
-t_list_rules(_) ->
-    error('TODO').
+% t_list_rules(_) ->
+%     error('TODO').
 
-t_show_rule(_) ->
-    error('TODO').
+% t_show_rule(_) ->
+%     error('TODO').
 
-t_delete_rule(_) ->
-    error('TODO').
+% t_delete_rule(_) ->
+%     error('TODO').
 
-t_list_actions(_) ->
-    error('TODO').
+% t_list_actions(_) ->
+%     error('TODO').
 
-t_show_action(_) ->
-    error('TODO').
+% t_show_action(_) ->
+%     error('TODO').
 
-t_create_resource(_) ->
-    error('TODO').
+% t_create_resource(_) ->
+%     error('TODO').
 
-t_list_resources(_) ->
-    error('TODO').
+% t_list_resources(_) ->
+%     error('TODO').
 
-t_list_resources_by_type(_) ->
-    error('TODO').
+% t_list_resources_by_type(_) ->
+%     error('TODO').
 
-t_show_resource(_) ->
-    error('TODO').
+% t_show_resource(_) ->
+%     error('TODO').
 
-t_get_resource_status(_) ->
-    error('TODO').
+% t_get_resource_status(_) ->
+%     error('TODO').
 
-t_start_resource(_) ->
-    error('TODO').
+% t_start_resource(_) ->
+%     error('TODO').
 
-t_delete_resource(_) ->
-    error('TODO').
+% t_delete_resource(_) ->
+%     error('TODO').
 
-t_list_resource_types(_) ->
-    error('TODO').
+% t_list_resource_types(_) ->
+%     error('TODO').
 
-t_show_resource_type(_) ->
-    error('TODO').
+% t_show_resource_type(_) ->
+%     error('TODO').
 
-t_list_events(_) ->
-    error('TODO').
+% t_list_events(_) ->
+%     error('TODO').

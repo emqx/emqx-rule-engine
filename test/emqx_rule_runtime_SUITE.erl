@@ -30,36 +30,36 @@ end_per_testcase(_TestCase, Config) ->
     Config.
 
 
-t_on_message_acked(_) ->
-    error('TODO').
+% t_on_message_acked(_) ->
+%     error('TODO').
 
-t_on_message_deliver(_) ->
-    error('TODO').
+% t_on_message_deliver(_) ->
+%     error('TODO').
 
-t_on_message_dropped(_) ->
-    error('TODO').
+% t_on_message_dropped(_) ->
+%     error('TODO').
 
-t_on_message_publish(_) ->
-    error('TODO').
+% t_on_message_publish(_) ->
+%     error('TODO').
 
-t_on_client_unsubscribe(_) ->
-    error('TODO').
+% t_on_client_unsubscribe(_) ->
+%     error('TODO').
 
-t_on_client_subscribe(_) ->
-    error('TODO').
+% t_on_client_subscribe(_) ->
+%     error('TODO').
 
-t_on_client_disconnected(_) ->
-    error('TODO').
+% t_on_client_disconnected(_) ->
+%     error('TODO').
 
-t_on_client_connected(_) ->
-    error('TODO').
+% t_on_client_connected(_) ->
+%     error('TODO').
 
-t_stop(_) ->
-    error('TODO').
+% t_stop(_) ->
+%     error('TODO').
 
-t_start(_) ->
-    error('TODO').
+% t_start(_) ->
+%     error('TODO').
 
-t_apply_rule(_) ->
-    error('TODO').
+% t_apply_rule(_) ->
+%     error('TODO').
 

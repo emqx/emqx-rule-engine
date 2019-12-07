@@ -23,6 +23,6 @@
 
 all() -> emqx_ct:all(?MODULE).
 
-t_gen(_) ->
-    error('TODO').
+% t_gen(_) ->
+%     error('TODO').
 
