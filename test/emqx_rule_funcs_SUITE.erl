@@ -323,7 +323,8 @@ apply_func(Name, Args, Msg) ->
     apply_func(Name, Args, emqx_rule_runtime:columns(emqx_message:to_map(Msg))).
 
 message() ->
-    emqx_message:make(<<"clientid">>, 1, <<"topic/#">>, <<"payload">>).
+    emqx_message:set_flags(#{dup => false},
+        emqx_message:make(<<"clientid">>, 1, <<"topic/#">>, <<"payload">>)).
 
 % t_contains_topic(_) ->
 %     error('TODO').

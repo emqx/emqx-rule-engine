@@ -347,7 +347,7 @@
                     username => <<"u_emqx">>},
               id => <<0,5,137,164,41,233,87,47,180,75,0,0,5,124,0,1>>,
               payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,qos => 1,
-              timestamp => erlang:timestamp(),
+              timestamp => emqx_rule_utils:now_ms(),
               node => node(),
               topic => <<"t1">>};
         'message.delivered' ->
@@ -366,7 +366,7 @@
               peerhost => {127,0,0,1},
               qos => 1,
               node => node(),
-              timestamp => erlang:timestamp(),
+              timestamp => emqx_rule_utils:now_ms(),
               topic => <<"t1">>,username => <<"u_emqx">>,
               ws_cookie => undefined,zone => external};
         'message.acked' ->
@@ -380,7 +380,7 @@
                     username => <<"u_emqx">>},
               id => <<0,5,137,164,41,233,87,47,180,75,0,0,5,124,0,1>>,
               payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,qos => 1,
-              timestamp => erlang:timestamp(),
+              timestamp => emqx_rule_utils:now_ms(),
               node => node(),
               topic => <<"t1">>,username => <<"u_emqx">>};
         'message.dropped' ->
@@ -394,7 +394,7 @@
               id => <<0,5,137,164,41,236,124,3,180,75,0,0,5,124,0,2>>,
               node => node(),
               payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,qos => 1,
-              timestamp => erlang:timestamp(),
+              timestamp => emqx_rule_utils:now_ms(),
               topic => <<"t1">>};
         'client.connected' ->
             #{anonymous => true,auth_result => success,
@@ -424,7 +424,7 @@
               reason_code => closed,
               username => <<"u_emqx">>,ws_cookie => undefined,
               node => node(),
-              timestamp => erlang:timestamp(),
+              timestamp => emqx_rule_utils:now_ms(),
               zone => external};
         'client.subscribe' ->
             #{anonymous => true,auth_result => success,
@@ -435,7 +435,7 @@
                   [{<<"t1">>,#{nl => 0,qos => 1,rap => 0,rc => 1,rh => 0}}],
               username => <<"u_emqx">>,ws_cookie => undefined,
               node => node(),
-              timestamp => erlang:timestamp(),
+              timestamp => emqx_rule_utils:now_ms(),
               zone => external};
         'client.unsubscribe' ->
             #{anonymous => true,auth_result => success,
@@ -446,7 +446,7 @@
               topic_filters => [{<<"t1">>,#{}}],
               username => <<"u_emqx">>,ws_cookie => undefined,
               node => node(),
-              timestamp => erlang:timestamp(),
+              timestamp => emqx_rule_utils:now_ms(),
               zone => external};
         'session.subscribed' ->
             #{clientid => <<"c_emqx">>,
@@ -455,7 +455,7 @@
               sub_opts => #{nl => 0,qos => 1,rap => 0,rc => 1,rh => 0},
               username => <<"u_emqx">>,ws_cookie => undefined,
               node => node(),
-              timestamp => erlang:timestamp()};
+              timestamp => emqx_rule_utils:now_ms()};
         'session.unsubscribed' ->
             #{clientid => <<"c_emqx">>,
               event => 'session.unsubscribed',
@@ -463,7 +463,7 @@
               sub_opts => #{nl => 0,qos => 1,rap => 0,rc => 1,rh => 0},
               username => <<"u_emqx">>,ws_cookie => undefined,
               node => node(),
-              timestamp => erlang:timestamp()};
+              timestamp => emqx_rule_utils:now_ms()};
         RuleType ->
               error({unknown_event_type, RuleType})
         end).
