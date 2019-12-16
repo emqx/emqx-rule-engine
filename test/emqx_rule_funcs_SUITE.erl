@@ -79,7 +79,7 @@ t_payload(_) ->
     ?assertEqual(c, apply_func(payload, [<<"a.b.c">>], Input#{payload => NestedMap})).
 
 t_timestamp(_) ->
-    Now = emqx_time:now_ms(),
+    Now = erlang:system_time(millisecond),
     timer:sleep(100),
     ?assert(Now < apply_func(timestamp, [], message())).
 
