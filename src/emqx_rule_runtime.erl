@@ -419,12 +419,20 @@ columns(Input = #{id := Id}, Result) ->
 columns(Input = #{from := From}, Result) ->
     columns(maps:remove(from, Input),
             Result#{clientid => From});
-columns(Input = #{flags := Flags}, Result) ->
+columns(Input = #{flags := Flags0}, Result) ->
+    Flags = case Flags0 of
+        undefined -> #{};
+        Flags0 -> Flags0
+    end,
     Retain = maps:get(retain, Flags, false),
     columns(maps:remove(flags, Input),
             maps:merge(Result, #{flags => Flags,
                                  retain => int(Retain)}));
-columns(Input = #{headers := Headers}, Result) ->
+columns(Input = #{headers := Headers0}, Result) ->
+    Headers = case Headers0 of
+        undefined -> #{};
+        Headers0 -> Headers0
+    end,
     Username = maps:get(username, Headers, undefined),
     PeerHost = host_to_str(maps:get(peerhost, Headers, undefined)),
     columns(maps:remove(headers, Input),
@@ -432,7 +440,7 @@ columns(Input = #{headers := Headers}, Result) ->
                                  peerhost => PeerHost}));
 columns(Input = #{timestamp := Timestamp}, Result) ->
     columns(maps:remove(timestamp, Input),
-            Result#{timestamp => emqx_rule_utils:now_ms(Timestamp)});
+            Result#{timestamp => Timestamp});
 columns(Input = #{peerhost := Peername}, Result) ->
     columns(maps:remove(peerhost, Input),
             Result#{peerhost => host_to_str(Peername)});
