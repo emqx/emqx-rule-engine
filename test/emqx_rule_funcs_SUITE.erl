@@ -79,7 +79,7 @@ t_payload(_) ->
     ?assertEqual(c, apply_func(payload, [<<"a.b.c">>], Input#{payload => NestedMap})).
 
 t_timestamp(_) ->
-    Now = emqx_time:now_ms(),
+    Now = erlang:system_time(millisecond),
     timer:sleep(100),
     ?assert(Now < apply_func(timestamp, [], message())).
 
@@ -323,7 +323,8 @@ apply_func(Name, Args, Msg) ->
     apply_func(Name, Args, emqx_rule_runtime:columns(emqx_message:to_map(Msg))).
 
 message() ->
-    emqx_message:make(<<"clientid">>, 1, <<"topic/#">>, <<"payload">>).
+    emqx_message:set_flags(#{dup => false},
+        emqx_message:make(<<"clientid">>, 1, <<"topic/#">>, <<"payload">>)).
 
 % t_contains_topic(_) ->
 %     error('TODO').

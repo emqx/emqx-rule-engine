@@ -43,9 +43,7 @@
         , tcp_connectivity/3
         ]).
 
--export([ now_ms/0
-        , now_ms/1
-        ]).
+-export([now_ms/0]).
 
 -compile({no_auto_import,
           [ float/1
@@ -283,6 +281,3 @@ parse_nested(Attr) ->
 
 now_ms() ->
     erlang:system_time(millisecond).
-
-now_ms({MegaSecs, Secs, MicroSecs}) ->
-    (MegaSecs * 1000000 + Secs) * 1000 + round(MicroSecs/1000).
