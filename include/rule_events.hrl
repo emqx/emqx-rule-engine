@@ -98,7 +98,6 @@
                 , <<"event">>
                 , <<"auth_result">>
                 , <<"clean_start">>
-                , <<"connack">>
                 , <<"connected_at">>
                 , <<"is_bridge">>
                 , <<"keepalive">>
