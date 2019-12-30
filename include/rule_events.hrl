@@ -33,7 +33,9 @@
                 , 'client.unsubscribe'
                 ];
            '$session' ->
-                [ 'session.subscribed'
+                [ '$session'
+                , '$any'
+                , 'session.subscribed'
                 , 'session.unsubscribed'
                 ];
            '$any' -> '$any';
