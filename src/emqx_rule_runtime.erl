@@ -22,12 +22,12 @@
 
 -export([ start/1, stop/1 ]).
 
--export([ on_client_connected/4
+-export([ on_client_connected/3
         , on_client_disconnected/4
         , on_client_subscribe/4
         , on_client_unsubscribe/4
         , on_message_publish/2
-        , on_message_dropped/3
+        , on_message_dropped/4
         , on_message_deliver/3
         , on_message_acked/3
         , on_session_subscribed/4
@@ -53,12 +53,12 @@
 %%------------------------------------------------------------------------------
 
 start(Env) ->
-    hook_rules('client.connected', fun ?MODULE:on_client_connected/4, Env),
+    hook_rules('client.connected', fun ?MODULE:on_client_connected/3, Env),
     hook_rules('client.disconnected', fun ?MODULE:on_client_disconnected/4, Env),
     hook_rules('client.subscribe', fun ?MODULE:on_client_subscribe/4, Env),
     hook_rules('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/4, Env),
     hook_rules('message.publish', fun ?MODULE:on_message_publish/2, Env),
-    hook_rules('message.dropped', fun ?MODULE:on_message_dropped/3, Env),
+    hook_rules('message.dropped', fun ?MODULE:on_message_dropped/4, Env),
     hook_rules('message.delivered', fun ?MODULE:on_message_deliver/3, Env),
     hook_rules('message.acked', fun ?MODULE:on_message_acked/3, Env),
     hook_rules('session.subscribed', fun ?MODULE:on_session_subscribed/4, Env),
@@ -72,8 +72,8 @@ hook_rules(Name, Fun, Env) ->
 %% Callbacks
 %%------------------------------------------------------------------------------
 
-on_client_connected(ClientInfo, ConnAck, ConnInfo, #{apply_fun := ApplyRules}) ->
-    ApplyRules(maps:merge(ClientInfo, #{event => 'client.connected', connack => ConnAck, conninfo => ConnInfo, node => node()})).
+on_client_connected(ClientInfo, ConnInfo, #{apply_fun := ApplyRules}) ->
+    ApplyRules(maps:merge(ClientInfo, #{event => 'client.connected', conninfo => ConnInfo, node => node()})).
 
 on_client_disconnected(ClientInfo, ReasonCode, ConnInfo, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(ClientInfo, #{event => 'client.disconnected', reason_code => ReasonCode, conninfo => ConnInfo, node => node(), timestamp => erlang:timestamp()})).
@@ -100,11 +100,11 @@ on_message_publish(Message, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.publish', node => node()})),
     {ok, Message}.
 
-on_message_dropped(_, Message = #message{topic = <<"$SYS/", _/binary>>},
-                   #{ignore_sys_message := true}) ->
+on_message_dropped(Message = #message{topic = <<"$SYS/", _/binary>>},
+                   _, _, #{ignore_sys_message := true}) ->
     {ok, Message};
 
-on_message_dropped(_, Message, #{apply_fun := ApplyRules}) ->
+on_message_dropped(Message, _, _, #{apply_fun := ApplyRules}) ->
     ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.dropped', node => node()})),
     {ok, Message}.
 
@@ -395,12 +395,12 @@ apply_func(Name, Args, Input) when is_atom(Name) ->
 
 %% Called when the rule engine application stop
 stop(_Env) ->
-    emqx:unhook('client.connected', fun ?MODULE:on_client_connected/4),
+    emqx:unhook('client.connected', fun ?MODULE:on_client_connected/3),
     emqx:unhook('client.disconnected', fun ?MODULE:on_client_disconnected/4),
     emqx:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/4),
     emqx:unhook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/4),
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
-    emqx:unhook('message.dropped', fun ?MODULE:on_message_dropped/3),
+    emqx:unhook('message.dropped', fun ?MODULE:on_message_dropped/4),
     emqx:unhook('message.delivered', fun ?MODULE:on_message_deliver/3),
     emqx:unhook('message.acked', fun ?MODULE:on_message_acked/3),
     emqx:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/4),

@@ -33,7 +33,9 @@
                 , 'client.unsubscribe'
                 ];
            '$session' ->
-                [ 'session.subscribed'
+                [ '$session'
+                , '$any'
+                , 'session.subscribed'
                 , 'session.unsubscribed'
                 ];
            '$any' -> '$any';
@@ -98,7 +100,6 @@
                 , <<"event">>
                 , <<"auth_result">>
                 , <<"clean_start">>
-                , <<"connack">>
                 , <<"connected_at">>
                 , <<"is_bridge">>
                 , <<"keepalive">>
