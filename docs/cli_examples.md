@@ -15,7 +15,7 @@ Rule rule:98a75239 created
 ```shell
 $ ./bin/emqx_ctl rules show rule:98a75239
 
-rule(id='rule:98a75239', for='['message.publish']', rawsql='SELECT payload FROM "message.publish" where topic = "#" and username="Steven"', actions=[{"name":"data_to_webserver","params":{"$resource":"resource:9093f1cb","url":"http://host-name/chats"}}], enabled='true', description='Msg From Steven to WebServer')
+rule(id='rule:98a75239', rawsql='SELECT payload FROM "message.publish" where topic = "#" and username="Steven"', actions=[{"name":"data_to_webserver","params":{"$resource":"resource:9093f1cb","url":"http://host-name/chats"}}], enabled='true', description='Msg From Steven to WebServer')
 ```
 
 ### list
@@ -23,7 +23,7 @@ rule(id='rule:98a75239', for='['message.publish']', rawsql='SELECT payload FROM 
 ```shell
 $ ./bin/emqx_ctl rules list
 
-rule(id='rule:98a75239', for='['message.publish']', rawsql='SELECT payload FROM "message.publish" where topic = "#" and username="Steven"', actions=[{"name":"data_to_webserver","params":{"$resource":"resource:9093f1cb","url":"http://host-name/chats"}}], enabled='true', description='Msg From Steven to WebServer')
+rule(id='rule:98a75239', rawsql='SELECT payload FROM "message.publish" where topic = "#" and username="Steven"', actions=[{"name":"data_to_webserver","params":{"$resource":"resource:9093f1cb","url":"http://host-name/chats"}}], enabled='true', description='Msg From Steven to WebServer')
 
 ```
 
@@ -42,9 +42,9 @@ ok
 ```shell
 $ ./bin/emqx_ctl rule-actions list
 
-action(name='republish', app='emqx_rule_engine', for='message.publish', types=[], params=#{...}, description='Republish a MQTT message to a another topic')
-action(name='inspect', app='emqx_rule_engine', for='$any', types=[], params=#{...}, description='Inspect the details of action params for debug purpose')
-action(name='data_to_webserver', app='emqx_web_hook', for='message.publish', types=[], params=#{...}, description='Forward Messages to Web Server')
+action(name='republish', app='emqx_rule_engine', types=[], params=#{...}, description='Republish a MQTT message to a another topic')
+action(name='inspect', app='emqx_rule_engine', types=[], params=#{...}, description='Inspect the details of action params for debug purpose')
+action(name='data_to_webserver', app='emqx_web_hook', types=[], params=#{...}, description='Forward Messages to Web Server')
 ```
 
 ### show
@@ -52,7 +52,7 @@ action(name='data_to_webserver', app='emqx_web_hook', for='message.publish', typ
 ```shell
 $ ./bin/emqx_ctl rule-actions show 'data_to_webserver'
 
-action(name='data_to_webserver', app='emqx_web_hook', for='message.publish', types=['web_hook'], params=#{...}, description='Forward Messages to Web Server')
+action(name='data_to_webserver', app='emqx_web_hook', types=['web_hook'], params=#{...}, description='Forward Messages to Web Server')
 ```
 
 ## Resource
