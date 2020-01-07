@@ -35,6 +35,7 @@
         ]).
 
 -export([ apply_rule/2
+        , apply_rules/2
         , columns/1
         , clear_rule_payload/0
         ]).
