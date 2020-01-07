@@ -38,7 +38,6 @@
 -export([ add_action/1
         , add_actions/1
         , get_actions/0
-        , get_actions_for/1
         , find_action/1
         , remove_action/1
         , remove_actions/1
@@ -229,20 +228,6 @@ delete_rule(Rule = #rule{id = Id, for = Hooks}) when is_record(Rule, rule) ->
 -spec(get_actions() -> list(emqx_rule_engine:action())).
 get_actions() ->
     get_all_records(?ACTION_TAB).
-
-%% @doc Get actions for a hook or hook alias.
--spec(get_actions_for(Hook :: hook() | list(hook()))
-        -> list(emqx_rule_engine:action())).
-get_actions_for(HookAlias) ->
-    do_get_actions_for(?EVENT_ALIAS(HookAlias)).
-
--spec(do_get_actions_for(Hook :: hook() | list(hook()))
-        -> list(emqx_rule_engine:action())).
-do_get_actions_for([]) -> [];
-do_get_actions_for([H | T] = Hooks) when is_list(Hooks) ->
-    do_get_actions_for(H) ++ do_get_actions_for(T);
-do_get_actions_for(Hook) when not is_list(Hook) ->
-    mnesia:dirty_index_read(?ACTION_TAB, Hook, #action.for).
 
 %% @doc Find an action by name.
 -spec(find_action(Name :: action_name()) -> {ok, emqx_rule_engine:action()} | not_found).

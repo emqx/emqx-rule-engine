@@ -26,6 +26,7 @@
 %% emqx_gen_mod callbacks
 -export([ load/1
         , unload/1
+        , event_name/1
         ]).
 
 -export([ on_client_connected/3
@@ -33,6 +34,9 @@
         , on_session_subscribed/4
         , on_session_unsubscribed/4
         , on_message_publish/2
+        , on_message_dropped/4
+        , on_message_delivered/3
+        , on_message_acked/3
         ]).
 
 -define(SUPPORTED_HOOK,
@@ -67,144 +71,237 @@ unload(_Env) ->
 
 on_client_connected(ClientInfo, ConnInfo, Env) ->
     may_publish_and_apply(client_connected,
-        event_msg_connected(ClientInfo, ConnInfo), Env).
+        eventmsg_connected(ClientInfo, ConnInfo), Env).
 
 on_client_disconnected(ClientInfo, Reason, ConnInfo, Env) ->
     may_publish_and_apply(client_disconnected,
-        event_msg_disconnected(ClientInfo, ConnInfo, Reason), Env).
+        eventmsg_disconnected(ClientInfo, ConnInfo, Reason), Env).
 
 on_session_subscribed(ClientInfo, Topic, SubOpts, Env) ->
     may_publish_and_apply(session_subscribed,
-        event_msg_subscribed(ClientInfo, Topic, SubOpts), Env).
+        eventmsg_sub_unsub('session.subscribed', ClientInfo, Topic, SubOpts), Env).
 
 on_session_unsubscribed(ClientInfo, Topic, SubOpts, Env) ->
     may_publish_and_apply(session_unsubscribed,
-        event_msg_subscribed(ClientInfo, Topic, SubOpts), Env).
+        eventmsg_sub_unsub('session.unsubscribed', ClientInfo, Topic, SubOpts), Env).
 
-on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>},
+on_message_publish(Message = #message{flags = #{event := true}},
+                   _Env) ->
+    {ok, Message};
+on_message_publish(Message = #message{flags = #{sys := true}},
                    #{ignore_sys_message := true}) ->
     {ok, Message};
-
 on_message_publish(Message, _Env) ->
-    emqx_rule_runtime:apply_rules(emqx_rule_registry:get_rules(), rule_input(Message)),
+    emqx_rule_runtime:apply_rules(
+        emqx_rule_registry:get_rules(), rule_input(Message)),
     {ok, Message}.
 
-on_message_dropped(Message = #message{topic = <<"$SYS/", _/binary>>},
+on_message_dropped(Message = #message{flags = #{sys := true}},
                    _, _, #{ignore_sys_message := true}) ->
     {ok, Message};
-
-on_message_dropped(Message, _, _, #{apply_fun := ApplyRules}) ->
-    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.dropped', node => node()})),
+on_message_dropped(Message, _, Reason, Env) ->
+    may_publish_and_apply(message_dropped,
+        eventmsg_dropped(Message, Reason), Env),
     {ok, Message}.
 
-on_message_deliver(ClientInfo, Message, #{apply_fun := ApplyRules}) ->
-    ApplyRules(maps:merge(ClientInfo#{event => 'message.delivered', node => node()}, emqx_message:to_map(Message))),
+on_message_delivered(_ClientInfo, Message = #message{flags = #{sys := true}},
+                   #{ignore_sys_message := true}) ->
+    {ok, Message};
+on_message_delivered(ClientInfo, Message, Env) ->
+    may_publish_and_apply(message_delivered,
+        eventmsg_delivered(ClientInfo, Message), Env),
     {ok, Message}.
 
-on_message_acked(_ClientInfo, Message, #{apply_fun := ApplyRules}) ->
-    ApplyRules(maps:merge(emqx_message:to_map(Message), #{event => 'message.acked', node => node()})),
+on_message_acked(_ClientInfo, Message = #message{flags = #{sys := true}},
+                   #{ignore_sys_message := true}) ->
+    {ok, Message};
+on_message_acked(ClientInfo, Message, Env) ->
+    may_publish_and_apply(message_acked,
+        eventmsg_acked(ClientInfo, Message), Env),
     {ok, Message}.
 
 %%--------------------------------------------------------------------
-%% Helper functions
+%% Event Messages
 %%--------------------------------------------------------------------
 
-event_msg_disconnected(_ClientInfo = #{clientid := ClientId, username := Username},
-                       _ConnInfo = #{disconnected_at := DisconnectedAt},
-                       Reason) ->
-    #{clientid => ClientId,
-      username => Username,
-      reason => reason(Reason),
-      disconnected_at => DisconnectedAt,
-      timestamp => erlang:system_time(millisecond)}.
-
-event_msg_connected(_ClientInfo = #{
-                        peername := PeerName,
-                        sockname := SockName,
-                        clientid := ClientId,
-                        username := Username,
-                        is_bridge := IsBridge,
-                        auth_result := AuthResult,
-                        mountpoint := Mountpoint
-                    },
+eventmsg_connected(_ClientInfo = #{
+                    peername := PeerName,
+                    sockname := SockName,
+                    clientid := ClientId,
+                    username := Username,
+                    is_bridge := IsBridge,
+                    auth_result := AuthResult,
+                    mountpoint := Mountpoint
+                   },
                    _ConnInfo = #{
-                        clean_start := CleanStart,
-                        proto_name := ProtoName,
-                        proto_ver := ProtoVer,
-                        keepalive := Keepalive,
-                        connected_at := ConnectedAt,
-                        expiry_interval := ExpiryInterval
-                    }) ->
-    #{clientid => ClientId,
+                    clean_start := CleanStart,
+                    proto_name := ProtoName,
+                    proto_ver := ProtoVer,
+                    keepalive := Keepalive,
+                    connected_at := ConnectedAt,
+                    expiry_interval := ExpiryInterval
+                   }) ->
+    #{event => 'client.connected',
+      clientid => ClientId,
       username => Username,
-      node => node(),
+      auth_result => AuthResult,
+      mountpoint => Mountpoint,
       peername => ntoa(PeerName),
       sockname => ntoa(SockName),
       proto_name => ProtoName,
       proto_ver => ProtoVer,
       keepalive => Keepalive,
-      connack => 0, %% Deprecated?
       clean_start => CleanStart,
+      connack => 0,
       expiry_interval => ExpiryInterval,
-      connected_at => ConnectedAt,
       is_bridge => IsBridge,
-      auth_result => AuthResult,
-      mountpoint => Mountpoint,
-      timestamp => erlang:system_time(millisecond)
+      connected_at => ConnectedAt,
+      timestamp => erlang:system_time(millisecond),
+      node => node()
      }.
 
-event_msg_subscribed(_ClientInfo = #{
-                        clientid := ClientId,
-                        username := Username
-                    }, Topic, _SubOpts = #{qos := QoS}) ->
-    #{clientid => ClientId,
+eventmsg_disconnected(_ClientInfo = #{
+                       clientid := ClientId,
+                       username := Username,
+                       peername := PeerName,
+                       sockname := SockName
+                      },
+                      _ConnInfo = #{
+                        disconnected_at := DisconnectedAt
+                      }, Reason) ->
+    #{event => 'client.disconnected',
+      reason => reason(Reason),
+      clientid => ClientId,
       username => Username,
-      topic => Topic,
-      qos => QoS
+      peername => ntoa(PeerName),
+      sockname => ntoa(SockName),
+      disconnected_at => DisconnectedAt,
+      timestamp => erlang:system_time(millisecond),
+      node => node()
     }.
 
-may_publish_and_apply(EventType, EventMsg, #{enabled := true, qos := QoS}) ->
+eventmsg_sub_unsub(Event, _ClientInfo = #{
+                    clientid := ClientId,
+                    username := Username,
+                    peername := PeerName,
+                    sockname := SockName
+                   }, Topic, _SubOpts = #{qos := QoS}) ->
+    #{event => Event,
+      clientid => ClientId,
+      username => Username,
+      peername => ntoa(PeerName),
+      sockname => ntoa(SockName),
+      topic => Topic,
+      qos => QoS,
+      timestamp => erlang:system_time(millisecond),
+      node => node()
+    }.
+
+eventmsg_dropped(#message{id = Id, from = ClientId, qos = QoS, flags = Flags, headers = Headers, topic = Topic, payload = Payload, timestamp = Timestamp}, Reason) ->
+    #{event => 'message.dropped',
+      id => Id,
+      reason => Reason,
+      clientid => ClientId,
+      username => maps:get(username, Headers, undefined),
+      payload => Payload,
+      peerhost => ntoa(maps:get(peerhost, Headers, undefined)),
+      topic => Topic,
+      qos => QoS,
+      flags => Flags,
+      timestamp => Timestamp,
+      node => node()
+    }.
+
+eventmsg_delivered(_ClientInfo = #{
+                    peername := PeerName,
+                    sockname := SockName,
+                    clientid := ReceiverCId,
+                    username := ReceiverUsername
+                  }, #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp, headers = Headers}) ->
+    #{event => 'message.delivered',
+      id => Id,
+      from_clientid => ClientId,
+      from_username => maps:get(username, Headers, undefined),
+      clientid => ReceiverCId,
+      username => ReceiverUsername,
+      payload => Payload,
+      peername => ntoa(PeerName),
+      sockname => ntoa(SockName),
+      topic => Topic,
+      qos => QoS,
+      flags => Flags,
+      timestamp => Timestamp,
+      node => node()
+    }.
+
+eventmsg_acked(_ClientInfo = #{
+                    peername := PeerName,
+                    sockname := SockName,
+                    clientid := ReceiverCId,
+                    username := ReceiverUsername
+                  }, #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp, headers = Headers}) ->
+    #{event => 'message.acked',
+      id => Id,
+      from_clientid => ClientId,
+      from_username => maps:get(username, Headers, undefined),
+      clientid => ReceiverCId,
+      username => ReceiverUsername,
+      payload => Payload,
+      peername => ntoa(PeerName),
+      sockname => ntoa(SockName),
+      topic => Topic,
+      qos => QoS,
+      flags => Flags,
+      timestamp => Timestamp,
+      node => node()
+    }.
+
+%%--------------------------------------------------------------------
+%% Events publishing and rules applying
+%%--------------------------------------------------------------------
+
+may_publish_and_apply(EventType, EventMsg, #{enabled := IsEnabled, qos := QoS}) ->
     case emqx_json:safe_encode(EventMsg) of
         {ok, Payload} ->
             Msg = make_msg(QoS, event_topic(EventType), Payload),
-            emqx_broker:safe_publish(Msg),
+            IsEnabled andalso emqx_broker:safe_publish(Msg),
             emqx_rule_runtime:apply_rules(emqx_rule_registry:get_rules(), rule_input(Msg));
         {error, _Reason} ->
             ?LOG(error, "Failed to encode event msg for ~p, msg: ~p", [EventType, EventMsg])
-    end;
-may_publish_and_apply(_EventType, _EventMsg, _Env) ->
-    ok.
+    end.
 
 make_msg(QoS, Topic, Payload) ->
-    emqx_message:set_flag(
-      sys, emqx_message:make(?MODULE, QoS, Topic, iolist_to_binary(Payload))).
+    emqx_message:set_flags(#{sys => true, event => true},
+        emqx_message:make(emqx_events, QoS, Topic, iolist_to_binary(Payload))).
 
 event_topic(Name) when is_atom(Name); is_list(Name) ->
     iolist_to_binary(lists:concat(["$events/", Name]));
 event_topic(Name) when is_binary(Name) ->
     iolist_to_binary(["$events/", Name]).
 
-rule_input(Message) ->
-    Headers = emqx_message:headers(Message),
-    Username = maps:get(username, Headers, undefined),
-    PeerHost = maps:get(peerhost, Headers, undefined),
-    #{id => emqx_message:id(Message),
-      clientid => emqx_message:from(Message),
-      username => Username,
-      payload => emqx_message:payload(Message),
-      peerhost => ntoa(PeerHost),
-      topic => emqx_message:topic(Message),
-      qos => emqx_message:qos(Message),
-      timestamp => emqx_message:timestamp(Message)
+rule_input(#message{id = Id, from = ClientId, qos = QoS, flags = Flags, headers = Headers, topic = Topic, payload = Payload, timestamp = Timestamp}) ->
+    #{id => Id,
+      clientid => ClientId,
+      username => maps:get(username, Headers, undefined),
+      payload => Payload,
+      peerhost => ntoa(maps:get(peerhost, Headers, undefined)),
+      topic => Topic,
+      qos => QoS,
+      flags => Flags,
+      timestamp => Timestamp,
+      node => node()
     }.
 
+%%--------------------------------------------------------------------
+%% Helper functions
+%%--------------------------------------------------------------------
 
 hook_conf(HookPoint, Env) ->
     Events = proplists:get_value(events, Env, []),
     IgnoreSys = proplists:get_value(ignore_sys_message, Env, true),
     case lists:keyfind(HookPoint, 1, Events) of
         {_, on, QoS} -> #{enabled => true, qos => QoS, ignore_sys_message => IgnoreSys};
-        _ -> #{enabled => false, ignore_sys_message => IgnoreSys}
+        _ -> #{enabled => false, qos => 1, ignore_sys_message => IgnoreSys}
     end.
 
 hook_fun(Event) ->
@@ -221,7 +318,16 @@ reason({shutdown, Reason}) when is_atom(Reason) -> Reason;
 reason({Error, _}) when is_atom(Error) -> Error;
 reason(_) -> internal_error.
 
+ntoa(undefined) -> undefined;
 ntoa({IpAddr, Port}) ->
     iolist_to_binary([inet:ntoa(IpAddr),":",integer_to_list(Port)]);
 ntoa(IpAddr) ->
     iolist_to_binary(inet:ntoa(IpAddr)).
+
+event_name(<<"$events/client_connected", _/binary>>) -> 'client.connected';
+event_name(<<"$events/client_disconnected", _/binary>>) -> 'client.disconnected';
+event_name(<<"$events/session_subscribed", _/binary>>) -> 'session.subscribed';
+event_name(<<"$events/session_unsubscribed", _/binary>>) -> 'session.unsubscribed';
+event_name(<<"$events/message_delivered", _/binary>>) -> 'message.delivered';
+event_name(<<"$events/message_acked", _/binary>>) -> 'message.acked';
+event_name(<<"$events/message_dropped", _/binary>>) -> 'message.dropped'.

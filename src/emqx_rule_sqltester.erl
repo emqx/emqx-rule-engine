@@ -64,19 +64,22 @@ sql_test_action() ->
         ?LOG(info, "Testing Rule SQL OK"), Data
     end.
 
-fill_default_values(Event, #{topic_filters := TopicFilters} = Context, Result) ->
-    fill_default_values(Event, maps:remove(topic_filters, Context),
-                        Result#{topic_filters => parse_topic_filters(TopicFilters)});
 fill_default_values(Event, #{peername := Peername} = Context, Result) ->
     fill_default_values(Event, maps:remove(peername, Context),
                         Result#{peername => parse_peername(Peername)});
 fill_default_values(Event, Context, Acc) ->
-    maps:merge(?EG_ENVS(Event), maps:merge(Context, Acc)).
+    case Event of
+        <<"$events/", _/binary>> ->
+            ExamEVS = #{payload := ExamPayload} = ?EG_ENVS(Event),
+            ExamEVS#{payload => maps:merge(ExamPayload, maps:merge(Context, Acc))};
+        _ ->
+            maps:merge(?EG_ENVS(Event), maps:merge(Context, Acc))
+    end.
 
 parse_peername(Peername) ->
     case string:split(Peername, [$:]) of
         [IPAddrStr, PortStr] ->
-            IPAddr = case inet:parse_address("127.0.0.1") of
+            IPAddr = case inet:parse_address(IPAddrStr) of
                         {ok, IPAddr0} -> IPAddr0;
                         {error, Error} -> error({Error, IPAddrStr})
                      end,
@@ -84,13 +87,3 @@ parse_peername(Peername) ->
         [IPAddrStr] ->
             error({invalid_ip_port, IPAddrStr})
     end.
-
-parse_topic_filters(TopicFilters) ->
-    [ case TpcFtl of
-        #{<<"topic">> := Topic, <<"qos">> := QoS} ->
-            {Topic, #{qos => QoS}};
-        #{<<"topic">> := Topic} ->
-            {Topic, #{}};
-        Topic ->
-            {Topic, #{}}
-      end || TpcFtl <- jsx:decode(TopicFilters, [return_maps])].
