@@ -25,10 +25,10 @@
 test(#{<<"rawsql">> := Sql, <<"ctx">> := Context}) ->
     case emqx_rule_sqlparser:parse_select(Sql) of
         {ok, Select} ->
-            Event = emqx_rule_sqlparser:select_from(Select),
+            EventTopics = emqx_rule_sqlparser:select_from(Select),
             ActInstId = {test_rule_sql, self()},
             Rule = #rule{rawsql = Sql,
-                         for = Event,
+                         for = EventTopics,
                          is_foreach = emqx_rule_sqlparser:select_is_foreach(Select),
                          fields = emqx_rule_sqlparser:select_fields(Select),
                          doeach = emqx_rule_sqlparser:select_doeach(Select),
@@ -37,7 +37,7 @@ test(#{<<"rawsql">> := Sql, <<"ctx">> := Context}) ->
                          actions = [#action_instance{
                                         id = ActInstId,
                                         name = test_rule_sql}]},
-            FullContext = fill_default_values(hd(Event), emqx_rule_maps:atom_key_map(Context), #{}),
+            FullContext = fill_default_values(hd(EventTopics), emqx_rule_maps:atom_key_map(Context)),
             try
                 ok = emqx_rule_registry:add_action_instance_params(
                         #action_instance_params{id = ActInstId,
@@ -64,33 +64,11 @@ sql_test_action() ->
         ?LOG(info, "Testing Rule SQL OK"), Data
     end.
 
-fill_default_values(Event, #{topic_filters := TopicFilters} = Context, Result) ->
-    fill_default_values(Event, maps:remove(topic_filters, Context),
-                        Result#{topic_filters => parse_topic_filters(TopicFilters)});
-fill_default_values(Event, #{peername := Peername} = Context, Result) ->
-    fill_default_values(Event, maps:remove(peername, Context),
-                        Result#{peername => parse_peername(Peername)});
-fill_default_values(Event, Context, Acc) ->
-    maps:merge(?EG_ENVS(Event), maps:merge(Context, Acc)).
-
-parse_peername(Peername) ->
-    case string:split(Peername, [$:]) of
-        [IPAddrStr, PortStr] ->
-            IPAddr = case inet:parse_address("127.0.0.1") of
-                        {ok, IPAddr0} -> IPAddr0;
-                        {error, Error} -> error({Error, IPAddrStr})
-                     end,
-            {IPAddr, binary_to_integer(PortStr)};
-        [IPAddrStr] ->
-            error({invalid_ip_port, IPAddrStr})
+fill_default_values(Event, Context) ->
+    case Event of
+        <<"$events/", _/binary>> ->
+            ExamEVS = #{payload := ExamPayload} = ?EG_ENVS(Event),
+            ExamEVS#{payload => maps:merge(ExamPayload, Context)};
+        _ ->
+            maps:merge(?EG_ENVS(Event), Context)
     end.
-
-parse_topic_filters(TopicFilters) ->
-    [ case TpcFtl of
-        #{<<"topic">> := Topic, <<"qos">> := QoS} ->
-            {Topic, #{qos => QoS}};
-        #{<<"topic">> := Topic} ->
-            {Topic, #{}};
-        Topic ->
-            {Topic, #{}}
-      end || TpcFtl <- jsx:decode(TopicFilters, [return_maps])].

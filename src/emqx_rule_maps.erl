@@ -29,6 +29,12 @@
 nested_get(Key, Map) ->
     nested_get(Key, Map, undefined).
 
+nested_get(Key, Data, Default) when is_binary(Data) ->
+    try jsx:decode(Data, [return_maps]) of
+        Map -> nested_get(Key, Map, Default)
+    catch
+        _:_ -> Default
+    end;
 nested_get(_Key, Map, Default) when not is_map(Map) ->
     Default;
 nested_get(Key, Map, Default) when not is_list(Key) ->
