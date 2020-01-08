@@ -16,17 +16,15 @@
 
 -module(emqx_rule_events).
 
--behaviour(emqx_gen_mod).
-
--include("emqx.hrl").
--include("logger.hrl").
+-include_lib("emqx/include/emqx.hrl").
+-include_lib("emqx/include/logger.hrl").
 
 -logger_header("[RuleEvents]").
 
-%% emqx_gen_mod callbacks
 -export([ load/1
         , unload/1
         , event_name/1
+        , rule_input/1
         ]).
 
 -export([ on_client_connected/3
@@ -91,9 +89,9 @@ on_message_publish(Message = #message{flags = #{event := true}},
 on_message_publish(Message = #message{flags = #{sys := true}},
                    #{ignore_sys_message := true}) ->
     {ok, Message};
-on_message_publish(Message, _Env) ->
+on_message_publish(Message = #message{topic = Topic}, _Env) ->
     emqx_rule_runtime:apply_rules(
-        emqx_rule_registry:get_rules(), rule_input(Message)),
+        emqx_rule_registry:get_rules_for(Topic), rule_input(Message)),
     {ok, Message}.
 
 on_message_dropped(Message = #message{flags = #{sys := true}},
@@ -125,15 +123,14 @@ on_message_acked(ClientInfo, Message, Env) ->
 %%--------------------------------------------------------------------
 
 eventmsg_connected(_ClientInfo = #{
-                    peername := PeerName,
-                    sockname := SockName,
                     clientid := ClientId,
                     username := Username,
                     is_bridge := IsBridge,
-                    auth_result := AuthResult,
                     mountpoint := Mountpoint
                    },
                    _ConnInfo = #{
+                    peername := PeerName,
+                    sockname := SockName,
                     clean_start := CleanStart,
                     proto_name := ProtoName,
                     proto_ver := ProtoVer,
@@ -144,7 +141,6 @@ eventmsg_connected(_ClientInfo = #{
     #{event => 'client.connected',
       clientid => ClientId,
       username => Username,
-      auth_result => AuthResult,
       mountpoint => Mountpoint,
       peername => ntoa(PeerName),
       sockname => ntoa(SockName),
@@ -152,7 +148,6 @@ eventmsg_connected(_ClientInfo = #{
       proto_ver => ProtoVer,
       keepalive => Keepalive,
       clean_start => CleanStart,
-      connack => 0,
       expiry_interval => ExpiryInterval,
       is_bridge => IsBridge,
       connected_at => ConnectedAt,
@@ -162,11 +157,11 @@ eventmsg_connected(_ClientInfo = #{
 
 eventmsg_disconnected(_ClientInfo = #{
                        clientid := ClientId,
-                       username := Username,
-                       peername := PeerName,
-                       sockname := SockName
+                       username := Username
                       },
                       _ConnInfo = #{
+                        peername := PeerName,
+                        sockname := SockName,
                         disconnected_at := DisconnectedAt
                       }, Reason) ->
     #{event => 'client.disconnected',
@@ -183,28 +178,26 @@ eventmsg_disconnected(_ClientInfo = #{
 eventmsg_sub_unsub(Event, _ClientInfo = #{
                     clientid := ClientId,
                     username := Username,
-                    peername := PeerName,
-                    sockname := SockName
+                    peerhost := PeerHost
                    }, Topic, _SubOpts = #{qos := QoS}) ->
     #{event => Event,
       clientid => ClientId,
       username => Username,
-      peername => ntoa(PeerName),
-      sockname => ntoa(SockName),
+      peerhost => ntoa(PeerHost),
       topic => Topic,
       qos => QoS,
       timestamp => erlang:system_time(millisecond),
       node => node()
     }.
 
-eventmsg_dropped(#message{id = Id, from = ClientId, qos = QoS, flags = Flags, headers = Headers, topic = Topic, payload = Payload, timestamp = Timestamp}, Reason) ->
+eventmsg_dropped(Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp}, Reason) ->
     #{event => 'message.dropped',
       id => Id,
       reason => Reason,
       clientid => ClientId,
-      username => maps:get(username, Headers, undefined),
+      username => emqx_message:get_header(username, Message, undefined),
       payload => Payload,
-      peerhost => ntoa(maps:get(peerhost, Headers, undefined)),
+      peerhost => ntoa(emqx_message:get_header(peerhost, Message, undefined)),
       topic => Topic,
       qos => QoS,
       flags => Flags,
@@ -213,20 +206,18 @@ eventmsg_dropped(#message{id = Id, from = ClientId, qos = QoS, flags = Flags, he
     }.
 
 eventmsg_delivered(_ClientInfo = #{
-                    peername := PeerName,
-                    sockname := SockName,
+                    peerhost := PeerHost,
                     clientid := ReceiverCId,
                     username := ReceiverUsername
-                  }, #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp, headers = Headers}) ->
+                  }, Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp}) ->
     #{event => 'message.delivered',
       id => Id,
       from_clientid => ClientId,
-      from_username => maps:get(username, Headers, undefined),
+      from_username => emqx_message:get_header(username, Message, undefined),
       clientid => ReceiverCId,
       username => ReceiverUsername,
       payload => Payload,
-      peername => ntoa(PeerName),
-      sockname => ntoa(SockName),
+      peerhost => ntoa(PeerHost),
       topic => Topic,
       qos => QoS,
       flags => Flags,
@@ -235,8 +226,7 @@ eventmsg_delivered(_ClientInfo = #{
     }.
 
 eventmsg_acked(_ClientInfo = #{
-                    peername := PeerName,
-                    sockname := SockName,
+                    peerhost := PeerHost,
                     clientid := ReceiverCId,
                     username := ReceiverUsername
                   }, #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp, headers = Headers}) ->
@@ -247,8 +237,7 @@ eventmsg_acked(_ClientInfo = #{
       clientid => ReceiverCId,
       username => ReceiverUsername,
       payload => Payload,
-      peername => ntoa(PeerName),
-      sockname => ntoa(SockName),
+      peerhost => ntoa(PeerHost),
       topic => Topic,
       qos => QoS,
       flags => Flags,
@@ -263,9 +252,10 @@ eventmsg_acked(_ClientInfo = #{
 may_publish_and_apply(EventType, EventMsg, #{enabled := IsEnabled, qos := QoS}) ->
     case emqx_json:safe_encode(EventMsg) of
         {ok, Payload} ->
-            Msg = make_msg(QoS, event_topic(EventType), Payload),
+            EventTopic = event_topic(EventType),
+            Msg = make_msg(QoS, EventTopic, Payload),
             IsEnabled andalso emqx_broker:safe_publish(Msg),
-            emqx_rule_runtime:apply_rules(emqx_rule_registry:get_rules(), rule_input(Msg));
+            emqx_rule_runtime:apply_rules(emqx_rule_registry:get_rules_for(EventTopic), rule_input(Msg));
         {error, _Reason} ->
             ?LOG(error, "Failed to encode event msg for ~p, msg: ~p", [EventType, EventMsg])
     end.
@@ -279,15 +269,16 @@ event_topic(Name) when is_atom(Name); is_list(Name) ->
 event_topic(Name) when is_binary(Name) ->
     iolist_to_binary(["$events/", Name]).
 
-rule_input(#message{id = Id, from = ClientId, qos = QoS, flags = Flags, headers = Headers, topic = Topic, payload = Payload, timestamp = Timestamp}) ->
-    #{id => Id,
+rule_input(Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, headers = Headers, payload = Payload, timestamp = Timestamp}) ->
+    #{id => emqx_guid:to_hexstr(Id),
       clientid => ClientId,
-      username => maps:get(username, Headers, undefined),
+      username => emqx_message:get_header(username, Message, undefined),
       payload => Payload,
-      peerhost => ntoa(maps:get(peerhost, Headers, undefined)),
+      peerhost => ntoa(emqx_message:get_header(peerhost, Message, undefined)),
       topic => Topic,
       qos => QoS,
       flags => Flags,
+      headers => Headers,
       timestamp => Timestamp,
       node => node()
     }.
@@ -307,8 +298,7 @@ hook_conf(HookPoint, Env) ->
 hook_fun(Event) ->
     case string:split(atom_to_list(Event), ".") of
         [Prefix, Name] ->
-            Point = list_to_atom(lists:append([Prefix, "_", Name])),
-            list_to_atom(lists:append(["on_", Point]));
+            list_to_atom(lists:append(["on_", Prefix, "_", Name]));
         [_] ->
             error(invalid_event, Event)
     end.

@@ -72,6 +72,8 @@ groups() ->
      {registry, [sequence],
       [t_add_get_remove_rule,
        t_add_get_remove_rules,
+       t_get_rules_for,
+       t_get_rules_for_2,
        t_add_get_remove_action,
        t_add_get_remove_actions,
        t_remove_actions_of,
@@ -140,11 +142,7 @@ end_per_group(_Groupname, _Config) ->
 
 init_per_testcase(t_events, Config) ->
     ok = emqx_rule_engine:load_providers(),
-    init_events_counters([ '$events/client_connected'
-                         , '$events/client_disconnected'
-                         , '$events/session_subscribed'
-                         , '$events/session_unsubscribed'
-                         ]),
+    init_events_counters(),
     ok = emqx_rule_registry:register_resource_types([make_simple_resource_type(simple_resource_type)]),
     ok = emqx_rule_registry:add_action(
             #action{name = 'hook-metrics-action', app = ?APP,
@@ -155,7 +153,11 @@ init_per_testcase(t_events, Config) ->
     SQL = "SELECT * FROM \"$events/client_connected\", "
                         "\"$events/client_disconnected\", "
                         "\"$events/session_subscribed\", "
-                        "\"$events/session_unsubscribed\", ",
+                        "\"$events/session_unsubscribed\", "
+                        "\"$events/message_acked\", "
+                        "\"$events/message_delivered\", "
+                        "\"$events/message_dropped\", "
+                        "\"t1\"",
     {ok, Rule} = emqx_rule_engine:create_rule(
                     #{rawsql => SQL,
                       actions => [{'inspect', #{}},
@@ -466,6 +468,29 @@ t_add_get_remove_rules(_Config) ->
     ?assertEqual([], emqx_rule_registry:get_rules()),
     ok.
 
+t_get_rules_for(_Config) ->
+    Len0 = length(emqx_rule_registry:get_rules_for(<<"simple/topic">>)),
+    ok = emqx_rule_registry:add_rules(
+            [make_simple_rule(<<"rule-debug-1">>),
+             make_simple_rule(<<"rule-debug-2">>)]),
+    ?assertEqual(Len0+2, length(emqx_rule_registry:get_rules_for(<<"simple/topic">>))),
+    ok = emqx_rule_registry:remove_rules([<<"rule-debug-1">>, <<"rule-debug-2">>]),
+    ok.
+
+t_get_rules_for_2(_Config) ->
+    Len0 = length(emqx_rule_registry:get_rules_for(<<"simple/1">>)),
+    ok = emqx_rule_registry:add_rules(
+            [make_simple_rule(<<"rule-debug-1">>, <<"select * from \"simple/#\"">>, [<<"simple/#">>]),
+             make_simple_rule(<<"rule-debug-2">>, <<"select * from \"simple/+\"">>, [<<"simple/+">>]),
+             make_simple_rule(<<"rule-debug-3">>, <<"select * from \"simple/+/1\"">>, [<<"simple/+/1">>]),
+             make_simple_rule(<<"rule-debug-4">>, <<"select * from \"simple/1\"">>, [<<"simple/1">>]),
+             make_simple_rule(<<"rule-debug-5">>, <<"select * from \"simple/2,simple/+,simple/3\"">>, [<<"simple/2">>,<<"simple/+">>, <<"simple/3">>]),
+             make_simple_rule(<<"rule-debug-6">>, <<"select * from \"simple/2,simple/3,simple/4\"">>, [<<"simple/2">>,<<"simple/3">>, <<"simple/4">>])
+             ]),
+    ?assertEqual(Len0+4, length(emqx_rule_registry:get_rules_for(<<"simple/1">>))),
+    ok = emqx_rule_registry:remove_rules([<<"rule-debug-1">>, <<"rule-debug-2">>,<<"rule-debug-3">>, <<"rule-debug-4">>,<<"rule-debug-5">>, <<"rule-debug-6">>]),
+    ok.
+
 t_add_get_remove_action(_Config) ->
     ActionName0 = 'action-debug-0',
     Action0 = make_simple_action(ActionName0),
@@ -561,49 +586,49 @@ t_events(_Config) ->
     session_subscribed(Client),
     ct:pal("====== verify t1"),
     message_publish(Client),
-    %ct:pal("====== verify $events/message_delivered"),
-    %message_delivered(Client),
-    %ct:pal("====== verify $events/message_acked"),
-    %message_acked(Client),
+    ct:pal("====== verify $events/message_delivered"),
+    message_delivered(Client),
+    ct:pal("====== verify $events/message_acked"),
+    message_acked(Client),
     ct:pal("====== verify $events/session_unsubscribed"),
     session_unsubscribed(Client),
-    %ct:pal("====== verify $events/message_dropped"),
-    %message_dropped(Client),
+    ct:pal("====== verify $events/message_dropped"),
+    message_dropped(Client),
     ct:pal("====== verify $events/client_disconnected"),
     client_disconnected(Client),
     ok.
 
 message_publish(Client) ->
     emqtt:publish(Client, <<"t1">>, <<"{\"id\": 1, \"name\": \"ha\"}">>, 1),
-    verify_events_counter('t1'),
+    verify_events_counter(<<"t1">>),
     ok.
 client_connected(Client) ->
     {ok, _} = emqtt:connect(Client),
-    verify_events_counter('$events/client_connected'),
+    verify_events_counter(<<"$events/client_connected">>),
     ok.
 client_disconnected(Client) ->
     ok = emqtt:stop(Client),
-    verify_events_counter('$events/client_disconnected'),
+    verify_events_counter(<<"$events/client_disconnected">>),
     ok.
 session_subscribed(Client) ->
     {ok, _, _} = emqtt:subscribe(Client, <<"t1">>, 1),
-    verify_events_counter('$events/session_subscribed'),
+    verify_events_counter(<<"$events/session_subscribed">>),
     ok.
 session_unsubscribed(Client) ->
     {ok, _, _} = emqtt:unsubscribe(Client, <<"t1">>),
-    verify_events_counter('$events/session_unsubscribed'),
+    verify_events_counter(<<"$events/session_unsubscribed">>),
     ok.
 
-%message_delivered(_Client) ->
-%    verify_events_counter('$events/message_delivered'),
-%    ok.
-%message_dropped(Client) ->
-%    message_publish(Client),
-%    verify_events_counter('$events/message_dropped'),
-%    ok.
-%message_acked(_Client) ->
-%    verify_events_counter('$events/message_acked'),
-%    ok.
+message_delivered(_Client) ->
+    verify_events_counter(<<"$events/message_delivered">>),
+    ok.
+message_dropped(Client) ->
+    message_publish(Client),
+    verify_events_counter(<<"$events/message_dropped">>),
+    ok.
+message_acked(_Client) ->
+    verify_events_counter(<<"$events/message_acked">>),
+    ok.
 
 t_match_atom_and_binary(_Config) ->
     ok = emqx_rule_engine:load_providers(),
@@ -611,8 +636,8 @@ t_match_atom_and_binary(_Config) ->
                     <<"t2">>,
                     "SELECT * "
                     "FROM \"$events/client_connected\" "
-                    "WHERE username = 'emqx2' and auth_result = 'success' ",
-                    <<"user:${username}">>),
+                    "WHERE payload.username = 'emqx2' ",
+                    <<"user:${payload.username}">>),
     {ok, Client} = emqtt:start_link([{username, <<"emqx1">>}]),
     {ok, _} = emqtt:connect(Client),
     {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
@@ -641,7 +666,7 @@ t_sqlselect_0(_Config) ->
                         #{<<"payload">> =>
                             <<"{\"cmd\": {\"info\":\"tt\"}}">>,
                           <<"topic">> => <<"t/a">>}})),
-    Sql2 = "select payload.cmd as cmd, event "
+    Sql2 = "select payload.cmd as cmd "
            "from \"t/#\" "
            "where cmd.info = 'tt'",
     ?assertMatch({ok,#{cmd := #{<<"info">> := <<"tt">>}}},
@@ -651,7 +676,7 @@ t_sqlselect_0(_Config) ->
                         #{<<"payload">> =>
                             <<"{\"cmd\": {\"info\":\"tt\"}}">>,
                           <<"topic">> => <<"t/a">>}})),
-    Sql3 = "select payload.cmd as cmd, cmd.info as info, event "
+    Sql3 = "select payload.cmd as cmd, cmd.info as info "
            "from \"t/#\" "
            "where cmd.info = 'tt' and info = 'tt'",
     ?assertMatch({ok,#{cmd := #{<<"info">> := <<"tt">>},
@@ -663,7 +688,7 @@ t_sqlselect_0(_Config) ->
                             <<"{\"cmd\": {\"info\":\"tt\"}}">>,
                           <<"topic">> => <<"t/a">>}})),
     %% cascaded as
-    Sql4 = "select payload.cmd as cmd, cmd.info as meta.info, event "
+    Sql4 = "select payload.cmd as cmd, cmd.info as meta.info "
            "from \"t/#\" "
            "where cmd.info = 'tt' and meta.info = 'tt'",
     ?assertMatch({ok,#{cmd := #{<<"info">> := <<"tt">>},
@@ -680,7 +705,7 @@ t_sqlselect_01(_Config) ->
     TopicRule1 = create_simple_repub_rule(
                     <<"t2">>,
                     "SELECT json_decode(payload) as p, payload "
-                    "FROM \"t3/#, t1\" "
+                    "FROM \"t3/#\", \"t1\" "
                     "WHERE p.x = 1"),
     {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqtt:connect(Client),
@@ -717,7 +742,7 @@ t_sqlselect_02(_Config) ->
     TopicRule1 = create_simple_repub_rule(
                     <<"t2">>,
                     "SELECT * "
-                    "FROM \"t3/#, t1\" "
+                    "FROM \"t3/#\", \"t1\" "
                     "WHERE payload.x = 1"),
     {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqtt:connect(Client),
@@ -784,12 +809,12 @@ t_sqlselect_2(_Config) ->
     TopicRule = create_simple_repub_rule(
                     <<"t2">>,
                     "SELECT * "
-                    "FROM \"#\" "),
+                    "FROM \"t2\" "),
     {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqtt:connect(Client),
     {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
 
-    emqtt:publish(Client, <<"t1">>, <<"{\"x\":1,\"y\":1}">>, 0),
+    emqtt:publish(Client, <<"t2">>, <<"{\"x\":1,\"y\":144}">>, 0),
     Fun = fun() ->
             receive {publish, #{topic := <<"t2">>, payload := _}} ->
                 received_t2
@@ -797,10 +822,9 @@ t_sqlselect_2(_Config) ->
                 received_nothing
             end
           end,
-    case Fun() of
-        received_t2 -> received_nothing = Fun();
-        received_nothing -> ok
-    end,
+    received_t2 = Fun(),
+    received_t2 = Fun(),
+    received_nothing = Fun(),
 
     emqtt:stop(Client),
     emqx_rule_registry:remove_rule(TopicRule).
@@ -812,9 +836,9 @@ t_sqlselect_3(_Config) ->
                     <<"t2">>,
                     "SELECT * "
                     "FROM \"$events/client_connected\" "
-                    "WHERE username = 'emqx1'",
-                    <<"clientid=${clientid}">>),
-    {ok, Client} = emqtt:start_link([{username, <<"emqx0">>}]),
+                    "WHERE payload.username = 'emqx1'",
+                    <<"clientid=${payload.clientid}">>),
+    {ok, Client} = emqtt:start_link([{clientid, <<"emqx0">>}, {username, <<"emqx0">>}]),
     {ok, _} = emqtt:connect(Client),
     {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
     ct:sleep(200),
@@ -1121,6 +1145,16 @@ make_simple_rule(RuleId) when is_binary(RuleId) ->
           actions = [{'inspect', #{}}],
           description = <<"simple rule">>}.
 
+make_simple_rule(RuleId, SQL, ForTopics) when is_binary(RuleId) ->
+    #rule{id = RuleId,
+          rawsql = SQL,
+          for = ForTopics,
+          fields = [<<"*">>],
+          is_foreach = false,
+          conditions = {},
+          actions = [{'inspect', #{}}],
+          description = <<"simple rule">>}.
+
 create_simple_repub_rule(TargetTopic, SQL) ->
     create_simple_repub_rule(TargetTopic, SQL, <<"${payload}">>).
 
@@ -1170,17 +1204,23 @@ on_simple_resource_type_destroy(_Id, #{}) -> ok.
 on_simple_resource_type_status(_Id, #{}, #{}) -> #{is_alive => true}.
 
 hook_metrics_action(_Id, _Params) ->
-    fun(_Data = #{topic := Topic}, _Events) ->
+    fun(Data = #{topic := Topic}, _Events) ->
+        ct:pal("applying hook_metrics_action: ~p", [Data]),
         ets:update_counter(?HOOK_METRICS_TAB, Topic, 1, {Topic, 1})
     end.
 
 verify_events_counter(Topic) ->
     ct:sleep(50),
-    ?assert(ets:lookup_element(?HOOK_METRICS_TAB, Topic, 2) > 0).
+    Counter = case ets:lookup(?HOOK_METRICS_TAB, Topic) of
+                [] ->
+                    ct:pal("HOOK_METRICS_TAB: ~p", [ets:tab2list(?HOOK_METRICS_TAB)]),
+                    0;
+                [{_, C}] -> C
+              end,
+    ?assert(Counter > 0).
 
-init_events_counters(Topics) ->
-    ets:new(?HOOK_METRICS_TAB, [named_table, set, public]),
-    [ets:insert(?HOOK_METRICS_TAB, {H, 0}) || H <- Topics].
+init_events_counters() ->
+    ets:new(?HOOK_METRICS_TAB, [named_table, set, public]).
 
 %%------------------------------------------------------------------------------
 %% Start Apps
@@ -1224,6 +1264,18 @@ deps_path(App, RelativePath) ->
 local_path(RelativePath) ->
     deps_path(emqx_rule_engine, RelativePath).
 
+set_special_configs(emqx_rule_engine) ->
+    application:set_env(emqx_rule_engine, ignore_sys_message, true),
+    application:set_env(emqx_rule_engine, events,
+                       [{'client.connected',on,1},
+                        {'client.disconnected',on,1},
+                        {'session.subscribed',on,1},
+                        {'session.unsubscribed',on,1},
+                        {'message.acked',on,1},
+                        {'message.dropped',on,1},
+                        {'message.delivered',on,1}
+                       ]),
+    ok;
 set_special_configs(_App) ->
     ok.
 

@@ -1,25 +1,9 @@
--module(emqx_topic_SUITE).
+-module(emqx_rule_events_SUITE).
 
 -compile(export_all).
 -compile(nowarn_export_all).
 
 -include_lib("eunit/include/eunit.hrl").
-
--import(emqx_topic,
-        [ wildcard/1
-        , match/2
-        , validate/1
-        , triples/1
-        , prepend/2
-        , join/1
-        , words/1
-        , systop/1
-        , feed_var/3
-        , parse/1
-        , parse/2
-        ]).
-
--define(N, 100000).
 
 all() -> emqx_ct:all(?MODULE).
 

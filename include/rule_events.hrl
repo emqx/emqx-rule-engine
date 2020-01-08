@@ -14,14 +14,30 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--define(COLUMNS(EVENT), [Key || {Key, ExampleVal} <- ?EG_COLUMNS(EVENT)]).
+-define(COLUMNS(EVENT), [Key || {Key, _ExampleVal} <- ?EG_COLUMNS(EVENT)]).
 
 -define(EG_COLUMNS(EVENT),
         case EVENT of
         'message.publish' ->
-                [ {<<"id">>, emqx_guid:gen()}
+                [ {<<"id">>, emqx_guid:to_hexstr(emqx_guid:gen())}
                 , {<<"clientid">>, <<"c_emqx">>}
                 , {<<"username">>, <<"u_emqx">>}
+                , {<<"payload">>, <<"{\"msg\": \"hello\"}">>}
+                , {<<"peerhost">>, <<"192.168.0.10">>}
+                , {<<"topic">>, <<"t/a">>}
+                , {<<"qos">>, 1}
+                , {<<"flags">>, #{}}
+                , {<<"headers">>, undefined}
+                , {<<"timestamp">>, erlang:system_time(millisecond)}
+                , {<<"node">>, node()}
+                ];
+        'message.delivered' ->
+                [ {<<"event">>, 'message.delivered'}
+                , {<<"id">>, emqx_guid:to_hexstr(emqx_guid:gen())}
+                , {<<"from_clientid">>, <<"c_emqx_1">>}
+                , {<<"from_username">>, <<"u_emqx_1">>}
+                , {<<"clientid">>, <<"c_emqx_2">>}
+                , {<<"username">>, <<"u_emqx_2">>}
                 , {<<"payload">>, <<"{\"msg\": \"hello\"}">>}
                 , {<<"peerhost">>, <<"192.168.0.10">>}
                 , {<<"topic">>, <<"t/a">>}
@@ -30,32 +46,15 @@
                 , {<<"timestamp">>, erlang:system_time(millisecond)}
                 , {<<"node">>, node()}
                 ];
-        'message.delivered' ->
-                [ {<<"event">>, 'message.delivered'}
-                , {<<"id">>, emqx_guid:gen()}
-                , {<<"from_clientid">>, <<"c_emqx_1">>}
-                , {<<"from_username">>, <<"u_emqx_1">>}
-                , {<<"clientid">>, <<"c_emqx_2">>}
-                , {<<"username">>, <<"u_emqx_2">>}
-                , {<<"payload">>, <<"{\"msg\": \"hello\"}">>}
-                , {<<"peername">>, <<"192.168.0.10:56431">>}
-                , {<<"sockname">>, <<"0.0.0.0:1883">>}
-                , {<<"topic">>, <<"t/a">>}
-                , {<<"qos">>, 1}
-                , {<<"flags">>, #{}}
-                , {<<"timestamp">>, erlang:system_time(millisecond)}
-                , {<<"node">>, node()}
-                ];
         'message.acked' ->
                 [ {<<"event">>, 'message.acked'}
-                , {<<"id">>, emqx_guid:gen()}
+                , {<<"id">>, emqx_guid:to_hexstr(emqx_guid:gen())}
                 , {<<"from_clientid">>, <<"c_emqx_1">>}
                 , {<<"from_username">>, <<"u_emqx_1">>}
                 , {<<"clientid">>, <<"c_emqx_2">>}
                 , {<<"username">>, <<"u_emqx_2">>}
                 , {<<"payload">>, <<"{\"msg\": \"hello\"}">>}
-                , {<<"peername">>, <<"192.168.0.10:56431">>}
-                , {<<"sockname">>, <<"0.0.0.0:1883">>}
+                , {<<"peerhost">>, <<"192.168.0.10">>}
                 , {<<"topic">>, <<"t/a">>}
                 , {<<"qos">>, 1}
                 , {<<"flags">>, #{}}
@@ -64,7 +63,7 @@
                 ];
         'message.dropped' ->
                 [ {<<"event">>, 'message.dropped'}
-                , {<<"id">>, emqx_guid:gen()}
+                , {<<"id">>, emqx_guid:to_hexstr(emqx_guid:gen())}
                 , {<<"reason">>, no_subscribers}
                 , {<<"clientid">>, <<"c_emqx">>}
                 , {<<"username">>, <<"u_emqx">>}
@@ -80,15 +79,13 @@
                 [ {<<"event">>, 'client.connected'}
                 , {<<"clientid">>, <<"c_emqx">>}
                 , {<<"username">>, <<"u_emqx">>}
-                , {<<"auth_result">>, success}
                 , {<<"mountpoint">>, undefined}
                 , {<<"peername">>, <<"192.168.0.10:56431">>}
                 , {<<"sockname">>, <<"0.0.0.0:1883">>}
-                , {<<"proto_name">>, mqtt}
+                , {<<"proto_name">>, <<"MQTT">>}
                 , {<<"proto_ver">>, 5}
                 , {<<"keepalive">>, 60}
                 , {<<"clean_start">>, true}
-                , {<<"connack">>, 0}
                 , {<<"expiry_interval">>, 3600}
                 , {<<"is_bridge">>, false}
                 , {<<"connected_at">>, erlang:system_time(second)}
@@ -110,8 +107,7 @@
                 [ {<<"event">>, 'session.subscribed'}
                 , {<<"clientid">>, <<"c_emqx">>}
                 , {<<"username">>, <<"u_emqx">>}
-                , {<<"peername">>, <<"192.168.0.10:56431">>}
-                , {<<"sockname">>, <<"0.0.0.0:1883">>}
+                , {<<"peerhost">>, <<"192.168.0.10">>}
                 , {<<"topic">>, <<"t/a">>}
                 , {<<"qos">>, 1}
                 , {<<"timestamp">>, erlang:system_time(millisecond)}
@@ -121,8 +117,7 @@
                 [ {<<"event">>, 'session.unsubscribed'}
                 , {<<"clientid">>, <<"c_emqx">>}
                 , {<<"username">>, <<"u_emqx">>}
-                , {<<"peername">>, <<"192.168.0.10:56431">>}
-                , {<<"sockname">>, <<"0.0.0.0:1883">>}
+                , {<<"peerhost">>, <<"192.168.0.10">>}
                 , {<<"topic">>, <<"t/a">>}
                 , {<<"qos">>, 1}
                 , {<<"timestamp">>, erlang:system_time(millisecond)}
@@ -159,7 +154,6 @@
         'client.connected' ->
             [ {<<"clientid">>, <<"c_emqx">>}
             , {<<"username">>, <<"u_emqx">>}
-            , {<<"auth_result">>, <<"success">>}
             , {<<"peername">>, <<"127.0.0.1:52918">>}
             ];
         'client.disconnected' ->
@@ -270,27 +264,27 @@
         case EVENT_TOPIC of
         <<"$events/", _/binary>> ->
             EventName = emqx_rule_events:event_name(EVENT_TOPIC),
-            #{flags => #{sys => true, event => true},
-              from => <<"emqx_events">>,
-              headers => #{allow_publish => true,
-                           username => <<"emqx_events">>},
-              id => <<0,5,137,164,41,233,87,47,180,75,0,0,5,124,0,1>>,
+            #{id => emqx_guid:to_hexstr(emqx_guid:gen()),
+              clientid => <<"emqx_events">>,
+              username => <<"emqx_events">>,
               payload => maps:from_list(?EG_COLUMNS(EventName)),
+              peerhost => <<"127.0.0.1">>,
+              topic => EVENT_TOPIC,
               qos => 1,
+              flags => #{sys => true, event => true},
               timestamp => emqx_rule_utils:now_ms(),
-              node => node(),
-              topic => EVENT_TOPIC};
+              node => node()
+              };
         _PublishTopic ->
-              #{flags => #{dup => false,retain => false},
-                from => <<"c_emqx">>,
-                headers =>
-                    #{allow_publish => true,
-                      peerhost => {127,0,0,1},
-                      username => <<"u_emqx">>},
-                id => <<0,5,137,164,41,233,87,47,180,75,0,0,5,124,0,1>>,
-                payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,
-                qos => 1,
-                timestamp => emqx_rule_utils:now_ms(),
-                node => node(),
-                topic => <<"t1">>}
+            #{id => emqx_guid:to_hexstr(emqx_guid:gen()),
+              clientid => <<"c_emqx">>,
+              username => <<"u_emqx">>,
+              payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,
+              peerhost => <<"127.0.0.1">>,
+              topic => <<"t/a">>,
+              qos => 1,
+              flags => #{sys => true, event => true},
+              timestamp => emqx_rule_utils:now_ms(),
+              node => node()
+              }
         end).
