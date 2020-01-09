@@ -192,7 +192,7 @@
            description => #{en => <<"message delivered">>, zh => <<"消息投递"/utf8>>},
            test_columns => ?TEST_COLUMNS('message.delivered'),
            columns => ?COLUMNS('message.delivered'),
-           sql_example => <<"SELECT payload.topic as topic FROM \"$events/message_delivered\" WHERE topic =~ 't/#'">>
+           sql_example => <<"SELECT * FROM \"$events/message_delivered\" WHERE topic =~ 't/#'">>
         }).
 
 -define(EVENT_INFO_MESSAGE_ACKED,
@@ -201,7 +201,7 @@
            description => #{en => <<"message acked">>, zh => <<"消息应答"/utf8>>},
            test_columns => ?TEST_COLUMNS('message.acked'),
            columns => ?COLUMNS('message.acked'),
-           sql_example => <<"SELECT payload.topic as topic FROM \"$events/message_acked\" WHERE topic =~ 't/#'">>
+           sql_example => <<"SELECT * FROM \"$events/message_acked\" WHERE topic =~ 't/#'">>
         }).
 
 -define(EVENT_INFO_MESSAGE_DROPPED,
@@ -210,7 +210,7 @@
            description => #{en => <<"message dropped">>, zh => <<"消息丢弃"/utf8>>},
            test_columns => ?TEST_COLUMNS('message.dropped'),
            columns => ?COLUMNS('message.dropped'),
-           sql_example => <<"SELECT payload.topic as topic FROM \"$events/message_dropped\" WHERE topic =~ 't/#'">>
+           sql_example => <<"SELECT * FROM \"$events/message_dropped\" WHERE topic =~ 't/#'">>
         }).
 
 -define(EVENT_INFO_CLIENT_CONNECTED,
@@ -237,7 +237,7 @@
            description => #{en => <<"session subscribed">>, zh => <<"会话订阅完成"/utf8>>},
            test_columns => ?TEST_COLUMNS('session.subscribed'),
            columns => ?COLUMNS('session.subscribed'),
-           sql_example => <<"SELECT * FROM \"$events/session_subscribed\" WHERE payload.topic =~ 't/#'">>
+           sql_example => <<"SELECT * FROM \"$events/session_subscribed\" WHERE topic =~ 't/#'">>
         }).
 
 -define(EVENT_INFO_SESSION_UNSUBSCRIBED,
@@ -246,7 +246,7 @@
            description => #{en => <<"session unsubscribed">>, zh => <<"会话取消订阅完成"/utf8>>},
            test_columns => ?TEST_COLUMNS('session.unsubscribed'),
            columns => ?COLUMNS('session.unsubscribed'),
-           sql_example => <<"SELECT * FROM \"$events/session_unsubscribed\" WHERE payload.topic =~ 't/#'">>
+           sql_example => <<"SELECT * FROM \"$events/session_unsubscribed\" WHERE topic =~ 't/#'">>
         }).
 
 -define(EVENT_INFO,

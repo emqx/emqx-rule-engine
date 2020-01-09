@@ -600,44 +600,44 @@ t_events(_Config) ->
 
 message_publish(Client) ->
     emqtt:publish(Client, <<"t1">>, <<"{\"id\": 1, \"name\": \"ha\"}">>, 1),
-    verify_events_counter(<<"t1">>),
+    verify_events_counter('message.publish'),
     ok.
 client_connected(Client) ->
     {ok, _} = emqtt:connect(Client),
-    verify_events_counter(<<"$events/client_connected">>),
+    verify_events_counter('client.connected'),
     ok.
 client_disconnected(Client) ->
     ok = emqtt:stop(Client),
-    verify_events_counter(<<"$events/client_disconnected">>),
+    verify_events_counter('client.disconnected'),
     ok.
 session_subscribed(Client) ->
     {ok, _, _} = emqtt:subscribe(Client, <<"t1">>, 1),
-    verify_events_counter(<<"$events/session_subscribed">>),
+    verify_events_counter('session.subscribed'),
     ok.
 session_unsubscribed(Client) ->
     {ok, _, _} = emqtt:unsubscribe(Client, <<"t1">>),
-    verify_events_counter(<<"$events/session_unsubscribed">>),
+    verify_events_counter('session.unsubscribed'),
     ok.
 
 message_delivered(_Client) ->
-    verify_events_counter(<<"$events/message_delivered">>),
+    verify_events_counter('message.delivered'),
     ok.
 message_dropped(Client) ->
     message_publish(Client),
-    verify_events_counter(<<"$events/message_dropped">>),
+    verify_events_counter('message.dropped'),
     ok.
 message_acked(_Client) ->
-    verify_events_counter(<<"$events/message_acked">>),
+    verify_events_counter('message.acked'),
     ok.
 
 t_match_atom_and_binary(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     TopicRule = create_simple_repub_rule(
                     <<"t2">>,
-                    "SELECT * "
+                    "SELECT connected_at as ts, * "
                     "FROM \"$events/client_connected\" "
-                    "WHERE payload.username = 'emqx2' ",
-                    <<"user:${payload.username}">>),
+                    "WHERE username = 'emqx2' ",
+                    <<"user:${ts}">>),
     {ok, Client} = emqtt:start_link([{username, <<"emqx1">>}]),
     {ok, _} = emqtt:connect(Client),
     {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
@@ -646,7 +646,8 @@ t_match_atom_and_binary(_Config) ->
     {ok, _} = emqtt:connect(Client2),
     receive {publish, #{topic := T, payload := Payload}} ->
         ?assertEqual(<<"t2">>, T),
-        ?assertEqual(<<"user:emqx2">>, Payload)
+        <<"user:", ConnAt/binary>> = Payload,
+        binary_to_integer(ConnAt)
     after 1000 ->
         ct:fail(wait_for_t2)
     end,
@@ -836,8 +837,8 @@ t_sqlselect_3(_Config) ->
                     <<"t2">>,
                     "SELECT * "
                     "FROM \"$events/client_connected\" "
-                    "WHERE payload.username = 'emqx1'",
-                    <<"clientid=${payload.clientid}">>),
+                    "WHERE username = 'emqx1'",
+                    <<"clientid=${clientid}">>),
     {ok, Client} = emqtt:start_link([{clientid, <<"emqx0">>}, {username, <<"emqx0">>}]),
     {ok, _} = emqtt:connect(Client),
     {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
@@ -1204,14 +1205,14 @@ on_simple_resource_type_destroy(_Id, #{}) -> ok.
 on_simple_resource_type_status(_Id, #{}, #{}) -> #{is_alive => true}.
 
 hook_metrics_action(_Id, _Params) ->
-    fun(Data = #{topic := Topic}, _Events) ->
+    fun(Data = #{event := EventName}, _Events) ->
         ct:pal("applying hook_metrics_action: ~p", [Data]),
-        ets:update_counter(?HOOK_METRICS_TAB, Topic, 1, {Topic, 1})
+        ets:update_counter(?HOOK_METRICS_TAB, EventName, 1, {EventName, 1})
     end.
 
-verify_events_counter(Topic) ->
+verify_events_counter(EventName) ->
     ct:sleep(50),
-    Counter = case ets:lookup(?HOOK_METRICS_TAB, Topic) of
+    Counter = case ets:lookup(?HOOK_METRICS_TAB, EventName) of
                 [] ->
                     ct:pal("HOOK_METRICS_TAB: ~p", [ets:tab2list(?HOOK_METRICS_TAB)]),
                     0;

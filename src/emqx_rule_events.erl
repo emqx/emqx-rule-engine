@@ -255,7 +255,7 @@ may_publish_and_apply(EventType, EventMsg, #{enabled := IsEnabled, qos := QoS}) 
             EventTopic = event_topic(EventType),
             Msg = make_msg(QoS, EventTopic, Payload),
             IsEnabled andalso emqx_broker:safe_publish(Msg),
-            emqx_rule_runtime:apply_rules(emqx_rule_registry:get_rules_for(EventTopic), rule_input(Msg));
+            emqx_rule_runtime:apply_rules(emqx_rule_registry:get_rules_for(EventTopic), EventMsg);
         {error, _Reason} ->
             ?LOG(error, "Failed to encode event msg for ~p, msg: ~p", [EventType, EventMsg])
     end.
@@ -270,7 +270,8 @@ event_topic(Name) when is_binary(Name) ->
     iolist_to_binary(["$events/", Name]).
 
 rule_input(Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, headers = Headers, payload = Payload, timestamp = Timestamp}) ->
-    #{id => emqx_guid:to_hexstr(Id),
+    #{event => 'message.publish',
+      id => emqx_guid:to_hexstr(Id),
       clientid => ClientId,
       username => emqx_message:get_header(username, Message, undefined),
       payload => Payload,

@@ -103,7 +103,7 @@ select_where(#select{where = Where}) ->
     Where.
 
 preprocess(#select{fields = Fields, is_foreach = IsForeach, doeach = DoEach, incase = InCase, from = Hooks, where = Conditions}) ->
-    {SelectedFileds, KnownColmuns1} = preprocess_columns(Fields, fixed_columns('message.publish')),
+    {SelectedFileds, KnownColmuns1} = preprocess_columns(Fields, fixed_columns()),
     {SelectedEach, KnownColmuns2} = preprocess_columns(DoEach, KnownColmuns1),
     #select{is_foreach = IsForeach,
             fields = SelectedFileds,
@@ -206,8 +206,15 @@ is_number_str(Str) when is_binary(Str) ->
 is_number_str(_NonStr) ->
     false.
 
-fixed_columns(EventName) ->
-    ?COLUMNS(EventName) ++ [<<"item">>].
+fixed_columns() ->
+    ?COLUMNS('message.publish') ++
+    ?COLUMNS('message.acked') ++
+    ?COLUMNS('message.dropped') ++
+    ?COLUMNS('client.connected') ++
+    ?COLUMNS('client.disconnected') ++
+    ?COLUMNS('session.subscribed') ++
+    ?COLUMNS('session.unsubscribed') ++
+    [<<"item">>].
 
 transform_alias(Alias) ->
     parse_nested(unquote(Alias)).
