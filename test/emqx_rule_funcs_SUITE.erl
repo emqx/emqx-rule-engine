@@ -1,5 +1,5 @@
 %%--------------------------------------------------------------------
-%% Copyright (c) 2019 EMQ Technologies Co., Ltd. All Rights Reserved.
+%% Copyright (c) 2020 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -23,6 +23,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
 
+-import(emqx_rule_events, [rule_input/1]).
+
 -define(PROPTEST(F), ?assert(proper:quickcheck(F()))).
 %%-define(PROPTEST(F), ?assert(proper:quickcheck(F(), [{on_output, fun ct:print/2}]))).
 
@@ -33,7 +35,7 @@
 t_msgid(_) ->
     Msg = message(),
     ?assertEqual(undefined, apply_func(msgid, [], #{})),
-    ?assertEqual(emqx_guid:to_hexstr(emqx_message:id(Msg)), apply_func(msgid, [], Msg)).
+    ?assertEqual(emqx_guid:to_hexstr(emqx_message:id(Msg)), apply_func(msgid, [], rule_input(Msg))).
 
 t_qos(_) ->
     ?assertEqual(undefined, apply_func(qos, [], #{})),
@@ -61,16 +63,16 @@ t_clientid(_) ->
 t_clientip(_) ->
     Msg = emqx_message:set_header(peerhost, {127,0,0,1}, message()),
     ?assertEqual(undefined, apply_func(clientip, [], #{})),
-    ?assertEqual(<<"127.0.0.1">>, apply_func(clientip, [], Msg)).
+    ?assertEqual(<<"127.0.0.1">>, apply_func(clientip, [], rule_input(Msg))).
 
 t_peerhost(_) ->
     Msg = emqx_message:set_header(peerhost, {127,0,0,1}, message()),
     ?assertEqual(undefined, apply_func(peerhost, [], #{})),
-    ?assertEqual(<<"127.0.0.1">>, apply_func(peerhost, [], Msg)).
+    ?assertEqual(<<"127.0.0.1">>, apply_func(peerhost, [], rule_input(Msg))).
 
 t_username(_) ->
     Msg = emqx_message:set_header(username, <<"feng">>, message()),
-    ?assertEqual(<<"feng">>, apply_func(username, [], Msg)).
+    ?assertEqual(<<"feng">>, apply_func(username, [], rule_input(Msg))).
 
 t_payload(_) ->
     Input = emqx_message:to_map(message()),
@@ -320,7 +322,7 @@ apply_func(Fun, Args) when is_function(Fun) ->
 apply_func(Name, Args, Input) when is_map(Input) ->
     apply_func(apply_func(Name, Args), [Input]);
 apply_func(Name, Args, Msg) ->
-    apply_func(Name, Args, emqx_rule_runtime:columns(emqx_message:to_map(Msg))).
+    apply_func(Name, Args, emqx_message:to_map(Msg)).
 
 message() ->
     emqx_message:set_flags(#{dup => false},

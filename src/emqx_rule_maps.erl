@@ -1,5 +1,5 @@
 %%--------------------------------------------------------------------
-%% Copyright (c) 2019 EMQ Technologies Co., Ltd. All Rights Reserved.
+%% Copyright (c) 2020 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -29,6 +29,12 @@
 nested_get(Key, Map) ->
     nested_get(Key, Map, undefined).
 
+nested_get(Key, Data, Default) when is_binary(Data) ->
+    try jsx:decode(Data, [return_maps]) of
+        Map -> nested_get(Key, Map, Default)
+    catch
+        _:_ -> Default
+    end;
 nested_get(_Key, Map, Default) when not is_map(Map) ->
     Default;
 nested_get(Key, Map, Default) when not is_list(Key) ->

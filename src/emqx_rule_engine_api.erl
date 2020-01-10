@@ -1,5 +1,5 @@
 %%--------------------------------------------------------------------
-%% Copyright (c) 2019 EMQ Technologies Co., Ltd. All Rights Reserved.
+%% Copyright (c) 2020 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -229,18 +229,8 @@ delete_rule(#{id := Id}, _Params) ->
 %% Actions API
 %%------------------------------------------------------------------------------
 
-list_actions(#{}, Params) ->
-    case proplists:get_value(<<"for">>, Params) of
-        undefined ->
-            return_all(emqx_rule_registry:get_actions());
-        Hook ->
-            try binary_to_existing_atom(Hook, utf8) of
-                Hook0 -> return_all(
-                            sort_by_title(action,
-                                emqx_rule_registry:get_actions_for(Hook0)))
-            catch _:badarg -> return({error, 400, ?ERR_NO_HOOK(Hook)})
-            end
-    end.
+list_actions(#{}, _Params) ->
+    return_all(emqx_rule_registry:get_actions()).
 
 show_action(#{name := Name}, _Params) ->
     reply_with(fun emqx_rule_registry:find_action/1, Name).

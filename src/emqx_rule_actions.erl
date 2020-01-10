@@ -1,5 +1,5 @@
 %%--------------------------------------------------------------------
-%% Copyright (c) 2019 EMQ Technologies Co., Ltd. All Rights Reserved.
+%% Copyright (c) 2020 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -128,20 +128,22 @@ on_action_create_republish(Id, #{<<"target_topic">> := TargetTopic, <<"target_qo
             ?LOG(error, "[republish] recursively republish detected, msg topic: ~p, target topic: ~p",
                  [Topic, TargetTopic]),
             error({recursive_republish, Envs});
-        (Selected, #{qos := QoS, flags := Flags, headers := Headers}) ->
+        (Selected, #{qos := QoS, flags := Flags}) ->
             ?LOG(debug, "[republish] republish to: ~p, Payload: ~p",
                 [TargetTopic, Selected]),
             emqx_broker:safe_publish(
-                #message{
+                emqx_message:set_headers(
+                  #{republish_by => Id},
+                  #message{
                     id = emqx_guid:gen(),
                     qos = if TargetQoS =:= -1 -> QoS; true -> TargetQoS end,
                     from = Id,
                     flags = Flags,
-                    headers = Headers#{republish_by => Id},
                     topic = emqx_rule_utils:proc_tmpl(TopicTks, Selected),
                     payload = emqx_rule_utils:proc_tmpl(PayloadTks, Selected),
                     timestamp = erlang:timestamp()
-                });
+                 })
+            );
         %% in case this is not a "message.publish" request
         (Selected, _Envs) ->
             ?LOG(debug, "[republish] republish to: ~p, Payload: ~p",

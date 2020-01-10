@@ -1,5 +1,5 @@
 %%--------------------------------------------------------------------
-%% Copyright (c) 2019 EMQ Technologies Co., Ltd. All Rights Reserved.
+%% Copyright (c) 2020 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -102,9 +102,6 @@ prop_get_put_value() ->
             begin
                 Val =:= get_value(Key, put_value(Key, Val, #{}))
             end).
-
-% t_unsafe_atom_key_map(_) ->
-%     error('TODO').
 
 all() ->
     IsTestCase = fun("t_" ++ _) -> true; (_) -> false end,

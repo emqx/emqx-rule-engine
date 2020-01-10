@@ -1,5 +1,5 @@
 %%--------------------------------------------------------------------
-%% Copyright (c) 2019 EMQ Technologies Co., Ltd. All Rights Reserved.
+%% Copyright (c) 2020 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -29,8 +29,7 @@
         , select_where/1
         ]).
 
--export([ hook/1
-        , unquote/1
+-export([ unquote/1
         ]).
 
 -import(proplists, [ get_value/2
@@ -104,14 +103,13 @@ select_where(#select{where = Where}) ->
     Where.
 
 preprocess(#select{fields = Fields, is_foreach = IsForeach, doeach = DoEach, incase = InCase, from = Hooks, where = Conditions}) ->
-    Froms = [hook(unquote(H)) || H <- Hooks],
-    {SelectedFileds, KnownColmuns1} = preprocess_columns(Fields, fixed_columns(Froms)),
+    {SelectedFileds, KnownColmuns1} = preprocess_columns(Fields, fixed_columns()),
     {SelectedEach, KnownColmuns2} = preprocess_columns(DoEach, KnownColmuns1),
     #select{is_foreach = IsForeach,
             fields = SelectedFileds,
             doeach = SelectedEach,
             incase = preprocess_condition(InCase, KnownColmuns2),
-            from   = Froms,
+            from   = [unquote(H) || H <- Hooks],
             where  = preprocess_condition(Conditions, KnownColmuns2)}.
 
 preprocess_columns(Fields, KnownColumns) ->
@@ -208,8 +206,15 @@ is_number_str(Str) when is_binary(Str) ->
 is_number_str(_NonStr) ->
     false.
 
-fixed_columns(Columns) when is_list(Columns) ->
-    lists:flatten([?COLUMNS(Col) || Col <- Columns]) ++ [<<"item">>].
+fixed_columns() ->
+    ?COLUMNS('message.publish') ++
+    ?COLUMNS('message.acked') ++
+    ?COLUMNS('message.dropped') ++
+    ?COLUMNS('client.connected') ++
+    ?COLUMNS('client.disconnected') ++
+    ?COLUMNS('session.subscribed') ++
+    ?COLUMNS('session.unsubscribed') ++
+    [<<"item">>].
 
 transform_alias(Alias) ->
     parse_nested(unquote(Alias)).
@@ -229,26 +234,3 @@ unquote(Topic) ->
 
 head([H | _]) -> H;
 head(Var) -> Var.
-
-hook(<<"client.connected">>) ->
-    'client.connected';
-hook(<<"client.disconnected">>) ->
-    'client.disconnected';
-hook(<<"client.subscribe">>) ->
-    'client.subscribe';
-hook(<<"client.unsubscribe">>) ->
-    'client.unsubscribe';
-hook(<<"session.subscribed">>) ->
-    'session.subscribed';
-hook(<<"session.unsubscribed">>) ->
-    'session.unsubscribed';
-hook(<<"message.publish">>) ->
-    'message.publish';
-hook(<<"message.delivered">>) ->
-    'message.delivered';
-hook(<<"message.acked">>) ->
-    'message.acked';
-hook(<<"message.dropped">>) ->
-    'message.dropped';
-hook(EventType) ->
-    error({unknown_event_type, EventType}).

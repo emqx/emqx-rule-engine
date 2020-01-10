@@ -1,5 +1,5 @@
 %%--------------------------------------------------------------------
-%% Copyright (c) 2019 EMQ Technologies Co., Ltd. All Rights Reserved.
+%% Copyright (c) 2020 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -32,12 +32,13 @@ start(_Type, _Args) ->
     ok = emqx_rule_engine:refresh_resources(),
     ok = emqx_rule_engine:refresh_rules(),
     ok = emqx_rule_engine_cli:load(),
-    ok = emqx_rule_runtime:start(env()),
+    ok = emqx_rule_events:load(env()),
     {ok, Sup}.
 
 stop(_State) ->
-    ok = emqx_rule_runtime:stop(env()),
+    ok = emqx_rule_events:unload(env()),
     ok = emqx_rule_engine_cli:unload().
 
 env() ->
-    maps:from_list(application:get_all_env(?APP)).
+    application:get_all_env(?APP)
+    .

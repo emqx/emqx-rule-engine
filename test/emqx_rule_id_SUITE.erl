@@ -1,5 +1,5 @@
 %%--------------------------------------------------------------------
-%% Copyright (c) 2019 EMQ Technologies Co., Ltd. All Rights Reserved.
+%% Copyright (c) 2020 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -23,6 +23,6 @@
 
 all() -> emqx_ct:all(?MODULE).
 
-% t_gen(_) ->
-%     error('TODO').
-
+t_gen(_) ->
+    ?assertEqual(10, length(emqx_rule_id:gen(10))),
+    ?assertEqual(20, length(emqx_rule_id:gen(20))).

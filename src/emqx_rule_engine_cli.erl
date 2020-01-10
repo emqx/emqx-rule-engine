@@ -1,5 +1,5 @@
 %%--------------------------------------------------------------------
-%% Copyright (c) 2019 EMQ Technologies Co., Ltd. All Rights Reserved.
+%% Copyright (c) 2020 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -113,10 +113,8 @@ rules(_usage) ->
 %% 'rule-actions' command
 %%-----------------------------------------------------------------------------
 
-actions(["list" | Params]) ->
-    with_opts(fun({Opts, _}) ->
-            print_all(get_actions(get_value(eventype, Opts)))
-        end, Params, ?OPTSPEC_ACTION_TYPE, {'rule-actions', list});
+actions(["list"]) ->
+    print_all(get_actions());
 
 actions(["show", ActionId]) ->
     print_with(fun emqx_rule_registry:find_action/1, ?RAISE(list_to_existing_atom(ActionId), {not_found, ActionId}));
@@ -289,10 +287,8 @@ parse_action_params(Actions) ->
             end, jsx:decode(Actions, [return_maps])),
         {invalid_action_params, _REASON_}).
 
-get_actions(undefined) ->
-    emqx_rule_registry:get_actions();
-get_actions(Hook) ->
-    emqx_rule_registry:get_actions_for(Hook).
+get_actions() ->
+    emqx_rule_registry:get_actions().
 
 get_rule_metrics(Id) ->
     [maps:put(node, Node, rpc:call(Node, emqx_rule_metrics, get_rule_metrics, [Id]))
