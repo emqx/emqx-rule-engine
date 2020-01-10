@@ -65,10 +65,4 @@ sql_test_action() ->
     end.
 
 fill_default_values(Event, Context) ->
-    case Event of
-        <<"$events/", _/binary>> ->
-            ExamEVS = #{payload := ExamPayload} = ?EG_ENVS(Event),
-            ExamEVS#{payload => maps:merge(ExamPayload, Context)};
-        _ ->
-            maps:merge(?EG_ENVS(Event), Context)
-    end.
+    maps:merge(?EG_ENVS(Event), Context).

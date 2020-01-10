@@ -90,6 +90,7 @@ groups() ->
        t_sqlselect_1,
        t_sqlselect_2,
        t_sqlselect_3,
+       t_sqlparse_event_1,
        t_sqlparse_foreach_1,
        t_sqlparse_foreach_2,
        t_sqlparse_foreach_3,
@@ -861,6 +862,14 @@ t_sqlselect_3(_Config) ->
 
     emqtt:stop(Client),
     emqx_rule_registry:remove_rule(TopicRule).
+
+t_sqlparse_event_1(_Config) ->
+    Sql = "select topic as tp "
+          "from \"$events/session_subscribed\" ",
+    ?assertMatch({ok,#{tp := <<"t/tt">>}},
+        emqx_rule_sqltester:test(
+        #{<<"rawsql">> => Sql,
+            <<"ctx">> => #{<<"topic">> => <<"t/tt">>}})).
 
 t_sqlparse_foreach_1(_Config) ->
     %% Verify foreach with and without 'AS'
