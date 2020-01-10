@@ -23,6 +23,6 @@
 
 all() -> emqx_ct:all(?MODULE).
 
-% t_gen(_) ->
-%     error('TODO').
-
+t_gen(_) ->
+    ?assertEqual(10, length(emqx_rule_id:gen(10))),
+    ?assertEqual(20, length(emqx_rule_id:gen(20))).

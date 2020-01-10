@@ -128,20 +128,22 @@ on_action_create_republish(Id, #{<<"target_topic">> := TargetTopic, <<"target_qo
             ?LOG(error, "[republish] recursively republish detected, msg topic: ~p, target topic: ~p",
                  [Topic, TargetTopic]),
             error({recursive_republish, Envs});
-        (Selected, #{qos := QoS, flags := Flags, headers := Headers}) ->
+        (Selected, #{qos := QoS, flags := Flags}) ->
             ?LOG(debug, "[republish] republish to: ~p, Payload: ~p",
                 [TargetTopic, Selected]),
             emqx_broker:safe_publish(
-                #message{
+                emqx_message:set_headers(
+                  #{republish_by => Id},
+                  #message{
                     id = emqx_guid:gen(),
                     qos = if TargetQoS =:= -1 -> QoS; true -> TargetQoS end,
                     from = Id,
                     flags = Flags,
-                    headers = Headers#{republish_by => Id},
                     topic = emqx_rule_utils:proc_tmpl(TopicTks, Selected),
                     payload = emqx_rule_utils:proc_tmpl(PayloadTks, Selected),
                     timestamp = erlang:timestamp()
-                });
+                 })
+            );
         %% in case this is not a "message.publish" request
         (Selected, _Envs) ->
             ?LOG(debug, "[republish] republish to: ~p, Payload: ~p",

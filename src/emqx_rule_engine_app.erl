@@ -32,12 +32,13 @@ start(_Type, _Args) ->
     ok = emqx_rule_engine:refresh_resources(),
     ok = emqx_rule_engine:refresh_rules(),
     ok = emqx_rule_engine_cli:load(),
-    ok = emqx_rule_runtime:start(env()),
+    ok = emqx_rule_events:load(env()),
     {ok, Sup}.
 
 stop(_State) ->
-    ok = emqx_rule_runtime:stop(env()),
+    ok = emqx_rule_events:unload(env()),
     ok = emqx_rule_engine_cli:unload().
 
 env() ->
-    maps:from_list(application:get_all_env(?APP)).
+    application:get_all_env(?APP)
+    .

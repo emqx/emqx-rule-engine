@@ -176,7 +176,7 @@ flag(Name) ->
 
 %% @doc "clientid()" Func
 clientid() ->
-    fun(#{clientid := ClientId}) -> ClientId; (_) -> undefined end.
+    fun(#{from := ClientId}) -> ClientId; (_) -> undefined end.
 
 %% @doc "username()" Func
 username() ->

@@ -38,7 +38,6 @@
 -export([ add_action/1
         , add_actions/1
         , get_actions/0
-        , get_actions_for/1
         , find_action/1
         , remove_action/1
         , remove_actions/1
@@ -129,13 +128,6 @@ mnesia(boot) ->
                 {record_name, resource_type},
                 {index, [#resource_type.provider]},
                 {attributes, record_info(fields, resource_type)},
-                {storage_properties, StoreProps}]),
-    %% Mapping from hook to rule_id
-    ok = ekka_mnesia:create_table(?RULE_HOOKS, [
-                {type, bag},
-                {disc_copies, [node()]},
-                {record_name, rule_hooks},
-                {attributes, record_info(fields, rule_hooks)},
                 {storage_properties, StoreProps}]);
 
 mnesia(copy) ->
@@ -146,21 +138,17 @@ mnesia(copy) ->
     %% Copy resource table
     ok = ekka_mnesia:copy_table(?RES_TAB),
     %% Copy resource type table
-    ok = ekka_mnesia:copy_table(?RES_TYPE_TAB),
-    %% Copy hook_name -> rule_id table
-    ok = ekka_mnesia:copy_table(?RULE_HOOKS).
+    ok = ekka_mnesia:copy_table(?RES_TYPE_TAB).
 
 dump() ->
     io:format("Rules: ~p~n"
               "ActionInstParams: ~p~n"
               "Resources: ~p~n"
-              "ResourceParams: ~p~n"
-              "Rule-Hook Mapping: ~p~n",
+              "ResourceParams: ~p~n",
             [ets:tab2list(?RULE_TAB),
              ets:tab2list(?ACTION_INST_PARAMS_TAB),
              ets:tab2list(?RES_TAB),
-             ets:tab2list(?RES_PARAMS_TAB),
-             ets:tab2list(?RULE_HOOKS)]).
+             ets:tab2list(?RES_PARAMS_TAB)]).
 
 %%------------------------------------------------------------------------------
 %% Start the registry
@@ -178,10 +166,10 @@ start_link() ->
 get_rules() ->
     get_all_records(?RULE_TAB).
 
--spec(get_rules_for(Hook :: hook()) -> list(emqx_rule_engine:rule())).
-get_rules_for(Hook) ->
-    lists:flatten([mnesia:dirty_read(?RULE_TAB, Id)
-                   || #rule_hooks{rule_id = Id} <- mnesia:dirty_read(?RULE_HOOKS, Hook)]).
+-spec(get_rules_for(Topic :: binary()) -> list(emqx_rule_engine:rule())).
+get_rules_for(Topic) ->
+    [Rule || Rule = #rule{for = For} <- get_rules(),
+             Topic =:= For orelse can_topic_match_oneof(Topic, For)].
 
 -spec(get_rule(Id :: rule_id()) -> {ok, emqx_rule_engine:rule()} | not_found).
 get_rule(Id) ->
@@ -207,8 +195,7 @@ remove_rules(Rules) ->
     trans(fun lists:foreach/2, [fun delete_rule/1, Rules]).
 
 %% @private
-insert_rule(Rule = #rule{id = Id, for = Hooks}) ->
-    [mnesia:write(?RULE_HOOKS, #rule_hooks{hook = H, rule_id = Id}, write) || H <- Hooks],
+insert_rule(Rule = #rule{}) ->
     mnesia:write(?RULE_TAB, Rule, write).
 
 %% @private
@@ -217,8 +204,7 @@ delete_rule(RuleId) when is_binary(RuleId) ->
         {ok, Rule} -> delete_rule(Rule);
         not_found -> ok
     end;
-delete_rule(Rule = #rule{id = Id, for = Hooks}) when is_record(Rule, rule) ->
-    [mnesia:delete_object(?RULE_HOOKS, #rule_hooks{hook = H, rule_id = Id}, write) || H <- Hooks],
+delete_rule(Rule = #rule{}) when is_record(Rule, rule) ->
     mnesia:delete_object(?RULE_TAB, Rule, write).
 
 %%------------------------------------------------------------------------------
@@ -229,20 +215,6 @@ delete_rule(Rule = #rule{id = Id, for = Hooks}) when is_record(Rule, rule) ->
 -spec(get_actions() -> list(emqx_rule_engine:action())).
 get_actions() ->
     get_all_records(?ACTION_TAB).
-
-%% @doc Get actions for a hook or hook alias.
--spec(get_actions_for(Hook :: hook() | list(hook()))
-        -> list(emqx_rule_engine:action())).
-get_actions_for(HookAlias) ->
-    do_get_actions_for(?EVENT_ALIAS(HookAlias)).
-
--spec(do_get_actions_for(Hook :: hook() | list(hook()))
-        -> list(emqx_rule_engine:action())).
-do_get_actions_for([]) -> [];
-do_get_actions_for([H | T] = Hooks) when is_list(Hooks) ->
-    do_get_actions_for(H) ++ do_get_actions_for(T);
-do_get_actions_for(Hook) when not is_list(Hook) ->
-    mnesia:dirty_index_read(?ACTION_TAB, Hook, #action.for).
 
 %% @doc Find an action by name.
 -spec(find_action(Name :: action_name()) -> {ok, emqx_rule_engine:action()} | not_found).
@@ -443,7 +415,8 @@ update_stats() ->
       end, ?STATS).
 
 get_all_records(Tab) ->
-    mnesia:dirty_match_object(Tab, mnesia:table_info(Tab, wild_pattern)).
+    %mnesia:dirty_match_object(Tab, mnesia:table_info(Tab, wild_pattern)).
+    ets:tab2list(Tab).
 
 trans(Fun) -> trans(Fun, []).
 trans(Fun, Args) ->
@@ -451,3 +424,7 @@ trans(Fun, Args) ->
         {atomic, ok} -> ok;
         {aborted, Reason} -> error(Reason)
     end.
+
+can_topic_match_oneof(Topic, Filters) ->
+    MatchedFilters = [Fltr || Fltr <- Filters, emqx_topic:match(Topic, Fltr)],
+    length(MatchedFilters) > 0.

@@ -83,5 +83,3 @@ t_proc_tmpl(_) ->
     Tks = emqx_rule_utils:preproc_tmpl(<<"a:${a},b:${b},c:${c},d:${d}">>),
     ?assertEqual(<<"a:1,b:1,c:1.0,d:{\"d1\":\"hi\"}">>,
                  emqx_rule_utils:proc_tmpl(Tks, Selected)).
-
-
