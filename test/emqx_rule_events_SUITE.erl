@@ -18,3 +18,14 @@ t_mod_hook_fun(_) ->
                'message.dropped',
                'message.delivered'
               ]].
+
+t_printable_headers(_) ->
+    Headers = #{peerhost => {127,0,0,1},
+                peername => {{127,0,0,1}, 9980},
+                sockname => {{127,0,0,1}, 1883}
+                },
+    ?assertMatch(
+        #{peerhost := <<"127.0.0.1">>,
+          peername := <<"127.0.0.1:9980">>,
+          sockname := <<"127.0.0.1:1883">>
+        }, emqx_rule_events:printable_headers(Headers)).
