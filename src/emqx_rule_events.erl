@@ -50,7 +50,9 @@
 
 -ifdef(TEST).
 -export([ reason/1
-        , hook_fun/1]).
+        , hook_fun/1
+        , printable_headers/1
+        ]).
 -endif.
 
 load(Env) ->
@@ -192,7 +194,7 @@ eventmsg_sub_unsub(Event, _ClientInfo = #{
 
 eventmsg_dropped(Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp}, Reason) ->
     #{event => 'message.dropped',
-      id => Id,
+      id => emqx_guid:to_hexstr(Id),
       reason => Reason,
       clientid => ClientId,
       username => emqx_message:get_header(username, Message, undefined),
@@ -211,7 +213,7 @@ eventmsg_delivered(_ClientInfo = #{
                     username := ReceiverUsername
                   }, Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp}) ->
     #{event => 'message.delivered',
-      id => Id,
+      id => emqx_guid:to_hexstr(Id),
       from_clientid => ClientId,
       from_username => emqx_message:get_header(username, Message, undefined),
       clientid => ReceiverCId,
@@ -231,7 +233,7 @@ eventmsg_acked(_ClientInfo = #{
                     username := ReceiverUsername
                   }, #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp, headers = Headers}) ->
     #{event => 'message.acked',
-      id => Id,
+      id => emqx_guid:to_hexstr(Id),
       from_clientid => ClientId,
       from_username => maps:get(username, Headers, undefined),
       clientid => ReceiverCId,
@@ -279,7 +281,7 @@ rule_input(Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags
       topic => Topic,
       qos => QoS,
       flags => Flags,
-      headers => Headers,
+      headers => printable_headers(Headers),
       timestamp => Timestamp,
       node => node()
     }.
@@ -322,3 +324,11 @@ event_name(<<"$events/session_unsubscribed", _/binary>>) -> 'session.unsubscribe
 event_name(<<"$events/message_delivered", _/binary>>) -> 'message.delivered';
 event_name(<<"$events/message_acked", _/binary>>) -> 'message.acked';
 event_name(<<"$events/message_dropped", _/binary>>) -> 'message.dropped'.
+
+printable_headers(undefined) -> #{};
+printable_headers(Headers) ->
+    maps:map(
+        fun (K, V0) when K =:= peerhost; K =:= peername; K =:= sockname ->
+                ntoa(V0);
+            (_, V0) -> V0
+        end, Headers).
