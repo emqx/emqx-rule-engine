@@ -264,17 +264,7 @@
         case EVENT_TOPIC of
         <<"$events/", _/binary>> ->
             EventName = emqx_rule_events:event_name(EVENT_TOPIC),
-            #{id => emqx_guid:to_hexstr(emqx_guid:gen()),
-              clientid => <<"emqx_events">>,
-              username => <<"emqx_events">>,
-              payload => maps:from_list(?EG_COLUMNS(EventName)),
-              peerhost => <<"127.0.0.1">>,
-              topic => EVENT_TOPIC,
-              qos => 1,
-              flags => #{sys => true, event => true},
-              timestamp => emqx_rule_utils:now_ms(),
-              node => node()
-              };
+            emqx_rule_maps:atom_key_map(maps:from_list(?EG_COLUMNS(EventName)));
         _PublishTopic ->
             #{id => emqx_guid:to_hexstr(emqx_guid:gen()),
               clientid => <<"c_emqx">>,
