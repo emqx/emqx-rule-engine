@@ -251,16 +251,18 @@ eventmsg_acked(_ClientInfo = #{
 %% Events publishing and rules applying
 %%--------------------------------------------------------------------
 
-may_publish_and_apply(EventType, EventMsg, #{enabled := IsEnabled, qos := QoS}) ->
+may_publish_and_apply(EventType, EventMsg, #{enabled := true, qos := QoS}) ->
+    EventTopic = event_topic(EventType),
     case emqx_json:safe_encode(EventMsg) of
         {ok, Payload} ->
-            EventTopic = event_topic(EventType),
-            Msg = make_msg(QoS, EventTopic, Payload),
-            IsEnabled andalso emqx_broker:safe_publish(Msg),
-            emqx_rule_runtime:apply_rules(emqx_rule_registry:get_rules_for(EventTopic), EventMsg);
+            emqx_broker:safe_publish(make_msg(QoS, EventTopic, Payload));
         {error, _Reason} ->
             ?LOG(error, "Failed to encode event msg for ~p, msg: ~p", [EventType, EventMsg])
-    end.
+    end,
+    emqx_rule_runtime:apply_rules(emqx_rule_registry:get_rules_for(EventTopic), EventMsg);
+may_publish_and_apply(EventType, EventMsg, _Env) ->
+    EventTopic = event_topic(EventType),
+    emqx_rule_runtime:apply_rules(emqx_rule_registry:get_rules_for(EventTopic), EventMsg).
 
 make_msg(QoS, Topic, Payload) ->
     emqx_message:set_flags(#{sys => true, event => true},
