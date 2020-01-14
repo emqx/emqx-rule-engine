@@ -92,8 +92,10 @@ on_message_publish(Message = #message{flags = #{sys := true}},
                    #{ignore_sys_message := true}) ->
     {ok, Message};
 on_message_publish(Message = #message{topic = Topic}, _Env) ->
-    emqx_rule_runtime:apply_rules(
-        emqx_rule_registry:get_rules_for(Topic), rule_input(Message)),
+    case emqx_rule_registry:get_rules_for(Topic) of
+        [] -> ok;
+        Rules -> emqx_rule_runtime:apply_rules(Rules, rule_input(Message))
+    end,
     {ok, Message}.
 
 on_message_dropped(Message = #message{flags = #{sys := true}},
