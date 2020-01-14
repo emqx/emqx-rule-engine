@@ -70,20 +70,20 @@ unload(_Env) ->
 %%--------------------------------------------------------------------
 
 on_client_connected(ClientInfo, ConnInfo, Env) ->
-    may_publish_and_apply(client_connected,
-        eventmsg_connected(ClientInfo, ConnInfo), Env).
+    may_publish_and_apply('client.connected',
+        fun() -> eventmsg_connected(ClientInfo, ConnInfo) end, Env).
 
 on_client_disconnected(ClientInfo, Reason, ConnInfo, Env) ->
-    may_publish_and_apply(client_disconnected,
-        eventmsg_disconnected(ClientInfo, ConnInfo, Reason), Env).
+    may_publish_and_apply('client.disconnected',
+        fun() -> eventmsg_disconnected(ClientInfo, ConnInfo, Reason) end, Env).
 
 on_session_subscribed(ClientInfo, Topic, SubOpts, Env) ->
-    may_publish_and_apply(session_subscribed,
-        eventmsg_sub_unsub('session.subscribed', ClientInfo, Topic, SubOpts), Env).
+    may_publish_and_apply('session.subscribed',
+        fun() -> eventmsg_sub_unsub('session.subscribed', ClientInfo, Topic, SubOpts) end, Env).
 
 on_session_unsubscribed(ClientInfo, Topic, SubOpts, Env) ->
-    may_publish_and_apply(session_unsubscribed,
-        eventmsg_sub_unsub('session.unsubscribed', ClientInfo, Topic, SubOpts), Env).
+    may_publish_and_apply('session.unsubscribed',
+        fun() -> eventmsg_sub_unsub('session.unsubscribed', ClientInfo, Topic, SubOpts) end, Env).
 
 on_message_publish(Message = #message{flags = #{event := true}},
                    _Env) ->
@@ -102,24 +102,24 @@ on_message_dropped(Message = #message{flags = #{sys := true}},
                    _, _, #{ignore_sys_message := true}) ->
     {ok, Message};
 on_message_dropped(Message, _, Reason, Env) ->
-    may_publish_and_apply(message_dropped,
-        eventmsg_dropped(Message, Reason), Env),
+    may_publish_and_apply('message.dropped',
+        fun() -> eventmsg_dropped(Message, Reason) end, Env),
     {ok, Message}.
 
 on_message_delivered(_ClientInfo, Message = #message{flags = #{sys := true}},
                    #{ignore_sys_message := true}) ->
     {ok, Message};
 on_message_delivered(ClientInfo, Message, Env) ->
-    may_publish_and_apply(message_delivered,
-        eventmsg_delivered(ClientInfo, Message), Env),
+    may_publish_and_apply('message.delivered',
+        fun() -> eventmsg_delivered(ClientInfo, Message) end, Env),
     {ok, Message}.
 
 on_message_acked(_ClientInfo, Message = #message{flags = #{sys := true}},
                    #{ignore_sys_message := true}) ->
     {ok, Message};
 on_message_acked(ClientInfo, Message, Env) ->
-    may_publish_and_apply(message_acked,
-        eventmsg_acked(ClientInfo, Message), Env),
+    may_publish_and_apply('message.acked',
+        fun() -> eventmsg_acked(ClientInfo, Message) end, Env),
     {ok, Message}.
 
 %%--------------------------------------------------------------------
@@ -253,27 +253,26 @@ eventmsg_acked(_ClientInfo = #{
 %% Events publishing and rules applying
 %%--------------------------------------------------------------------
 
-may_publish_and_apply(EventType, EventMsg, #{enabled := true, qos := QoS}) ->
-    EventTopic = event_topic(EventType),
+may_publish_and_apply(EventName, GenEventMsg, #{enabled := true, qos := QoS}) ->
+    EventTopic = event_topic(EventName),
+    EventMsg = GenEventMsg(),
     case emqx_json:safe_encode(EventMsg) of
         {ok, Payload} ->
             emqx_broker:safe_publish(make_msg(QoS, EventTopic, Payload));
         {error, _Reason} ->
-            ?LOG(error, "Failed to encode event msg for ~p, msg: ~p", [EventType, EventMsg])
+            ?LOG(error, "Failed to encode event msg for ~p, msg: ~p", [EventName, EventMsg])
     end,
     emqx_rule_runtime:apply_rules(emqx_rule_registry:get_rules_for(EventTopic), EventMsg);
-may_publish_and_apply(EventType, EventMsg, _Env) ->
-    EventTopic = event_topic(EventType),
-    emqx_rule_runtime:apply_rules(emqx_rule_registry:get_rules_for(EventTopic), EventMsg).
+may_publish_and_apply(EventName, GenEventMsg, _Env) ->
+    EventTopic = event_topic(EventName),
+    case emqx_rule_registry:get_rules_for(EventTopic) of
+        [] -> ok;
+        Rules -> emqx_rule_runtime:apply_rules(Rules, GenEventMsg())
+    end.
 
 make_msg(QoS, Topic, Payload) ->
     emqx_message:set_flags(#{sys => true, event => true},
         emqx_message:make(emqx_events, QoS, Topic, iolist_to_binary(Payload))).
-
-event_topic(Name) when is_atom(Name); is_list(Name) ->
-    iolist_to_binary(lists:concat(["$events/", Name]));
-event_topic(Name) when is_binary(Name) ->
-    iolist_to_binary(["$events/", Name]).
 
 rule_input(Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, headers = Headers, payload = Payload, timestamp = Timestamp}) ->
     #{event => 'message.publish',
@@ -328,6 +327,14 @@ event_name(<<"$events/session_unsubscribed", _/binary>>) -> 'session.unsubscribe
 event_name(<<"$events/message_delivered", _/binary>>) -> 'message.delivered';
 event_name(<<"$events/message_acked", _/binary>>) -> 'message.acked';
 event_name(<<"$events/message_dropped", _/binary>>) -> 'message.dropped'.
+
+event_topic('client.connected') -> <<"$events/client_connected">>;
+event_topic('client.disconnected') -> <<"$events/client_disconnected">>;
+event_topic('session.subscribed') -> <<"$events/session_subscribed">>;
+event_topic('session.unsubscribed') -> <<"$events/session_unsubscribed">>;
+event_topic('message.delivered') -> <<"$events/message_delivered">>;
+event_topic('message.acked') -> <<"$events/message_acked">>;
+event_topic('message.dropped') -> <<"$events/message_dropped">>.
 
 printable_headers(undefined) -> #{};
 printable_headers(Headers) ->
