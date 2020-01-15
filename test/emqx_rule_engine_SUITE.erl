@@ -1087,7 +1087,7 @@ t_sqlparse_foreach_8(_Config) ->
 
     Sql3 = "foreach json_decode(payload) as p, p.sensors as s, s.collection as c, sublist(2,1,c.info) as info "
           "do info.cmd as msg_type, info.name as name "
-          "from \"t/#\" "
+          "from \"message.publish\" "
           "where s.page = '2' ",
     [?assertMatch({ok,[#{name := <<"cmd1">>, msg_type := <<"1">>}]},
                  emqx_rule_sqltester:test(

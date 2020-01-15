@@ -81,7 +81,7 @@ t_username(_) ->
 
 t_payload(_) ->
     ?assertEqual(<<"payload">>, apply_func(payload, [], message())),
-    NestedMap = #{a => #{b => #{c => c}}},
+    NestedMap = #{payload => #{a => #{b => #{c => c}}}},
     ?assertEqual(c, apply_func(payload, [[a,b,c]], NestedMap)).
 
 t_timestamp(_) ->
