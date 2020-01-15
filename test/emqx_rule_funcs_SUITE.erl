@@ -322,6 +322,10 @@ t_nth(_) ->
     ?assertEqual(2, apply_func(nth, [2, [1,2,3,4]])),
     ?assertEqual(4, apply_func(nth, [4, [1,2,3,4]])).
 
+t_length(_) ->
+    ?assertEqual(4, apply_func(length, [[1,2,3,4]])),
+    ?assertEqual(0, apply_func(length, [[]])).
+
 t_slice(_) ->
     ?assertEqual([1,2,3,4], apply_func(sublist, [4, [1,2,3,4]])),
     ?assertEqual([1,2], apply_func(sublist, [2, [1,2,3,4]])),
