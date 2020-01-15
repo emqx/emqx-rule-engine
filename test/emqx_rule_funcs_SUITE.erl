@@ -147,6 +147,58 @@ t_bool(_) ->
     ?assertEqual(false, emqx_rule_funcs:bool(<<"false">>)),
     ?assertError({invalid_boolean, _}, emqx_rule_funcs:bool(3)).
 
+t_is_null(_) ->
+    ?assertEqual(true, emqx_rule_funcs:is_null(undefined)),
+    ?assertEqual(false, emqx_rule_funcs:is_null(a)),
+    ?assertEqual(false, emqx_rule_funcs:is_null(<<>>)),
+    ?assertEqual(false, emqx_rule_funcs:is_null(<<"a">>)).
+
+t_is_not_null(_) ->
+    [?assertEqual(emqx_rule_funcs:is_not_null(T), not emqx_rule_funcs:is_null(T))
+     || T <- [undefined, a, <<"a">>, <<>>]].
+
+t_is_str(_) ->
+    [?assertEqual(true, emqx_rule_funcs:is_str(T))
+     || T <- [<<"a">>, <<>>, <<"abc">>]],
+    [?assertEqual(false, emqx_rule_funcs:is_str(T))
+     || T <- ["a", a, 1]].
+
+t_is_bool(_) ->
+    [?assertEqual(true, emqx_rule_funcs:is_bool(T))
+     || T <- [true, false]],
+    [?assertEqual(false, emqx_rule_funcs:is_bool(T))
+     || T <- ["a", <<>>, a, 2]].
+
+t_is_int(_) ->
+    [?assertEqual(true, emqx_rule_funcs:is_int(T))
+     || T <- [1, 2, -1]],
+    [?assertEqual(false, emqx_rule_funcs:is_int(T))
+     || T <- [1.1, "a", a]].
+
+t_is_float(_) ->
+    [?assertEqual(true, emqx_rule_funcs:is_float(T))
+     || T <- [1.1, 2.0, -1.2]],
+    [?assertEqual(false, emqx_rule_funcs:is_float(T))
+     || T <- [1, "a", a, <<>>]].
+
+t_is_num(_) ->
+    [?assertEqual(true, emqx_rule_funcs:is_num(T))
+     || T <- [1.1, 2.0, -1.2, 1]],
+    [?assertEqual(false, emqx_rule_funcs:is_num(T))
+     || T <- ["a", a, <<>>]].
+
+t_is_map(_) ->
+    [?assertEqual(true, emqx_rule_funcs:is_map(T))
+     || T <- [#{}, #{a =>1}]],
+    [?assertEqual(false, emqx_rule_funcs:is_map(T))
+     || T <- ["a", a, <<>>]].
+
+t_is_array(_) ->
+    [?assertEqual(true, emqx_rule_funcs:is_array(T))
+     || T <- [[], [1,2]]],
+    [?assertEqual(false, emqx_rule_funcs:is_array(T))
+     || T <- [<<>>, a]].
+
 %%------------------------------------------------------------------------------
 %% Test cases for arith op
 %%------------------------------------------------------------------------------
@@ -267,7 +319,30 @@ bin(S) -> iolist_to_binary(S).
 %%------------------------------------------------------------------------------
 
 t_nth(_) ->
-    ?assertEqual(2, lists:nth(2, [1,2,3,4])).
+    ?assertEqual(2, apply_func(nth, [2, [1,2,3,4]])),
+    ?assertEqual(4, apply_func(nth, [4, [1,2,3,4]])).
+
+t_slice(_) ->
+    ?assertEqual([1,2,3,4], apply_func(sublist, [4, [1,2,3,4]])),
+    ?assertEqual([1,2], apply_func(sublist, [2, [1,2,3,4]])),
+    ?assertEqual([4], apply_func(sublist, [4, 1, [1,2,3,4]])),
+    ?assertEqual([4], apply_func(sublist, [4, 2, [1,2,3,4]])),
+    ?assertEqual([], apply_func(sublist, [5, 2, [1,2,3,4]])),
+    ?assertEqual([2,3], apply_func(sublist, [2, 2, [1,2,3,4]])),
+    ?assertEqual([1], apply_func(sublist, [1, 1, [1,2,3,4]])).
+
+t_first_last(_) ->
+    ?assertEqual(1, apply_func(first, [[1,2,3,4]])),
+    ?assertEqual(4, apply_func(last, [[1,2,3,4]])).
+
+t_contains(_) ->
+    ?assertEqual(true, apply_func(contains, [1, [1,2,3,4]])),
+    ?assertEqual(true, apply_func(contains, [3, [1,2,3,4]])),
+    ?assertEqual(true, apply_func(contains, [<<"a">>, [<<>>,<<"ab">>,3,<<"a">>]])),
+    ?assertEqual(true, apply_func(contains, [#{a=>b}, [#{a=>1}, #{a=>b}]])),
+    ?assertEqual(false, apply_func(contains, [#{a=>b}, [#{a=>1}]])),
+    ?assertEqual(false, apply_func(contains, [3, [1, 2]])),
+    ?assertEqual(false, apply_func(contains, [<<"c">>, [<<>>,<<"ab">>,3,<<"a">>]])).
 
 t_map_get(_) ->
     ?assertEqual(1, apply_func(map_get, [<<"a">>, #{a => 1}])),
