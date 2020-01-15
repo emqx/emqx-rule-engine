@@ -124,6 +124,7 @@
 
 %% Array Funcs
 -export([ nth/2
+        , length/1
         , sublist/2
         , sublist/3
         , first/1
@@ -478,6 +479,9 @@ split(S, P, <<"trailing">>) when is_binary(S),is_binary(P) ->
 
 nth(N, L) when is_integer(N), is_list(L) ->
     lists:nth(N, L).
+
+length(List) when is_list(List) ->
+    erlang:length(List).
 
 sublist(Len, List) when is_integer(Len), is_list(List) ->
     lists:sublist(List, Len).
