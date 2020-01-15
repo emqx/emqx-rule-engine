@@ -89,9 +89,16 @@
         , map/1
         ]).
 
-%% Null Funcs
+%% Data Type Validation Funcs
 -export([ is_null/1
         , is_not_null/1
+        , is_str/1
+        , is_bool/1
+        , is_int/1
+        , is_float/1
+        , is_num/1
+        , is_map/1
+        , is_array/1
         ]).
 
 %% String Funcs
@@ -115,7 +122,13 @@
         ]).
 
 %% Array Funcs
--export([ nth/2 ]).
+-export([ nth/2
+        , sublist/2
+        , sublist/3
+        , first/1
+        , last/1
+        , contains/2
+        ]).
 
 %% Hash Funcs
 -export([ md5/1
@@ -209,8 +222,8 @@ header(Name) ->
 payload() ->
     fun(#{payload := Payload}) -> Payload; (_) -> undefined end.
 
-payload(Path) when is_list(Path) ->
-    fun(Payload) when is_map(Payload) ->
+payload(Path) ->
+    fun(#{payload := Payload}) when erlang:is_map(Payload) ->
             nested_get(Path, Payload);
        (_) -> undefined
     end.
@@ -410,6 +423,27 @@ is_null(_Data) -> false.
 is_not_null(Data) ->
     not is_null(Data).
 
+is_str(T) when is_binary(T) -> true;
+is_str(_) -> false.
+
+is_bool(T) when is_boolean(T) -> true;
+is_bool(_) -> false.
+
+is_int(T) when is_integer(T) -> true;
+is_int(_) -> false.
+
+is_float(T) when erlang:is_float(T) -> true;
+is_float(_) -> false.
+
+is_num(T) when is_number(T) -> true;
+is_num(_) -> false.
+
+is_map(T) when erlang:is_map(T) -> true;
+is_map(_) -> false.
+
+is_array(T) when is_list(T) -> true;
+is_array(_) -> false.
+
 %%------------------------------------------------------------------------------
 %% String Funcs
 %%------------------------------------------------------------------------------
@@ -458,6 +492,21 @@ split(S, P, <<"trailing">>) when is_binary(S),is_binary(P) ->
 
 nth(N, L) when is_integer(N), is_list(L) ->
     lists:nth(N, L).
+
+sublist(Len, List) when is_integer(Len), is_list(List) ->
+    lists:sublist(List, Len).
+
+sublist(Start, Len, List) when is_integer(Start), is_integer(Len), is_list(List) ->
+    lists:sublist(List, Start, Len).
+
+first(List) when is_list(List) ->
+    hd(List).
+
+last(List) when is_list(List) ->
+    lists:last(List).
+
+contains(Elm, List) when is_list(List) ->
+    lists:member(Elm, List).
 
 map_get(Key, Map) ->
     map_get(Key, Map, undefined).
