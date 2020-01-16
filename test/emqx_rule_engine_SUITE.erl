@@ -98,6 +98,7 @@ groups() ->
        t_sqlparse_foreach_5,
        t_sqlparse_foreach_6,
        t_sqlparse_foreach_7,
+       t_sqlparse_foreach_8,
        t_sqlparse_case_when_1,
        t_sqlparse_case_when_2,
        t_sqlparse_case_when_3
@@ -1048,6 +1049,33 @@ t_sqlparse_foreach_7(_Config) ->
                       <<"ctx">> =>
                         #{<<"payload">> => Payload,
                           <<"topic">> => <<"t/a">>}})).
+
+t_sqlparse_foreach_8(_Config) ->
+    %% Verify foreach-do-incase and cascaded AS
+    Sql = "foreach json_decode(payload) as p, p.sensors as s, s.collection as c, c.info as info "
+          "do info.cmd as msg_type, info.name as name "
+          "incase is_map(info) "
+          "from \"t/#\" "
+          "where s.page = '2' ",
+    Payload  = <<"{\"sensors\": {\"page\": 2, \"collection\": {\"info\":[\"haha\", {\"name\":\"cmd1\", \"cmd\":\"1\"}]} } }">>,
+    ?assertMatch({ok,[#{name := <<"cmd1">>, msg_type := <<"1">>}]},
+                 emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql,
+                      <<"ctx">> =>
+                        #{<<"payload">> => Payload,
+                          <<"topic">> => <<"t/a">>}})),
+
+    Sql3 = "foreach json_decode(payload) as p, p.sensors as s, s.collection as c, sublist(2,1,c.info) as info "
+          "do info.cmd as msg_type, info.name as name "
+          "from \"t/#\" "
+          "where s.page = '2' ",
+    [?assertMatch({ok,[#{name := <<"cmd1">>, msg_type := <<"1">>}]},
+                 emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => SqlN,
+                      <<"ctx">> =>
+                        #{<<"payload">> => Payload,
+                          <<"topic">> => <<"t/a">>}}))
+     || SqlN <- [Sql3]].
 
 t_sqlparse_case_when_1(_Config) ->
     %% case-when-else clause
