@@ -180,7 +180,7 @@ create_rule(_Bindings, Params) ->
             Params).
 
 test_rule_sql(Params) ->
-    try emqx_rule_sqltester:test(jsx:decode(jsx:encode(Params), [return_maps])) of
+    try emqx_rule_sqltester:test(emqx_json:decode(emqx_json:encode(Params), [return_maps])) of
         {ok, Result} -> return({ok, Result});
         {error, nomatch} -> return({error, 404, <<"SQL Not Match">>})
     catch
@@ -471,7 +471,7 @@ parse_resource_params([_ | Params], Res) ->
     parse_resource_params(Params, Res).
 
 json_term_to_map(List) ->
-    jsx:decode(jsx:encode(List), [return_maps]).
+    emqx_json:decode(emqx_json:encode(List), [return_maps]).
 
 sort_by_title(action, Actions) ->
     sort_by(#action.title, Actions);

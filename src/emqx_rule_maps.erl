@@ -30,7 +30,7 @@ nested_get(Key, Map) ->
     nested_get(Key, Map, undefined).
 
 nested_get(Key, Data, Default) when is_binary(Data) ->
-    try jsx:decode(Data, [return_maps]) of
+    try emqx_json:decode(Data, [return_maps]) of
         Map -> nested_get(Key, Map, Default)
     catch
         _:_ -> Default
