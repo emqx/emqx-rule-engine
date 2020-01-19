@@ -190,13 +190,13 @@ sql_data(Bin) when is_binary(Bin) -> Bin;
 sql_data(Num) when is_number(Num) -> Num;
 sql_data(Bool) when is_boolean(Bool) -> Bool;
 sql_data(Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8);
-sql_data(Map) when is_map(Map) -> jsx:encode(Map).
+sql_data(Map) when is_map(Map) -> emqx_json:encode(Map).
 
 str(List) when is_list(List) -> List;
 str(Bin) when is_binary(Bin) -> binary_to_list(Bin);
 str(Num) when is_number(Num) -> number_to_list(Num);
 str(Atom) when is_atom(Atom) -> atom_to_list(Atom);
-str(Map) when is_map(Map) -> binary_to_list(jsx:encode(Map));
+str(Map) when is_map(Map) -> binary_to_list(emqx_json:encode(Map));
 str(Data) -> error({invalid_str, Data}).
 
 utf8_bin(Str) when is_binary(Str); is_list(Str) ->
@@ -213,7 +213,7 @@ bin(List) when is_list(List) -> list_to_binary(List);
 bin(Bin) when is_binary(Bin) -> Bin;
 bin(Num) when is_number(Num) -> number_to_binary(Num);
 bin(Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8);
-bin(Map) when is_map(Map) -> jsx:encode(Map);
+bin(Map) when is_map(Map) -> emqx_json:encode(Map);
 bin(Data) -> error({invalid_bin, Data}).
 
 int(List) when is_list(List) ->
@@ -246,7 +246,7 @@ float(Num) when is_number(Num) -> erlang:float(Num);
 float(Data) -> error({invalid_number, Data}).
 
 map(Bin) when is_binary(Bin) ->
-    case jsx:decode(Bin, [return_maps]) of
+    case emqx_json:decode(Bin, [return_maps]) of
         Map = #{} -> Map;
         _ -> error({invalid_map, Bin})
     end;

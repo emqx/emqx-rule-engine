@@ -542,11 +542,11 @@ base64_decode(Data) when is_binary(Data) ->
     base64:decode(Data).
 
 json_encode(Data) ->
-    jsx:encode(Data).
+    emqx_json:encode(Data).
 
 json_decode(Data) ->
     emqx_rule_maps:unsafe_atom_key_map(
-        jsx:decode(Data, [return_maps])).
+      emqx_json:decode(Data, [return_maps])).
 
 %% @doc This is for sql funcs that should be handled in the specific modules.
 %% Here the emqx_rule_funcs module acts as a proxy, forwarding
