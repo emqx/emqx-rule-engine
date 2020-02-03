@@ -34,6 +34,7 @@
         , number_to_binary/1
         , atom_key/1
         , unsafe_atom_key/1
+        , deeplist_to_map/1
         ]).
 
 %% connectivity check
@@ -130,6 +131,23 @@ unsafe_atom_key(Keys = [_Key | _]) ->
     [unsafe_atom_key(SubKey) || SubKey <- Keys];
 unsafe_atom_key(Key) ->
     error({invalid_key, Key}).
+
+deeplist_to_map(List) ->
+    deeplist_to_map(List, #{}).
+
+%% @private
+deeplist_to_map([], Map) -> Map;
+deeplist_to_map([{Name, Value}|L], Map) ->
+    case is_proplist(Value) of
+        true ->
+            deeplist_to_map(L, Map#{Name => deeplist_to_map(Value)});
+        false ->
+            deeplist_to_map(L, Map#{Name => Value})
+    end.
+
+%% @private
+is_proplist([{_, _}|_]) -> true;
+is_proplist(_) -> false.
 
 atom_key(Key) when is_atom(Key) ->
     Key;

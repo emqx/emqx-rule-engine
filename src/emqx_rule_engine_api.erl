@@ -22,6 +22,8 @@
 
 -import(minirest,  [return/1]).
 
+-import(emqx_rule_utils, [deeplist_to_map/1]).
+
 -rest_api(#{name   => create_rule,
             method => 'POST',
             path   => "/rules/",
@@ -180,7 +182,7 @@ create_rule(_Bindings, Params) ->
             Params).
 
 test_rule_sql(Params) ->
-    try emqx_rule_sqltester:test(emqx_json:decode(emqx_json:encode(Params), [return_maps])) of
+    try emqx_rule_sqltester:test(deeplist_to_map(Params), [return_maps]) of
         {ok, Result} -> return({ok, Result});
         {error, nomatch} -> return({error, 404, <<"SQL Not Match">>})
     catch
@@ -439,7 +441,7 @@ parse_rule_params([], Rule) ->
 parse_rule_params([{<<"rawsql">>, RawSQL} | Params], Rule) ->
     parse_rule_params(Params, Rule#{rawsql => RawSQL});
 parse_rule_params([{<<"actions">>, Actions} | Params], Rule) ->
-    parse_rule_params(Params, Rule#{actions => [parse_action(json_term_to_map(A)) || A <- Actions]});
+    parse_rule_params(Params, Rule#{actions => [parse_action(deeplist_to_map(A)) || A <- Actions]});
 parse_rule_params([{<<"description">>, Descr} | Params], Rule) ->
     parse_rule_params(Params, Rule#{description => Descr});
 parse_rule_params([_ | Params], Res) ->
@@ -464,14 +466,11 @@ parse_resource_params([{<<"type">>, ResourceType} | Params], Res) ->
         throw({resource_type_not_found, ResourceType})
     end;
 parse_resource_params([{<<"config">>, Config} | Params], Res) ->
-    parse_resource_params(Params, Res#{config => json_term_to_map(Config)});
+    parse_resource_params(Params, Res#{config => deeplist_to_map(Config)});
 parse_resource_params([{<<"description">>, Descr} | Params], Res) ->
     parse_resource_params(Params, Res#{description => Descr});
 parse_resource_params([_ | Params], Res) ->
     parse_resource_params(Params, Res).
-
-json_term_to_map(List) ->
-    emqx_json:decode(emqx_json:encode(List), [return_maps]).
 
 sort_by_title(action, Actions) ->
     sort_by(#action.title, Actions);
