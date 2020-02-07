@@ -304,7 +304,7 @@ apply_func(Name, Args, Input) when is_atom(Name) ->
 ensure_map(Map) when is_map(Map) ->
     Map;
 ensure_map(MaybeJson) ->
-    try jsx:decode(MaybeJson, [return_maps]) of
+    try emqx_json:decode(MaybeJson, [return_maps]) of
         JsonMap when is_map(JsonMap) -> JsonMap;
         _Val -> #{}
     catch _:_ -> #{}

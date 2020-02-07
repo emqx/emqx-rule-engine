@@ -259,12 +259,12 @@ make_rule(Opts) ->
 make_resource(Opts) ->
     Config = get_value(config, Opts),
     #{type => get_value(type, Opts),
-      config => ?RAISE(jsx:decode(Config, [return_maps]), {invalid_config, Config}),
+      config => ?RAISE(emqx_json:decode(Config, [return_maps]), {invalid_config, Config}),
       description => get_value(descr, Opts)}.
 
 printable_actions(Actions) when is_list(Actions) ->
-    jsx:encode([#{id => Id, name => Name, params => Args, metrics => get_action_metrics(Id)}
-                || #action_instance{id = Id, name = Name, args = Args} <- Actions]).
+    emqx_json:encode([#{id => Id, name => Name, params => Args, metrics => get_action_metrics(Id)}
+                      || #action_instance{id = Id, name = Name, args = Args} <- Actions]).
 
 with_opts(Action, RawParams, OptSpecList, {CmdObject, CmdName}) ->
     case getopt:parse_and_check(OptSpecList, RawParams) of
@@ -284,7 +284,7 @@ parse_action_params(Actions) ->
                 ActParam};
             (#{<<"name">> := ActName}) ->
                 {?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}), #{}}
-            end, jsx:decode(Actions, [return_maps])),
+            end, emqx_json:decode(Actions, [return_maps])),
         {invalid_action_params, _REASON_}).
 
 get_actions() ->
