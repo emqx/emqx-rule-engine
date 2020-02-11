@@ -128,22 +128,22 @@
         end).
 
 -define(TEST_COLUMNS_MESSGE,
-        [ {<<"clientid">>, <<"c_emqx">>}
-        , {<<"username">>, <<"u_emqx">>}
-        , {<<"topic">>, <<"t/a">>}
-        , {<<"qos">>, 1}
-        , {<<"payload">>, <<"{\"msg\": \"hello\"}">>}
-        ]).
+        #{ <<"clientid">> => <<"c_emqx">>
+         , <<"username">> => <<"u_emqx">>
+         , <<"topic">>    => <<"t/a">>
+         , <<"qos">>      => 1
+         , <<"payload">>  => <<"{\"msg\": \"hello\"}">>
+         }).
 
 -define(TEST_COLUMNS_MESSGE_DELIVERED_ACKED,
-        [ {<<"from_clientid">>, <<"c_emqx_1">>}
-        , {<<"from_username">>, <<"u_emqx_1">>}
-        , {<<"clientid">>, <<"c_emqx_2">>}
-        , {<<"username">>, <<"u_emqx_2">>}
-        , {<<"topic">>, <<"t/a">>}
-        , {<<"qos">>, 1}
-        , {<<"payload">>, <<"{\"msg\": \"hello\"}">>}
-        ]).
+        #{ <<"from_clientid">> => <<"c_emqx_1">>
+         , <<"from_username">> => <<"u_emqx_1">>
+         , <<"clientid">>      => <<"c_emqx_2">>
+         , <<"username">>      => <<"u_emqx_2">>
+         , <<"topic">>         => <<"t/a">>
+         , <<"qos">>           => 1
+         , <<"payload">>       => <<"{\"msg\": \"hello\"}">>
+         }).
 
 -define(TEST_COLUMNS(EVENT),
         case EVENT of
@@ -152,27 +152,27 @@
         'message.delivered' -> ?TEST_COLUMNS_MESSGE_DELIVERED_ACKED;
         'message.acked' -> ?TEST_COLUMNS_MESSGE_DELIVERED_ACKED;
         'client.connected' ->
-            [ {<<"clientid">>, <<"c_emqx">>}
-            , {<<"username">>, <<"u_emqx">>}
-            , {<<"peername">>, <<"127.0.0.1:52918">>}
-            ];
+            #{ <<"clientid">> => <<"c_emqx">>
+             , <<"username">> => <<"u_emqx">>
+             , <<"peername">> => <<"127.0.0.1:52918">>
+             };
         'client.disconnected' ->
-            [ {<<"clientid">>, <<"c_emqx">>}
-            , {<<"username">>, <<"u_emqx">>}
-            , {<<"reason">>, <<"normal">>}
-            ];
+            #{ <<"clientid">> => <<"c_emqx">>
+             , <<"username">> => <<"u_emqx">>
+             , <<"reason">>   => <<"normal">>
+             };
         'session.subscribed' ->
-            [ {<<"clientid">>, <<"c_emqx">>}
-            , {<<"username">>, <<"u_emqx">>}
-            , {<<"topic">>, <<"t/a">>}
-            , {<<"qos">>, 1}
-            ];
+            #{ <<"clientid">> => <<"c_emqx">>
+             , <<"username">> => <<"u_emqx">>
+             , <<"topic">>    => <<"t/a">>
+             , <<"qos">>      => 1
+             };
         'session.unsubscribed' ->
-            [ {<<"clientid">>, <<"c_emqx">>}
-            , {<<"username">>, <<"u_emqx">>}
-            , {<<"topic">>, <<"t/a">>}
-            , {<<"qos">>, 1}
-            ];
+            #{ <<"clientid">> => <<"c_emqx">>
+             , <<"username">> => <<"u_emqx">>
+             , <<"topic">>    => <<"t/a">>
+             , <<"qos">>      => 1
+             };
         RuleType ->
             error({unknown_rule_type, RuleType})
         end).
