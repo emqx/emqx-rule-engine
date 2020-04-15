@@ -43,7 +43,9 @@
         , tcp_connectivity/3
         ]).
 
--export([now_ms/0]).
+-export([ now_ms/0
+        , can_topic_match_oneof/2
+        ]).
 
 -compile({no_auto_import,
           [ float/1
@@ -281,3 +283,7 @@ parse_nested(Attr) ->
 
 now_ms() ->
     erlang:system_time(millisecond).
+
+can_topic_match_oneof(Topic, Filters) ->
+    MatchedFilters = [Fltr || Fltr <- Filters, emqx_topic:match(Topic, Fltr)],
+    length(MatchedFilters) > 0.
