@@ -114,6 +114,20 @@
         , upper/1
         , split/2
         , split/3
+        , concat/2
+        , tokens/2
+        , tokens/3
+        , sprintf_s/2
+        , pad/2
+        , pad/3
+        , pad/4
+        , replace/3
+        , replace/4
+        , regex_match/2
+        , regex_replace/3
+        , ascii/1
+        , find/2
+        , find/3
         ]).
 
 %% Map Funcs
@@ -262,8 +276,13 @@ find_topic_filter(Filter, TopicFilters, Func) ->
 %% Arithmetic Funcs
 %%------------------------------------------------------------------------------
 
+%% plus 2 numbers
 '+'(X, Y) when is_number(X), is_number(Y) ->
-    X + Y.
+    X + Y;
+
+%% concat 2 strings
+'+'(X, Y) when is_binary(X), is_binary(Y) ->
+    concat(X, Y).
 
 '-'(X, Y) when is_number(X), is_number(Y) ->
     X - Y.
@@ -467,11 +486,90 @@ upper(S) when is_binary(S) ->
 split(S, P) when is_binary(S),is_binary(P) ->
     [R || R <- string:split(S, P, all), R =/= <<>> andalso R =/= ""].
 
+split(S, P, <<"notrim">>) ->
+    string:split(S, P, all);
+
+split(S, P, <<"leading_notrim">>) ->
+    string:split(S, P, leading);
 split(S, P, <<"leading">>) when is_binary(S),is_binary(P) ->
     [R || R <- string:split(S, P, leading), R =/= <<>> andalso R =/= ""];
-
+split(S, P, <<"trailing_notrim">>) ->
+    string:split(S, P, trailing);
 split(S, P, <<"trailing">>) when is_binary(S),is_binary(P) ->
     [R || R <- string:split(S, P, trailing), R =/= <<>> andalso R =/= ""].
+
+tokens(S, Separators) ->
+    [list_to_binary(R) || R <- string:lexemes(binary_to_list(S), binary_to_list(Separators))].
+
+tokens(S, Separators, <<"nocrlf">>) ->
+    [list_to_binary(R) || R <- string:lexemes(binary_to_list(S), binary_to_list(Separators) ++ [$\r,$\n,[$\r,$\n]])].
+
+concat(S1, S2) when is_binary(S1), is_binary(S2) ->
+    unicode:characters_to_binary([S1, S2], unicode).
+
+sprintf_s(Format, Args) when is_list(Args) ->
+    erlang:iolist_to_binary(io_lib:format(binary_to_list(Format), Args)).
+
+pad(S, Len) when is_binary(S), is_integer(Len) ->
+   iolist_to_binary(string:pad(S, Len, trailing)).
+
+pad(S, Len, <<"trailing">>) when is_binary(S), is_integer(Len) ->
+   iolist_to_binary(string:pad(S, Len, trailing));
+
+pad(S, Len, <<"both">>) when is_binary(S), is_integer(Len) ->
+   iolist_to_binary(string:pad(S, Len, both));
+
+pad(S, Len, <<"leading">>) when is_binary(S), is_integer(Len) ->
+   iolist_to_binary(string:pad(S, Len, leading)).
+
+pad(S, Len, <<"trailing">>, Char) when is_binary(S), is_integer(Len), is_binary(Char) ->
+   iolist_to_binary(string:pad(S, Len, trailing, Char));
+
+pad(S, Len, <<"both">>, Char) when is_binary(S), is_integer(Len), is_binary(Char) ->
+   iolist_to_binary(string:pad(S, Len, both, Char));
+
+pad(S, Len, <<"leading">>, Char) when is_binary(S), is_integer(Len), is_binary(Char) ->
+   iolist_to_binary(string:pad(S, Len, leading, Char)).
+
+replace(SrcStr, P, RepStr) when is_binary(SrcStr), is_binary(P), is_binary(RepStr) ->
+    iolist_to_binary(string:replace(SrcStr, P, RepStr, all)).
+
+replace(SrcStr, P, RepStr, <<"all">>) when is_binary(SrcStr), is_binary(P), is_binary(RepStr) ->
+    iolist_to_binary(string:replace(SrcStr, P, RepStr, all));
+
+replace(SrcStr, P, RepStr, <<"trailing">>) when is_binary(SrcStr), is_binary(P), is_binary(RepStr) ->
+    iolist_to_binary(string:replace(SrcStr, P, RepStr, trailing));
+
+replace(SrcStr, P, RepStr, <<"leading">>) when is_binary(SrcStr), is_binary(P), is_binary(RepStr) ->
+    iolist_to_binary(string:replace(SrcStr, P, RepStr, leading)).
+
+regex_match(Str, RE) ->
+    case re:run(Str, RE, [global,{capture,none}]) of
+        match -> true;
+        nomatch -> false
+    end.
+
+regex_replace(SrcStr, RE, RepStr) ->
+    re:replace(SrcStr, RE, RepStr, [global, {return,binary}]).
+
+ascii(Char) when is_binary(Char) ->
+    [FirstC| _] = binary_to_list(Char),
+    FirstC.
+
+find(S, P) when is_binary(S), is_binary(P) ->
+    find_s(S, P, leading).
+
+find(S, P, <<"trailing">>) when is_binary(S), is_binary(P) ->
+    find_s(S, P, trailing);
+
+find(S, P, <<"leading">>) when is_binary(S), is_binary(P) ->
+    find_s(S, P, leading).
+
+find_s(S, P, Dir) ->
+    case string:find(S, P, Dir) of
+        nomatch -> <<"">>;
+        SubStr -> SubStr
+    end.
 
 %%------------------------------------------------------------------------------
 %% Array Funcs
@@ -562,8 +660,21 @@ json_decode(Data) ->
 '$handle_undefined_function'(schema_encode, Args) ->
     error({args_count_error, {schema_encode, Args}});
 
-'$handle_undefined_function'(Fun, _Args) ->
-    error({sql_function_not_supported, Fun}).
+'$handle_undefined_function'(sprintf, [Format|Args]) ->
+    erlang:apply(fun sprintf_s/2, [Format, Args]);
+
+'$handle_undefined_function'(Fun, Args) ->
+    error({sql_function_not_supported, function_literal(Fun, Args)}).
 
 split_nested_key(Key) ->
     string:split(Key, ".", all).
+
+function_literal(Fun, []) when is_atom(Fun) ->
+    atom_to_list(Fun) ++ "()";
+function_literal(Fun, [FArg | Args]) when is_atom(Fun), is_list(Args) ->
+    WithFirstArg = io_lib:format("~s(~0p", [atom_to_list(Fun), FArg]),
+    lists:foldl(fun(Arg, Literal) ->
+        io_lib:format("~s, ~0p", [Literal, Arg])
+    end, WithFirstArg, Args) ++ ")";
+function_literal(Fun, Args) ->
+    {invalid_func, {Fun, Args}}.
