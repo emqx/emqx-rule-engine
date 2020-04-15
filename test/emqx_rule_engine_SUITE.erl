@@ -91,6 +91,8 @@ groups() ->
        t_sqlselect_2,
        t_sqlselect_3,
        t_sqlparse_event_1,
+       t_sqlparse_event_2,
+       t_sqlparse_event_3,
        t_sqlparse_foreach_1,
        t_sqlparse_foreach_2,
        t_sqlparse_foreach_3,
@@ -870,7 +872,23 @@ t_sqlparse_event_1(_Config) ->
     ?assertMatch({ok,#{tp := <<"t/tt">>}},
         emqx_rule_sqltester:test(
         #{<<"rawsql">> => Sql,
-            <<"ctx">> => #{<<"topic">> => <<"t/tt">>}})).
+          <<"ctx">> => #{<<"topic">> => <<"t/tt">>}})).
+
+t_sqlparse_event_2(_Config) ->
+    Sql = "select clientid "
+          "from \"$events/client_connected\" ",
+    ?assertMatch({ok,#{clientid := <<"abc">>}},
+        emqx_rule_sqltester:test(
+        #{<<"rawsql">> => Sql,
+          <<"ctx">> => #{<<"clientid">> => <<"abc">>}})).
+
+t_sqlparse_event_3(_Config) ->
+    Sql = "select clientid, topic as tp "
+          "from \"t/tt\", \"$events/client_connected\" ",
+    ?assertMatch({ok,#{clientid := <<"abc">>, tp := <<"t/tt">>}},
+        emqx_rule_sqltester:test(
+        #{<<"rawsql">> => Sql,
+          <<"ctx">> => #{<<"clientid">> => <<"abc">>, <<"topic">> => <<"t/tt">>}})).
 
 t_sqlparse_foreach_1(_Config) ->
     %% Verify foreach with and without 'AS'

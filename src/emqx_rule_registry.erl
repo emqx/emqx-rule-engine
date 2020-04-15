@@ -169,7 +169,7 @@ get_rules() ->
 -spec(get_rules_for(Topic :: binary()) -> list(emqx_rule_engine:rule())).
 get_rules_for(Topic) ->
     [Rule || Rule = #rule{for = For} <- get_rules(),
-             Topic =:= For orelse can_topic_match_oneof(Topic, For)].
+             Topic =:= For orelse emqx_rule_utils:can_topic_match_oneof(Topic, For)].
 
 -spec(get_rule(Id :: rule_id()) -> {ok, emqx_rule_engine:rule()} | not_found).
 get_rule(Id) ->
@@ -424,7 +424,3 @@ trans(Fun, Args) ->
         {atomic, ok} -> ok;
         {aborted, Reason} -> error(Reason)
     end.
-
-can_topic_match_oneof(Topic, Filters) ->
-    MatchedFilters = [Fltr || Fltr <- Filters, emqx_topic:match(Topic, Fltr)],
-    length(MatchedFilters) > 0.
