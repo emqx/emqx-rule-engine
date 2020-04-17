@@ -23,7 +23,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
 
--import(emqx_rule_events, [rule_input/1]).
+-import(emqx_rule_events, [eventmsg_publish/1]).
 
 -define(PROPTEST(F), ?assert(proper:quickcheck(F()))).
 %%-define(PROPTEST(F), ?assert(proper:quickcheck(F(), [{on_output, fun ct:print/2}]))).
@@ -35,7 +35,7 @@
 t_msgid(_) ->
     Msg = message(),
     ?assertEqual(undefined, apply_func(msgid, [], #{})),
-    ?assertEqual(emqx_guid:to_hexstr(emqx_message:id(Msg)), apply_func(msgid, [], rule_input(Msg))).
+    ?assertEqual(emqx_guid:to_hexstr(emqx_message:id(Msg)), apply_func(msgid, [], eventmsg_publish(Msg))).
 
 t_qos(_) ->
     ?assertEqual(undefined, apply_func(qos, [], #{})),
@@ -63,27 +63,22 @@ t_clientid(_) ->
 t_clientip(_) ->
     Msg = emqx_message:set_header(peerhost, {127,0,0,1}, message()),
     ?assertEqual(undefined, apply_func(clientip, [], #{})),
-    ?assertEqual(<<"127.0.0.1">>, apply_func(clientip, [], rule_input(Msg))).
+    ?assertEqual(<<"127.0.0.1">>, apply_func(clientip, [], eventmsg_publish(Msg))).
 
 t_peerhost(_) ->
     Msg = emqx_message:set_header(peerhost, {127,0,0,1}, message()),
     ?assertEqual(undefined, apply_func(peerhost, [], #{})),
-    ?assertEqual(<<"127.0.0.1">>, apply_func(peerhost, [], rule_input(Msg))).
+    ?assertEqual(<<"127.0.0.1">>, apply_func(peerhost, [], eventmsg_publish(Msg))).
 
 t_username(_) ->
     Msg = emqx_message:set_header(username, <<"feng">>, message()),
-    ?assertEqual(<<"feng">>, apply_func(username, [], rule_input(Msg))).
+    ?assertEqual(<<"feng">>, apply_func(username, [], eventmsg_publish(Msg))).
 
 t_payload(_) ->
     Input = emqx_message:to_map(message()),
     NestedMap = #{a => #{b => #{c => c}}},
     ?assertEqual(<<"hello">>, apply_func(payload, [], Input#{payload => <<"hello">>})),
     ?assertEqual(c, apply_func(payload, [<<"a.b.c">>], Input#{payload => NestedMap})).
-
-t_timestamp(_) ->
-    Now = erlang:system_time(millisecond),
-    timer:sleep(100),
-    ?assert(Now < apply_func(timestamp, [], message())).
 
 %%------------------------------------------------------------------------------
 %% Data Type Convertion Funcs
@@ -253,8 +248,11 @@ prop_math_fun() ->
                             end, true, MathFuns)
             end).
 
-comp_with_math(exp, X) ->
-    if X < 710 -> math:exp(X) == apply_func(exp, [X]);
+comp_with_math(Fun, X)
+        when Fun =:= exp;
+             Fun =:= sinh;
+             Fun =:= cosh ->
+    if X < 710 -> math:Fun(X) == apply_func(Fun, [X]);
        true -> true
     end;
 comp_with_math(F, X) ->
@@ -309,6 +307,146 @@ t_trim(_) ->
     ?assertEqual(<<"abc">>, apply_func(trim, [<<" abc ">>])),
     ?assertEqual(<<"abc ">>, apply_func(ltrim, [<<" abc ">>])),
     ?assertEqual(<<" abc">>, apply_func(rtrim, [<<" abc">>])).
+
+t_split_all(_) ->
+    ?assertEqual([], apply_func(split, [<<>>, <<"/">>])),
+    ?assertEqual([], apply_func(split, [<<"/">>, <<"/">>])),
+    ?assertEqual([<<"a">>,<<"b">>,<<"c">>], apply_func(split, [<<"/a/b/c">>, <<"/">>])),
+    ?assertEqual([<<"a">>,<<"b">>,<<"c">>], apply_func(split, [<<"/a/b//c/">>, <<"/">>])),
+    ?assertEqual([<<"a">>,<<"b">>,<<"c">>], apply_func(split, [<<"a,b,c">>, <<",">>])),
+    ?assertEqual([<<"a">>,<<" b ">>,<<"c">>], apply_func(split, [<<"a, b ,c">>, <<",">>])),
+    ?assertEqual([<<"a">>,<<"b">>,<<"c\n">>], apply_func(split, [<<"a,b,c\n">>, <<",">>])),
+    ?assertEqual([<<"a">>,<<"b">>,<<"c\r\n">>], apply_func(split, [<<"a,b,c\r\n">>, <<",">>])).
+
+t_split_notrim_all(_) ->
+    ?assertEqual([<<>>], apply_func(split, [<<>>, <<"/">>, <<"notrim">>])),
+    ?assertEqual([<<>>,<<>>], apply_func(split, [<<"/">>, <<"/">>, <<"notrim">>])),
+    ?assertEqual([<<>>, <<"a">>,<<"b">>,<<"c">>], apply_func(split, [<<"/a/b/c">>, <<"/">>, <<"notrim">>])),
+    ?assertEqual([<<>>, <<"a">>,<<"b">>, <<>>, <<"c">>, <<>>], apply_func(split, [<<"/a/b//c/">>, <<"/">>, <<"notrim">>])),
+    ?assertEqual([<<>>, <<"a">>,<<"b">>,<<"c\n">>], apply_func(split, [<<",a,b,c\n">>, <<",">>, <<"notrim">>])),
+    ?assertEqual([<<"a">>,<<" b">>,<<"c\r\n">>], apply_func(split, [<<"a, b,c\r\n">>, <<",">>, <<"notrim">>])),
+    ?assertEqual([<<"哈哈"/utf8>>,<<" 你好"/utf8>>,<<" 是的\r\n"/utf8>>], apply_func(split, [<<"哈哈, 你好, 是的\r\n"/utf8>>, <<",">>, <<"notrim">>])).
+
+t_split_leading(_) ->
+    ?assertEqual([], apply_func(split, [<<>>, <<"/">>, <<"leading">>])),
+    ?assertEqual([], apply_func(split, [<<"/">>, <<"/">>, <<"leading">>])),
+    ?assertEqual([<<"a/b/c">>], apply_func(split, [<<"/a/b/c">>, <<"/">>, <<"leading">>])),
+    ?assertEqual([<<"a">>,<<"b//c/">>], apply_func(split, [<<"a/b//c/">>, <<"/">>, <<"leading">>])),
+    ?assertEqual([<<"a">>,<<"b,c\n">>], apply_func(split, [<<"a,b,c\n">>, <<",">>, <<"leading">>])),
+    ?assertEqual([<<"a b">>,<<"c\r\n">>], apply_func(split, [<<"a b,c\r\n">>, <<",">>, <<"leading">>])),
+    ?assertEqual([<<"哈哈"/utf8>>,<<" 你好, 是的\r\n"/utf8>>], apply_func(split, [<<"哈哈, 你好, 是的\r\n"/utf8>>, <<",">>, <<"leading">>])).
+
+t_split_leading_notrim(_) ->
+    ?assertEqual([<<>>], apply_func(split, [<<>>, <<"/">>, <<"leading_notrim">>])),
+    ?assertEqual([<<>>,<<>>], apply_func(split, [<<"/">>, <<"/">>, <<"leading_notrim">>])),
+    ?assertEqual([<<>>, <<"a/b/c">>], apply_func(split, [<<"/a/b/c">>, <<"/">>, <<"leading_notrim">>])),
+    ?assertEqual([<<"a">>,<<"b//c/">>], apply_func(split, [<<"a/b//c/">>, <<"/">>, <<"leading_notrim">>])),
+    ?assertEqual([<<"a">>,<<"b,c\n">>], apply_func(split, [<<"a,b,c\n">>, <<",">>, <<"leading_notrim">>])),
+    ?assertEqual([<<"a b">>,<<"c\r\n">>], apply_func(split, [<<"a b,c\r\n">>, <<",">>, <<"leading_notrim">>])),
+    ?assertEqual([<<"哈哈"/utf8>>,<<" 你好, 是的\r\n"/utf8>>], apply_func(split, [<<"哈哈, 你好, 是的\r\n"/utf8>>, <<",">>, <<"leading_notrim">>])).
+
+t_split_trailing(_) ->
+    ?assertEqual([], apply_func(split, [<<>>, <<"/">>, <<"trailing">>])),
+    ?assertEqual([], apply_func(split, [<<"/">>, <<"/">>, <<"trailing">>])),
+    ?assertEqual([<<"/a/b">>, <<"c">>], apply_func(split, [<<"/a/b/c">>, <<"/">>, <<"trailing">>])),
+    ?assertEqual([<<"a/b//c">>], apply_func(split, [<<"a/b//c/">>, <<"/">>, <<"trailing">>])),
+    ?assertEqual([<<"a,b">>,<<"c\n">>], apply_func(split, [<<"a,b,c\n">>, <<",">>, <<"trailing">>])),
+    ?assertEqual([<<"a b">>,<<"c\r\n">>], apply_func(split, [<<"a b,c\r\n">>, <<",">>, <<"trailing">>])),
+    ?assertEqual([<<"哈哈, 你好"/utf8>>,<<" 是的\r\n"/utf8>>], apply_func(split, [<<"哈哈, 你好, 是的\r\n"/utf8>>, <<",">>, <<"trailing">>])).
+
+t_split_trailing_notrim(_) ->
+    ?assertEqual([<<>>], apply_func(split, [<<>>, <<"/">>, <<"trailing_notrim">>])),
+    ?assertEqual([<<>>, <<>>], apply_func(split, [<<"/">>, <<"/">>, <<"trailing_notrim">>])),
+    ?assertEqual([<<"/a/b">>, <<"c">>], apply_func(split, [<<"/a/b/c">>, <<"/">>, <<"trailing_notrim">>])),
+    ?assertEqual([<<"a/b//c">>, <<>>], apply_func(split, [<<"a/b//c/">>, <<"/">>, <<"trailing_notrim">>])),
+    ?assertEqual([<<"a,b">>,<<"c\n">>], apply_func(split, [<<"a,b,c\n">>, <<",">>, <<"trailing_notrim">>])),
+    ?assertEqual([<<"a b">>,<<"c\r\n">>], apply_func(split, [<<"a b,c\r\n">>, <<",">>, <<"trailing_notrim">>])),
+    ?assertEqual([<<"哈哈, 你好"/utf8>>,<<" 是的\r\n"/utf8>>], apply_func(split, [<<"哈哈, 你好, 是的\r\n"/utf8>>, <<",">>, <<"trailing_notrim">>])).
+
+t_tokens(_) ->
+    ?assertEqual([], apply_func(tokens, [<<>>, <<"/">>])),
+    ?assertEqual([], apply_func(tokens, [<<"/">>, <<"/">>])),
+    ?assertEqual([<<"a">>,<<"b">>,<<"c">>], apply_func(tokens, [<<"/a/b/c">>, <<"/">>])),
+    ?assertEqual([<<"a">>,<<"b">>,<<"c">>], apply_func(tokens, [<<"/a/b//c/">>, <<"/">>])),
+    ?assertEqual([<<"a">>,<<"b">>,<<"c">>], apply_func(tokens, [<<" /a/ b /c">>, <<" /">>])),
+    ?assertEqual([<<"a">>,<<"\nb">>,<<"c\n">>], apply_func(tokens, [<<"a ,\nb,c\n">>, <<", ">>])),
+    ?assertEqual([<<"a">>,<<"b">>,<<"c\r\n">>], apply_func(tokens, [<<"a ,b,c\r\n">>, <<", ">>])),
+    ?assertEqual([<<"a">>,<<"b">>,<<"c">>], apply_func(tokens, [<<"a,b, c\n">>, <<", ">>, <<"nocrlf">>])),
+    ?assertEqual([<<"a">>,<<"b">>,<<"c">>], apply_func(tokens, [<<"a,b,c\r\n">>, <<",">>, <<"nocrlf">>])),
+    ?assertEqual([<<"a">>,<<"b">>,<<"c">>], apply_func(tokens, [<<"a,b\r\n,c\n">>, <<",">>, <<"nocrlf">>])),
+    ?assertEqual([], apply_func(tokens, [<<"\r\n">>, <<",">>, <<"nocrlf">>])),
+    ?assertEqual([], apply_func(tokens, [<<"\r\n">>, <<",">>, <<"nocrlf">>])),
+    ?assertEqual([<<"哈哈"/utf8>>,<<"你好"/utf8>>,<<"是的"/utf8>>], apply_func(tokens, [<<"哈哈, 你好, 是的\r\n"/utf8>>, <<", ">>, <<"nocrlf">>])).
+
+t_concat(_) ->
+    ?assertEqual(<<"ab">>, apply_func(concat, [<<"a">>, <<"b">>])),
+    ?assertEqual(<<"ab">>, apply_func('+', [<<"a">>, <<"b">>])),
+    ?assertEqual(<<"哈哈你好"/utf8>>, apply_func(concat, [<<"哈哈"/utf8>>,<<"你好"/utf8>>])),
+    ?assertEqual(<<"abc">>, apply_func(concat, [apply_func(concat, [<<"a">>, <<"b">>]), <<"c">>])),
+    ?assertEqual(<<"a">>, apply_func(concat, [<<"">>, <<"a">>])),
+    ?assertEqual(<<"a">>, apply_func(concat, [<<"a">>, <<"">>])),
+    ?assertEqual(<<>>, apply_func(concat, [<<"">>, <<"">>])).
+
+t_sprintf(_) ->
+    ?assertEqual(<<"Hello Shawn!">>, apply_func(sprintf, [<<"Hello ~s!">>, <<"Shawn">>])),
+    ?assertEqual(<<"Name: ABC, Count: 2">>, apply_func(sprintf, [<<"Name: ~s, Count: ~p">>, <<"ABC">>, 2])),
+    ?assertEqual(<<"Name: ABC, Count: 2, Status: {ok,running}">>, apply_func(sprintf, [<<"Name: ~s, Count: ~p, Status: ~p">>, <<"ABC">>, 2, {ok, running}])).
+
+t_pad(_) ->
+    ?assertEqual(<<"abc  ">>, apply_func(pad, [<<"abc">>, 5])),
+    ?assertEqual(<<"abc">>, apply_func(pad, [<<"abc">>, 0])),
+    ?assertEqual(<<"abc  ">>, apply_func(pad, [<<"abc">>, 5, <<"trailing">>])),
+    ?assertEqual(<<"abc">>, apply_func(pad, [<<"abc">>, 0, <<"trailing">>])),
+    ?assertEqual(<<" abc ">>, apply_func(pad, [<<"abc">>, 5, <<"both">>])),
+    ?assertEqual(<<"abc">>, apply_func(pad, [<<"abc">>, 0, <<"both">>])),
+    ?assertEqual(<<"  abc">>, apply_func(pad, [<<"abc">>, 5, <<"leading">>])),
+    ?assertEqual(<<"abc">>, apply_func(pad, [<<"abc">>, 0, <<"leading">>])).
+
+t_pad_char(_) ->
+    ?assertEqual(<<"abcee">>, apply_func(pad, [<<"abc">>, 5, <<"trailing">>, <<"e">>])),
+    ?assertEqual(<<"abcexex">>, apply_func(pad, [<<"abc">>, 5, <<"trailing">>, <<"ex">>])),
+    ?assertEqual(<<"eabce">>, apply_func(pad, [<<"abc">>, 5, <<"both">>, <<"e">>])),
+    ?assertEqual(<<"exabcex">>, apply_func(pad, [<<"abc">>, 5, <<"both">>, <<"ex">>])),
+    ?assertEqual(<<"eeabc">>, apply_func(pad, [<<"abc">>, 5, <<"leading">>, <<"e">>])),
+    ?assertEqual(<<"exexabc">>, apply_func(pad, [<<"abc">>, 5, <<"leading">>, <<"ex">>])).
+
+t_replace(_) ->
+    ?assertEqual(<<"ab-c--">>, apply_func(replace, [<<"ab c  ">>, <<" ">>, <<"-">>])),
+    ?assertEqual(<<"ab::c::::">>, apply_func(replace, [<<"ab c  ">>, <<" ">>, <<"::">>])),
+    ?assertEqual(<<"ab-c--">>, apply_func(replace, [<<"ab c  ">>, <<" ">>, <<"-">>, <<"all">>])),
+    ?assertEqual(<<"ab-c  ">>, apply_func(replace, [<<"ab c  ">>, <<" ">>, <<"-">>, <<"leading">>])),
+    ?assertEqual(<<"ab c -">>, apply_func(replace, [<<"ab c  ">>, <<" ">>, <<"-">>, <<"trailing">>])).
+
+t_ascii(_) ->
+    ?assertEqual(97, apply_func(ascii, [<<"a">>])),
+    ?assertEqual(97, apply_func(ascii, [<<"ab">>])).
+
+t_find(_) ->
+    ?assertEqual(<<"cbcd">>, apply_func(find, [<<"acbcd">>, <<"c">>])),
+    ?assertEqual(<<"cbcd">>, apply_func(find, [<<"acbcd">>, <<"c">>, <<"leading">>])),
+    ?assertEqual(<<"">>, apply_func(find, [<<"acbcd">>, <<"e">>])),
+    ?assertEqual(<<"">>, apply_func(find, [<<"">>, <<"c">>])),
+    ?assertEqual(<<"">>, apply_func(find, [<<"">>, <<"">>])).
+
+t_find_trailing(_) ->
+    ?assertEqual(<<"cd">>, apply_func(find, [<<"acbcd">>, <<"c">>, <<"trailing">>])),
+    ?assertEqual(<<"">>, apply_func(find, [<<"acbcd">>, <<"e">>, <<"trailing">>])),
+    ?assertEqual(<<"">>, apply_func(find, [<<"">>, <<"c">>, <<"trailing">>])),
+    ?assertEqual(<<"">>, apply_func(find, [<<"">>, <<"">>, <<"trailing">>])).
+
+t_regex_match(_) ->
+    ?assertEqual(true, apply_func(regex_match, [<<"acbcd">>, <<"c">>])),
+    ?assertEqual(true, apply_func(regex_match, [<<"acbcd">>, <<"(ac)+">>])),
+    ?assertEqual(false, apply_func(regex_match, [<<"bcd">>, <<"(ac)+">>])),
+    ?assertEqual(true, apply_func(regex_match, [<<>>, <<".*">>])),
+    ?assertEqual(false, apply_func(regex_match, [<<>>, <<"[a-z]+">>])),
+    ?assertEqual(true, apply_func(regex_match, [<<"exebd">>, <<"^[a-z]+$">>])),
+    ?assertEqual(false, apply_func(regex_match, [<<"e2xebd">>, <<"^[a-z]+$">>])).
+
+t_regex_replace(_) ->
+    ?assertEqual(<<>>, apply_func(regex_replace, [<<>>, <<"c.*">>, <<"e">>])),
+    ?assertEqual(<<"aebed">>, apply_func(regex_replace, [<<"accbcd">>, <<"c+">>, <<"e">>])),
+    ?assertEqual(<<"a[cc]b[c]d">>, apply_func(regex_replace, [<<"accbcd">>, <<"c+">>, <<"[&]">>])).
 
 ascii_string() -> list(range(0,127)).
 
