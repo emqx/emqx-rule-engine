@@ -23,7 +23,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
 
--import(emqx_rule_events, [rule_input/1]).
+-import(emqx_rule_events, [eventmsg_publish/1]).
 
 -define(PROPTEST(F), ?assert(proper:quickcheck(F()))).
 %%-define(PROPTEST(F), ?assert(proper:quickcheck(F(), [{on_output, fun ct:print/2}]))).
@@ -35,7 +35,7 @@
 t_msgid(_) ->
     Msg = message(),
     ?assertEqual(undefined, apply_func(msgid, [], #{})),
-    ?assertEqual(emqx_guid:to_hexstr(emqx_message:id(Msg)), apply_func(msgid, [], rule_input(Msg))).
+    ?assertEqual(emqx_guid:to_hexstr(emqx_message:id(Msg)), apply_func(msgid, [], eventmsg_publish(Msg))).
 
 t_qos(_) ->
     ?assertEqual(undefined, apply_func(qos, [], #{})),
@@ -63,16 +63,16 @@ t_clientid(_) ->
 t_clientip(_) ->
     Msg = emqx_message:set_header(peerhost, {127,0,0,1}, message()),
     ?assertEqual(undefined, apply_func(clientip, [], #{})),
-    ?assertEqual(<<"127.0.0.1">>, apply_func(clientip, [], rule_input(Msg))).
+    ?assertEqual(<<"127.0.0.1">>, apply_func(clientip, [], eventmsg_publish(Msg))).
 
 t_peerhost(_) ->
     Msg = emqx_message:set_header(peerhost, {127,0,0,1}, message()),
     ?assertEqual(undefined, apply_func(peerhost, [], #{})),
-    ?assertEqual(<<"127.0.0.1">>, apply_func(peerhost, [], rule_input(Msg))).
+    ?assertEqual(<<"127.0.0.1">>, apply_func(peerhost, [], eventmsg_publish(Msg))).
 
 t_username(_) ->
     Msg = emqx_message:set_header(username, <<"feng">>, message()),
-    ?assertEqual(<<"feng">>, apply_func(username, [], rule_input(Msg))).
+    ?assertEqual(<<"feng">>, apply_func(username, [], eventmsg_publish(Msg))).
 
 t_payload(_) ->
     Input = emqx_message:to_map(message()),
@@ -248,8 +248,11 @@ prop_math_fun() ->
                             end, true, MathFuns)
             end).
 
-comp_with_math(exp, X) ->
-    if X < 710 -> math:exp(X) == apply_func(exp, [X]);
+comp_with_math(Fun, X)
+        when Fun =:= exp;
+             Fun =:= sinh;
+             Fun =:= cosh ->
+    if X < 710 -> math:Fun(X) == apply_func(Fun, [X]);
        true -> true
     end;
 comp_with_math(F, X) ->

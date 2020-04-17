@@ -24,7 +24,7 @@
 -export([ load/1
         , unload/1
         , event_name/1
-        , rule_input/1
+        , eventmsg_publish/1
         ]).
 
 -export([ on_client_connected/3
@@ -69,6 +69,19 @@ unload(_Env) ->
 %% Callbacks
 %%--------------------------------------------------------------------
 
+on_message_publish(Message = #message{flags = #{event := true}},
+                   _Env) ->
+    {ok, Message};
+on_message_publish(Message = #message{flags = #{sys := true}},
+                   #{ignore_sys_message := true}) ->
+    {ok, Message};
+on_message_publish(Message = #message{topic = Topic}, _Env) ->
+    case emqx_rule_registry:get_rules_for(Topic) of
+        [] -> ok;
+        Rules -> emqx_rule_runtime:apply_rules(Rules, eventmsg_publish(Message))
+    end,
+    {ok, Message}.
+
 on_client_connected(ClientInfo, ConnInfo, Env) ->
     may_publish_and_apply('client.connected',
         fun() -> eventmsg_connected(ClientInfo, ConnInfo) end, Env).
@@ -79,24 +92,11 @@ on_client_disconnected(ClientInfo, Reason, ConnInfo, Env) ->
 
 on_session_subscribed(ClientInfo, Topic, SubOpts, Env) ->
     may_publish_and_apply('session.subscribed',
-        fun() -> eventmsg_sub_unsub('session.subscribed', ClientInfo, Topic, SubOpts) end, Env).
+        fun() -> eventmsg_sub_or_unsub('session.subscribed', ClientInfo, Topic, SubOpts) end, Env).
 
 on_session_unsubscribed(ClientInfo, Topic, SubOpts, Env) ->
     may_publish_and_apply('session.unsubscribed',
-        fun() -> eventmsg_sub_unsub('session.unsubscribed', ClientInfo, Topic, SubOpts) end, Env).
-
-on_message_publish(Message = #message{flags = #{event := true}},
-                   _Env) ->
-    {ok, Message};
-on_message_publish(Message = #message{flags = #{sys := true}},
-                   #{ignore_sys_message := true}) ->
-    {ok, Message};
-on_message_publish(Message = #message{topic = Topic}, _Env) ->
-    case emqx_rule_registry:get_rules_for(Topic) of
-        [] -> ok;
-        Rules -> emqx_rule_runtime:apply_rules(Rules, rule_input(Message))
-    end,
-    {ok, Message}.
+        fun() -> eventmsg_sub_or_unsub('session.unsubscribed', ClientInfo, Topic, SubOpts) end, Env).
 
 on_message_dropped(Message = #message{flags = #{sys := true}},
                    _, _, #{ignore_sys_message := true}) ->
@@ -126,6 +126,20 @@ on_message_acked(ClientInfo, Message, Env) ->
 %% Event Messages
 %%--------------------------------------------------------------------
 
+eventmsg_publish(Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, headers = Headers, payload = Payload, timestamp = Timestamp}) ->
+    with_basic_columns('message.publish',
+        #{id => emqx_guid:to_hexstr(Id),
+          clientid => ClientId,
+          username => emqx_message:get_header(username, Message, undefined),
+          payload => Payload,
+          peerhost => ntoa(emqx_message:get_header(peerhost, Message, undefined)),
+          topic => Topic,
+          qos => QoS,
+          flags => Flags,
+          headers => printable_headers(Headers),
+          publish_received_at => Timestamp
+        }).
+
 eventmsg_connected(_ClientInfo = #{
                     clientid := ClientId,
                     username := Username,
@@ -142,22 +156,20 @@ eventmsg_connected(_ClientInfo = #{
                     connected_at := ConnectedAt,
                     expiry_interval := ExpiryInterval
                    }) ->
-    #{event => 'client.connected',
-      clientid => ClientId,
-      username => Username,
-      mountpoint => Mountpoint,
-      peername => ntoa(PeerName),
-      sockname => ntoa(SockName),
-      proto_name => ProtoName,
-      proto_ver => ProtoVer,
-      keepalive => Keepalive,
-      clean_start => CleanStart,
-      expiry_interval => ExpiryInterval,
-      is_bridge => IsBridge,
-      connected_at => ConnectedAt,
-      timestamp => erlang:system_time(millisecond),
-      node => node()
-     }.
+    with_basic_columns('client.connected',
+        #{clientid => ClientId,
+          username => Username,
+          mountpoint => Mountpoint,
+          peername => ntoa(PeerName),
+          sockname => ntoa(SockName),
+          proto_name => ProtoName,
+          proto_ver => ProtoVer,
+          keepalive => Keepalive,
+          clean_start => CleanStart,
+          expiry_interval => ExpiryInterval,
+          is_bridge => IsBridge,
+          connected_at => ConnectedAt
+        }).
 
 eventmsg_disconnected(_ClientInfo = #{
                        clientid := ClientId,
@@ -168,86 +180,85 @@ eventmsg_disconnected(_ClientInfo = #{
                         sockname := SockName,
                         disconnected_at := DisconnectedAt
                       }, Reason) ->
-    #{event => 'client.disconnected',
-      reason => reason(Reason),
-      clientid => ClientId,
-      username => Username,
-      peername => ntoa(PeerName),
-      sockname => ntoa(SockName),
-      disconnected_at => DisconnectedAt,
-      timestamp => erlang:system_time(millisecond),
-      node => node()
-    }.
+    with_basic_columns('client.disconnected',
+        #{reason => reason(Reason),
+          clientid => ClientId,
+          username => Username,
+          peername => ntoa(PeerName),
+          sockname => ntoa(SockName),
+          disconnected_at => DisconnectedAt
+        }).
 
-eventmsg_sub_unsub(Event, _ClientInfo = #{
+eventmsg_sub_or_unsub(Event, _ClientInfo = #{
                     clientid := ClientId,
                     username := Username,
                     peerhost := PeerHost
                    }, Topic, _SubOpts = #{qos := QoS}) ->
-    #{event => Event,
-      clientid => ClientId,
-      username => Username,
-      peerhost => ntoa(PeerHost),
-      topic => Topic,
-      qos => QoS,
-      timestamp => erlang:system_time(millisecond),
-      node => node()
-    }.
+    with_basic_columns(Event,
+        #{clientid => ClientId,
+          username => Username,
+          peerhost => ntoa(PeerHost),
+          topic => Topic,
+          qos => QoS
+        }).
 
 eventmsg_dropped(Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp}, Reason) ->
-    #{event => 'message.dropped',
-      id => emqx_guid:to_hexstr(Id),
-      reason => Reason,
-      clientid => ClientId,
-      username => emqx_message:get_header(username, Message, undefined),
-      payload => Payload,
-      peerhost => ntoa(emqx_message:get_header(peerhost, Message, undefined)),
-      topic => Topic,
-      qos => QoS,
-      flags => Flags,
-      timestamp => Timestamp,
-      node => node()
-    }.
+    with_basic_columns('message.dropped',
+        #{id => emqx_guid:to_hexstr(Id),
+          reason => Reason,
+          clientid => ClientId,
+          username => emqx_message:get_header(username, Message, undefined),
+          payload => Payload,
+          peerhost => ntoa(emqx_message:get_header(peerhost, Message, undefined)),
+          topic => Topic,
+          qos => QoS,
+          flags => Flags,
+          publish_received_at => Timestamp
+        }).
 
 eventmsg_delivered(_ClientInfo = #{
                     peerhost := PeerHost,
                     clientid := ReceiverCId,
                     username := ReceiverUsername
                   }, Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp}) ->
-    #{event => 'message.delivered',
-      id => emqx_guid:to_hexstr(Id),
-      from_clientid => ClientId,
-      from_username => emqx_message:get_header(username, Message, undefined),
-      clientid => ReceiverCId,
-      username => ReceiverUsername,
-      payload => Payload,
-      peerhost => ntoa(PeerHost),
-      topic => Topic,
-      qos => QoS,
-      flags => Flags,
-      timestamp => Timestamp,
-      node => node()
-    }.
+    with_basic_columns('message.delivered',
+        #{id => emqx_guid:to_hexstr(Id),
+          from_clientid => ClientId,
+          from_username => emqx_message:get_header(username, Message, undefined),
+          clientid => ReceiverCId,
+          username => ReceiverUsername,
+          payload => Payload,
+          peerhost => ntoa(PeerHost),
+          topic => Topic,
+          qos => QoS,
+          flags => Flags,
+          publish_received_at => Timestamp
+        }).
 
 eventmsg_acked(_ClientInfo = #{
                     peerhost := PeerHost,
                     clientid := ReceiverCId,
                     username := ReceiverUsername
                   }, #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp, headers = Headers}) ->
-    #{event => 'message.acked',
-      id => emqx_guid:to_hexstr(Id),
-      from_clientid => ClientId,
-      from_username => maps:get(username, Headers, undefined),
-      clientid => ReceiverCId,
-      username => ReceiverUsername,
-      payload => Payload,
-      peerhost => ntoa(PeerHost),
-      topic => Topic,
-      qos => QoS,
-      flags => Flags,
-      timestamp => Timestamp,
-      node => node()
-    }.
+    with_basic_columns('message.acked',
+        #{id => emqx_guid:to_hexstr(Id),
+          from_clientid => ClientId,
+          from_username => maps:get(username, Headers, undefined),
+          clientid => ReceiverCId,
+          username => ReceiverUsername,
+          payload => Payload,
+          peerhost => ntoa(PeerHost),
+          topic => Topic,
+          qos => QoS,
+          flags => Flags,
+          publish_received_at => Timestamp
+        }).
+
+with_basic_columns(EventName, Data) when is_map(Data) ->
+    Data#{event => EventName,
+          timestamp => erlang:system_time(millisecond),
+          node => node()
+        }.
 
 %%--------------------------------------------------------------------
 %% Events publishing and rules applying
@@ -273,21 +284,6 @@ may_publish_and_apply(EventName, GenEventMsg, _Env) ->
 make_msg(QoS, Topic, Payload) ->
     emqx_message:set_flags(#{sys => true, event => true},
         emqx_message:make(emqx_events, QoS, Topic, iolist_to_binary(Payload))).
-
-rule_input(Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, headers = Headers, payload = Payload, timestamp = Timestamp}) ->
-    #{event => 'message.publish',
-      id => emqx_guid:to_hexstr(Id),
-      clientid => ClientId,
-      username => emqx_message:get_header(username, Message, undefined),
-      payload => Payload,
-      peerhost => ntoa(emqx_message:get_header(peerhost, Message, undefined)),
-      topic => Topic,
-      qos => QoS,
-      flags => Flags,
-      headers => printable_headers(Headers),
-      timestamp => Timestamp,
-      node => node()
-    }.
 
 %%--------------------------------------------------------------------
 %% Helper functions
