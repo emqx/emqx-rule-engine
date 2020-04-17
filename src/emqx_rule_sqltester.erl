@@ -25,34 +25,53 @@
 test(#{<<"rawsql">> := Sql, <<"ctx">> := Context}) ->
     case emqx_rule_sqlparser:parse_select(Sql) of
         {ok, Select} ->
+            InTopic = maps:get(<<"topic">>, Context, <<>>),
             EventTopics = emqx_rule_sqlparser:select_from(Select),
-            ActInstId = {test_rule_sql, self()},
-            Rule = #rule{rawsql = Sql,
-                         for = EventTopics,
-                         is_foreach = emqx_rule_sqlparser:select_is_foreach(Select),
-                         fields = emqx_rule_sqlparser:select_fields(Select),
-                         doeach = emqx_rule_sqlparser:select_doeach(Select),
-                         incase = emqx_rule_sqlparser:select_incase(Select),
-                         conditions = emqx_rule_sqlparser:select_where(Select),
-                         actions = [#action_instance{
-                                        id = ActInstId,
-                                        name = test_rule_sql}]},
-            FullContext = fill_default_values(hd(EventTopics), emqx_rule_maps:atom_key_map(Context)),
-            try
-                ok = emqx_rule_registry:add_action_instance_params(
-                        #action_instance_params{id = ActInstId,
-                                                params = #{},
-                                                apply = sql_test_action()}),
-                emqx_rule_runtime:clear_rule_payload(),
-                emqx_rule_runtime:apply_rule(Rule, FullContext)
-            of
-                {ok, Data} -> {ok, flatten(Data)};
-                {error, nomatch} -> {error, nomatch}
-            after
-                ok = emqx_rule_registry:remove_action_instance_params(ActInstId)
+            case lists:all(fun is_publish_topic/1, EventTopics) of
+                true ->
+                    %% test if the topic matches the topic filters in the rule
+                    case emqx_rule_utils:can_topic_match_oneof(InTopic, EventTopics) of
+                        true -> test_rule(Sql, Select, Context, EventTopics);
+                        false -> {error, nomatch}
+                    end;
+                false ->
+                    %% the rule is for both publish and events, test it directly
+                    test_rule(Sql, Select, Context, EventTopics)
             end;
         Error -> error(Error)
     end.
+
+test_rule(Sql, Select, Context, EventTopics) ->
+    ActInstId = {test_rule_sql, self()},
+    Rule = #rule{
+        rawsql = Sql,
+        for = EventTopics,
+        is_foreach = emqx_rule_sqlparser:select_is_foreach(Select),
+        fields = emqx_rule_sqlparser:select_fields(Select),
+        doeach = emqx_rule_sqlparser:select_doeach(Select),
+        incase = emqx_rule_sqlparser:select_incase(Select),
+        conditions = emqx_rule_sqlparser:select_where(Select),
+        actions = [#action_instance{
+                    id = ActInstId,
+                    name = test_rule_sql}]
+    },
+    FullContext = fill_default_values(hd(EventTopics), emqx_rule_maps:atom_key_map(Context)),
+    try
+        ok = emqx_rule_registry:add_action_instance_params(
+                #action_instance_params{id = ActInstId,
+                                        params = #{},
+                                        apply = sql_test_action()}),
+        emqx_rule_runtime:clear_rule_payload(),
+        emqx_rule_runtime:apply_rule(Rule, FullContext)
+    of
+        {ok, Data} -> {ok, flatten(Data)};
+        {error, nomatch} -> {error, nomatch}
+    after
+        ok = emqx_rule_registry:remove_action_instance_params(ActInstId)
+    end.
+
+is_publish_topic(<<"$events/", _/binary>>) -> false;
+is_publish_topic(_Topic) -> true.
 
 flatten([]) -> [];
 flatten([D1]) -> D1;
