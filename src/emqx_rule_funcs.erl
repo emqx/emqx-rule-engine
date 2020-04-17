@@ -29,7 +29,6 @@
         , username/0
         , payload/0
         , payload/1
-        , timestamp/0
         , contains_topic/2
         , contains_topic/3
         , contains_topic_match/2
@@ -224,13 +223,6 @@ payload(Path) ->
     fun(#{payload := Payload}) when erlang:is_map(Payload) ->
             map_get(Path, Payload);
        (_) -> undefined
-    end.
-
-%% @doc "timestamp()" Func
-timestamp() ->
-    fun(#{timestamp := Ts}) ->
-            Ts;
-       (_) -> emqx_rule_utils:now_ms()
     end.
 
 %% @doc Check if a topic_filter contains a specific topic

@@ -80,11 +80,6 @@ t_payload(_) ->
     ?assertEqual(<<"hello">>, apply_func(payload, [], Input#{payload => <<"hello">>})),
     ?assertEqual(c, apply_func(payload, [<<"a.b.c">>], Input#{payload => NestedMap})).
 
-t_timestamp(_) ->
-    Now = erlang:system_time(millisecond),
-    timer:sleep(100),
-    ?assert(Now < apply_func(timestamp, [], message())).
-
 %%------------------------------------------------------------------------------
 %% Data Type Convertion Funcs
 %%------------------------------------------------------------------------------
