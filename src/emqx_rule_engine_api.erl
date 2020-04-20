@@ -438,21 +438,22 @@ parse_rule_params([], Rule) ->
     Rule;
 parse_rule_params([{<<"rawsql">>, RawSQL} | Params], Rule) ->
     parse_rule_params(Params, Rule#{rawsql => RawSQL});
+parse_rule_params([{<<"on_action_failed">>, OnFailed} | Params], Rule) ->
+    parse_rule_params(Params, Rule#{on_action_failed => OnFailed});
 parse_rule_params([{<<"actions">>, Actions} | Params], Rule) ->
-    parse_rule_params(Params, Rule#{actions => [parse_action(json_term_to_map(A)) || A <- Actions]});
+    parse_rule_params(Params, Rule#{actions => parse_actions(Actions)});
 parse_rule_params([{<<"description">>, Descr} | Params], Rule) ->
     parse_rule_params(Params, Rule#{description => Descr});
 parse_rule_params([_ | Params], Res) ->
     parse_rule_params(Params, Res).
 
-parse_action(Actions) ->
-    case maps:find(<<"params">>, Actions) of
-        error ->
-            {binary_to_existing_atom(maps:get(<<"name">>, Actions), utf8), #{}};
-        {ok, Params} ->
-            {binary_to_existing_atom(maps:get(<<"name">>, Actions), utf8),
-             Params}
-    end.
+parse_actions(Actions) ->
+    [parse_action(json_term_to_map(A)) || A <- Actions].
+
+parse_action(Action) ->
+    {binary_to_existing_atom(maps:get(<<"name">>, Action), utf8),
+     maps:get(<<"params">>, Action, #{}),
+     parse_actions(maps:get(<<"fallbacks">>, Action, []))}.
 
 parse_resource_params(Params) ->
     parse_resource_params(Params, #{config => #{}, description => <<"">>}).
