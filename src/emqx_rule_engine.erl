@@ -161,7 +161,8 @@ create_rule(Params = #{rawsql := Sql, actions := Actions}) ->
                          doeach = emqx_rule_sqlparser:select_doeach(Select),
                          incase = emqx_rule_sqlparser:select_incase(Select),
                          conditions = emqx_rule_sqlparser:select_where(Select),
-                         actions = [prepare_action(Action) || Action <- Actions],
+                         on_action_failed = maps:get(on_action_failed, Params, continue),
+                         actions = prepare_actions(Actions),
                          enabled = maps:get(enabled, Params, true),
                          description = maps:get(description, Params, "")},
             ok = emqx_rule_registry:add_rule(Rule),
@@ -285,11 +286,7 @@ refresh_resources() ->
 -spec(refresh_rules() -> ok).
 refresh_rules() ->
     try
-        [lists:foreach(
-            fun(#action_instance{id = Id, name = ActName, args = Args}) ->
-                {ok, #action{module = Mod, on_create = Create}} = emqx_rule_registry:find_action(ActName),
-                cluster_call(init_action, [Mod, Create, Id, with_resource_params(Args)])
-            end, Actions)
+        [refresh_actions(Actions, fun(_) -> true end)
         || #rule{actions = Actions} <- emqx_rule_registry:get_rules()],
         ok
     catch
@@ -314,14 +311,18 @@ refresh_resource_status() ->
 %%------------------------------------------------------------------------------
 %% Internal Functions
 %%------------------------------------------------------------------------------
+prepare_actions(Actions) ->
+    [prepare_action(Action) || Action <- Actions].
 
 prepare_action({Name, Args}) ->
+    prepare_action({Name, Args, []});
+prepare_action({Name, Args, Fallbacks}) ->
     case emqx_rule_registry:find_action(Name) of
         {ok, #action{module = Mod, on_create = Create, params_spec = ParamSpec}} ->
             ok = emqx_rule_validator:validate_params(Args, ParamSpec),
             ActionInstId = action_instance_id(Name),
             cluster_call(init_action, [Mod, Create, ActionInstId, with_resource_params(Args)]),
-            #action_instance{id = ActionInstId, name = Name, args = Args};
+            #action_instance{id = ActionInstId, name = Name, args = Args, fallbacks = prepare_actions(Fallbacks)};
         not_found ->
             throw({action_not_found, Name})
     end.
@@ -441,16 +442,27 @@ fetch_resource_status(Module, OnStatus, ResId) ->
     end.
 
 refresh_actions_of_a_resource(ResId) ->
-    [lists:foreach(
-        fun(#action_instance{args = Args = #{<<"$resource">> := ResId0},
-                             id = Id, name = ActName}) when ResId0 =:= ResId ->
-                {ok, #action{module = Mod, on_create = Create}}
-                    = emqx_rule_registry:find_action(ActName),
-                init_action(Mod, Create, Id, with_resource_params(Args));
-            (#action_instance{}) ->
-                ok
-        end, Actions)
-    || #rule{actions = Actions} <- emqx_rule_registry:get_rules()].
+    [refresh_actions(Actions,
+        fun (#action_instance{args = #{<<"$resource">> := ResId0}})
+                when ResId0 =:= ResId -> true;
+            (_) -> false
+        end)
+     || #rule{actions = Actions} <- emqx_rule_registry:get_rules()].
+
+refresh_actions(Actions, Pred) ->
+    lists:foreach(
+        fun(#action_instance{args = Args,
+                             id = Id, name = ActName,
+                             fallbacks = Fallbacks} = ActionInst) ->
+            case Pred(ActionInst) of
+                true ->
+                    {ok, #action{module = Mod, on_create = Create}}
+                        = emqx_rule_registry:find_action(ActName),
+                    cluster_call(init_action, [Mod, Create, Id, with_resource_params(Args)]),
+                    refresh_actions(Fallbacks, Pred);
+                false -> ok
+            end
+        end, Actions).
 
 func_fail(Func) when is_atom(Func) ->
     list_to_atom(atom_to_list(Func) ++ "_failure").

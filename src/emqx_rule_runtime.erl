@@ -71,6 +71,7 @@ apply_rule(#rule{id = RuleId,
                  doeach = DoEach,
                  incase = InCase,
                  conditions = Conditions,
+                 on_action_failed = OnFailed,
                  actions = Actions}, Input) ->
     {Selected, Collection} = ?RAISE(select_and_collect(Fields, Input),
                                         {select_and_collect_error, _REASON_}),
@@ -80,7 +81,7 @@ apply_rule(#rule{id = RuleId,
         true ->
             ok = emqx_rule_metrics:inc(RuleId, 'rules.matched'),
             Collection2 = filter_collection(Input, InCase, DoEach, Collection),
-            {ok, [take_actions(Actions, Coll, Input) || Coll <- Collection2]};
+            {ok, [take_actions(Actions, Coll, Input, OnFailed) || Coll <- Collection2]};
         false ->
             {error, nomatch}
     end;
@@ -89,6 +90,7 @@ apply_rule(#rule{id = RuleId,
                  is_foreach = false,
                  fields = Fields,
                  conditions = Conditions,
+                 on_action_failed = OnFailed,
                  actions = Actions}, Input) ->
     Selected = ?RAISE(select_and_transform(Fields, Input),
                       {select_and_transform_error, _REASON_}),
@@ -96,7 +98,7 @@ apply_rule(#rule{id = RuleId,
                 {match_conditions_error, _REASON_}) of
         true ->
             ok = emqx_rule_metrics:inc(RuleId, 'rules.matched'),
-            {ok, take_actions(Actions, Selected, Input)};
+            {ok, take_actions(Actions, Selected, Input, OnFailed)};
         false ->
             {error, nomatch}
     end.
@@ -215,10 +217,10 @@ number(Bin) ->
     end.
 
 %% Step3 -> Take actions
-take_actions(Actions, Selected, Envs) ->
-    lists:map(fun(Action) -> take_action(Action, Selected, Envs) end, Actions).
+take_actions(Actions, Selected, Envs, OnFailed) ->
+    lists:map(fun(Action) -> take_action(Action, Selected, Envs, OnFailed) end, Actions).
 
-take_action(#action_instance{id = Id}, Selected, Envs) ->
+take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected, Envs, OnFailed) ->
     try
         {ok, #action_instance_params{apply = Apply}}
             = emqx_rule_registry:get_action_instance_params(Id),
@@ -228,7 +230,14 @@ take_action(#action_instance{id = Id}, Selected, Envs) ->
     catch
         _Error:Reason:Stack ->
             emqx_rule_metrics:inc(Id, 'actions.failure'),
-            error({take_action_failed, {Id, Reason, Stack}})
+            case OnFailed of
+                continue ->
+                    take_actions(Fallbacks, Selected, Envs, continue),
+                    failed;
+                stop ->
+                    take_actions(Fallbacks, Selected, Envs, continue),
+                    error({take_action_failed, {Id, Reason, Stack}})
+            end
     end.
 
 eval({var, [<<"payload">> | Vars]}, Input) ->

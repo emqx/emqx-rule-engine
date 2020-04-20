@@ -46,6 +46,7 @@
 -define(OPTSPEC_RULES_CREATE,
         [ {sql, undefined, undefined, binary, "Filter Condition SQL"}
         , {actions, undefined, undefined, binary, "Action List in JSON format: [{\"name\": <action_name>, \"params\": {<key>: <value>}}]"}
+        , {on_action_failed, $g, "on_action_failed", {atom, continue}, "'continue' or 'stop' when an action in the rule fails"}
         , {descr, $d, "descr", {binary, <<"">>}, "Description"}
         ]).
 
@@ -253,7 +254,8 @@ format(#resource_type{name = Name,
 make_rule(Opts) ->
     Actions = get_value(actions, Opts),
     #{rawsql => get_value(sql, Opts),
-      actions => parse_action_params(Actions),
+      actions => parse_actions(emqx_json:decode(Actions, [return_maps])),
+      on_action_failed => get_value(on_action_failed, Opts),
       description => get_value(descr, Opts)}.
 
 make_resource(Opts) ->
@@ -276,16 +278,15 @@ with_opts(Action, RawParams, OptSpecList, {CmdObject, CmdName}) ->
             emqx_ctl:print("~0p~n", [Reason])
     end.
 
-parse_action_params(Actions) ->
-    ?RAISE(
-        lists:map(fun
-            (#{<<"name">> := ActName, <<"params">> := ActParam}) ->
-                {?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}),
-                ActParam};
-            (#{<<"name">> := ActName}) ->
-                {?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}), #{}}
-            end, emqx_json:decode(Actions, [return_maps])),
+parse_actions(Actions) ->
+    ?RAISE([parse_action(Action) || Action <- Actions],
         {invalid_action_params, _REASON_}).
+
+parse_action(Action) ->
+    ActName = maps:get(<<"name">>, Action),
+    {?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}),
+     maps:get(<<"params">>, Action, #{}),
+     parse_actions(maps:get(<<"fallbacks">>, Action, []))}.
 
 get_actions() ->
     emqx_rule_registry:get_actions().
