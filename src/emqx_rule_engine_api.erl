@@ -377,12 +377,14 @@ record_to_map(#rule{id = Id,
                     for = Hook,
                     rawsql = RawSQL,
                     actions = Actions,
+                    on_action_failed = OnFailed,
                     enabled = Enabled,
                     description = Descr}) ->
     #{id => Id,
       for => Hook,
       rawsql => RawSQL,
       actions => printable_actions(Actions),
+      on_action_failed => OnFailed,
       metrics => get_rule_metrics(Id),
       enabled => Enabled,
       description => Descr
@@ -429,8 +431,10 @@ record_to_map(#resource_type{name = Name,
      }.
 
 printable_actions(Actions) ->
-    [#{id => Id, name => Name, params => Args, metrics => get_action_metrics(Id)}
-     || #action_instance{id = Id, name = Name, args = Args} <- Actions].
+    [#{id => Id, name => Name, params => Args,
+       metrics => get_action_metrics(Id),
+       fallbacks => printable_actions(Fallbacks)}
+     || #action_instance{id = Id, name = Name, args = Args, fallbacks = Fallbacks} <- Actions].
 
 parse_rule_params(Params) ->
     parse_rule_params(Params, #{description => <<"">>}).
@@ -439,13 +443,17 @@ parse_rule_params([], Rule) ->
 parse_rule_params([{<<"rawsql">>, RawSQL} | Params], Rule) ->
     parse_rule_params(Params, Rule#{rawsql => RawSQL});
 parse_rule_params([{<<"on_action_failed">>, OnFailed} | Params], Rule) ->
-    parse_rule_params(Params, Rule#{on_action_failed => OnFailed});
+    parse_rule_params(Params, Rule#{on_action_failed => on_failed(OnFailed)});
 parse_rule_params([{<<"actions">>, Actions} | Params], Rule) ->
     parse_rule_params(Params, Rule#{actions => parse_actions(Actions)});
 parse_rule_params([{<<"description">>, Descr} | Params], Rule) ->
     parse_rule_params(Params, Rule#{description => Descr});
 parse_rule_params([_ | Params], Res) ->
     parse_rule_params(Params, Res).
+
+on_failed(<<"continue">>) -> continue;
+on_failed(<<"stop">>) -> stop;
+on_failed(OnFailed) -> error({invalid_on_failed, OnFailed}).
 
 parse_actions(Actions) ->
     [parse_action(json_term_to_map(A)) || A <- Actions].
