@@ -220,9 +220,10 @@ format(#rule{id = Id,
              for = Hook,
              rawsql = Sql,
              actions = Actions,
+             on_action_failed = OnFailed,
              enabled = Enabled,
              description = Descr}) ->
-    lists:flatten(io_lib:format("rule(id='~s', for='~0p', rawsql='~s', actions=~0p, metrics=~0p, enabled='~s', description='~s')~n", [Id, Hook, rmlf(Sql), printable_actions(Actions), get_rule_metrics(Id), Enabled, Descr]));
+    lists:flatten(io_lib:format("rule(id='~s', for='~0p', rawsql='~s', actions=~0p, on_action_failed='~s', metrics=~0p, enabled='~s', description='~s')~n", [Id, Hook, rmlf(Sql), printable_actions(Actions), OnFailed, get_rule_metrics(Id), Enabled, Descr]));
 
 format(#action{hidden = true}) ->
     ok;
@@ -255,7 +256,7 @@ make_rule(Opts) ->
     Actions = get_value(actions, Opts),
     #{rawsql => get_value(sql, Opts),
       actions => parse_actions(emqx_json:decode(Actions, [return_maps])),
-      on_action_failed => get_value(on_action_failed, Opts),
+      on_action_failed => on_failed(get_value(on_action_failed, Opts)),
       description => get_value(descr, Opts)}.
 
 make_resource(Opts) ->
@@ -265,8 +266,10 @@ make_resource(Opts) ->
       description => get_value(descr, Opts)}.
 
 printable_actions(Actions) when is_list(Actions) ->
-    emqx_json:encode([#{id => Id, name => Name, params => Args, metrics => get_action_metrics(Id)}
-                      || #action_instance{id = Id, name = Name, args = Args} <- Actions]).
+    emqx_json:encode([#{id => Id, name => Name, params => Args,
+                        metrics => get_action_metrics(Id),
+                        fallbacks => printable_actions(Fallbacks)}
+                      || #action_instance{id = Id, name = Name, args = Args, fallbacks = Fallbacks} <- Actions]).
 
 with_opts(Action, RawParams, OptSpecList, {CmdObject, CmdName}) ->
     case getopt:parse_and_check(OptSpecList, RawParams) of
@@ -298,6 +301,10 @@ get_rule_metrics(Id) ->
 get_action_metrics(Id) ->
     [maps:put(node, Node, rpc:call(Node, emqx_rule_metrics, get_action_metrics, [Id]))
      || Node <- [node()| nodes()]].
+
+on_failed(continue) -> continue;
+on_failed(stop) -> stop;
+on_failed(OnFailed) -> error({invalid_on_failed, OnFailed}).
 
 rmlf(Str) ->
     re:replace(Str, "\n", "", [global]).
