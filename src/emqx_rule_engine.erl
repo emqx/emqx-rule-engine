@@ -27,6 +27,7 @@
         ]).
 
 -export([ create_rule/1
+        , update_rule/1
         , delete_rule/1
         , create_resource/1
         , test_resource/1
@@ -169,6 +170,18 @@ create_rule(Params = #{rawsql := Sql, actions := Actions}) ->
             ok = emqx_rule_registry:add_rule(Rule),
             {ok, Rule};
         Error -> error(Error)
+    end.
+
+-spec(update_rule(#{}) -> {ok, rule()} | no_return()).
+update_rule(Params = #{id := RuleId}) ->
+    case emqx_rule_registry:get_rule(RuleId) of
+        {ok, Rule0} ->
+            delete_rule(RuleId),
+            Rule = may_update_rule_params(Rule0, Params),
+            ok = emqx_rule_registry:add_rule(Rule),
+            {ok, Rule};
+        not_found ->
+            {error, {not_found, RuleId}}
     end.
 
 -spec(delete_rule(RuleId :: rule_id()) -> ok).
@@ -345,6 +358,35 @@ with_resource_params(Args = #{<<"$resource">> := ResId}) ->
             throw({resource_not_initialized, ResId})
     end;
 with_resource_params(Args) -> Args.
+
+may_update_rule_params(Rule, Params) when map_size(Params) =:= 0 ->
+    Rule;
+may_update_rule_params(Rule, Params = #{enabled := Enabled}) ->
+    may_update_rule_params(Rule#rule{enabled = Enabled}, maps:remove(enabled, Params));
+may_update_rule_params(Rule, Params = #{description := Descr}) ->
+    may_update_rule_params(Rule#rule{description = Descr}, maps:remove(description, Params));
+may_update_rule_params(Rule, Params = #{on_action_failed := OnFailed}) ->
+    may_update_rule_params(Rule#rule{on_action_failed = OnFailed}, maps:remove(on_action_failed, Params));
+may_update_rule_params(Rule, Params = #{actions := Actions}) ->
+    may_update_rule_params(Rule#rule{actions = prepare_actions(Actions)}, maps:remove(actions, Params));
+may_update_rule_params(Rule, Params = #{rawsql := SQL}) ->
+    case emqx_rule_sqlparser:parse_select(SQL) of
+        {ok, Select} ->
+            may_update_rule_params(
+                Rule#rule{
+                    rawsql = SQL,
+                    for = emqx_rule_sqlparser:select_from(Select),
+                    is_foreach = emqx_rule_sqlparser:select_is_foreach(Select),
+                    fields = emqx_rule_sqlparser:select_fields(Select),
+                    doeach = emqx_rule_sqlparser:select_doeach(Select),
+                    incase = emqx_rule_sqlparser:select_incase(Select),
+                    conditions = emqx_rule_sqlparser:select_where(Select)
+                },
+                maps:remove(rawsql, Params));
+        Error -> error(Error)
+    end;
+may_update_rule_params(Rule, _Params) -> %% ignore all the unsupported params
+    Rule.
 
 ignore_lib_apps(Apps) ->
     LibApps = [kernel, stdlib, sasl, appmon, eldap, erts,

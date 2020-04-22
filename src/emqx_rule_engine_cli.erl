@@ -46,8 +46,18 @@
 -define(OPTSPEC_RULES_CREATE,
         [ {sql, undefined, undefined, binary, "Filter Condition SQL"}
         , {actions, undefined, undefined, binary, "Action List in JSON format: [{\"name\": <action_name>, \"params\": {<key>: <value>}}]"}
+        , {enabled, $e, "enabled", {atom, true}, "'true' or 'false' to enable or disable the rule"}
         , {on_action_failed, $g, "on_action_failed", {atom, continue}, "'continue' or 'stop' when an action in the rule fails"}
         , {descr, $d, "descr", {binary, <<"">>}, "Description"}
+        ]).
+
+-define(OPTSPEC_RULES_UPDATE,
+        [ {id, undefined, undefined, binary, "Rule ID"}
+        , {sql, $s, "sql", {binary, undefined}, "Filter Condition SQL"}
+        , {actions, $a, "actions", {binary, undefined}, "Action List in JSON format: [{\"name\": <action_name>, \"params\": {<key>: <value>}}]"}
+        , {enabled, $e, "enabled", {atom, undefined}, "'true' or 'false' to enable or disable the rule"}
+        , {on_action_failed, $g, "on_action_failed", {atom, undefined}, "'continue' or 'stop' when an action in the rule fails"}
+        , {descr, $d, "descr", {binary, undefined}, "Description"}
         ]).
 
 %%-----------------------------------------------------------------------------
@@ -98,6 +108,19 @@ rules(["create" | Params]) ->
                         emqx_ctl:print("Invalid options: ~0p~n", [Error])
                 end
               end, Params, ?OPTSPEC_RULES_CREATE, {?FUNCTION_NAME, create});
+
+rules(["update" | Params]) ->
+    with_opts(fun({Opts, _}) ->
+                try emqx_rule_engine:update_rule(make_updated_rule(Opts)) of
+                    {ok, #rule{id = RuleId}} ->
+                        emqx_ctl:print("Rule ~s updated~n", [RuleId]);
+                    {error, Reason} ->
+                        emqx_ctl:print("Invalid options: ~0p~n", [Reason])
+                catch
+                    throw:Error ->
+                        emqx_ctl:print("Invalid options: ~0p~n", [Error])
+                end
+              end, Params, ?OPTSPEC_RULES_UPDATE, {?FUNCTION_NAME, update});
 
 rules(["delete", RuleId]) ->
     ok = emqx_rule_engine:delete_rule(list_to_binary(RuleId)),
@@ -255,9 +278,31 @@ format(#resource_type{name = Name,
 make_rule(Opts) ->
     Actions = get_value(actions, Opts),
     #{rawsql => get_value(sql, Opts),
+      enabled => get_value(enabled, Opts),
       actions => parse_actions(emqx_json:decode(Actions, [return_maps])),
       on_action_failed => on_failed(get_value(on_action_failed, Opts)),
       description => get_value(descr, Opts)}.
+
+make_updated_rule(Opts) ->
+    KeyNameParsers = [{sql, rawsql, fun(SQL) -> SQL end},
+                      enabled,
+                      {actions, actions, fun(Actions) ->
+                            parse_actions(emqx_json:decode(Actions, [return_maps]))
+                        end},
+                      on_action_failed,
+                      {descr, description, fun(Descr) -> Descr end}],
+    lists:foldl(fun
+        ({Key, Name, Parser}, ParamsAcc) ->
+            case get_value(Key, Opts) of
+                undefined -> ParamsAcc;
+                Val -> ParamsAcc#{Name => Parser(Val)}
+            end;
+        (Key, ParamsAcc) ->
+            case get_value(Key, Opts) of
+                undefined -> ParamsAcc;
+                Val -> ParamsAcc#{Key => Val}
+            end
+        end, #{id => get_value(id, Opts)}, KeyNameParsers).
 
 make_resource(Opts) ->
     Config = get_value(config, Opts),
