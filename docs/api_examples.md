@@ -7,12 +7,14 @@ APPSECRET="88ebdd6569afc:Mjg3MzUyNTI2Mjk2NTcyOTEwMDEwMDMzMTE2NTM1MTkzNjA"
 ## Rules
 
 ### test sql
+
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8081/api/v4/rules?test' -d \
 '{"rawsql":"select * from \"message.publish\" where topic=\"t/a\"","ctx":{}}'
 
 
 
 ### create
+
 ```shell
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8081/api/v4/rules' -d \
 '{"rawsql":"select * from \"t/a\"","actions":[{"name":"inspect","params":{"a":1}}],"description":"test-rule"}'
@@ -26,7 +28,24 @@ $ curl -v --basic -u $APPSECRET -k 'http://localhost:8081/api/v4/rules' -d \
 {"code":0,"data":{"actions":[{"name":"inspect","params":{"$resource":"resource:3a7b44a1","a":1}}],"description":"test-rule","enabled":true,"id":"rule:6fce0ca9","rawsql":"select * from \"t/a\""}}
 ```
 
+### modify
+
+```shell
+## modify all of the params
+$ curl -v --basic -u $APPSECRET -k 'http://localhost:8081/api/v4/rules/rule:bc987915' -d \
+'{"rawsql":"select * from \"t/a\"","actions":[{"name":"inspect","params":{"a":1}}],"description":"test-rule"}'
+
+## modify some of the params: disable it
+$ curl -v --basic -u $APPSECRET -k 'http://localhost:8081/api/v4/rules/rule:bc987915' -d \
+'{"enabled": false}'
+
+## modify some of the params: add fallback actions
+$ curl -v --basic -u $APPSECRET -k 'http://localhost:8081/api/v4/rules/rule:bc987915' -d \
+'{"actions":[{"name":"inspect","params":{"a":1}, "fallbacks": [{"name":"donothing"}]}]}'
+```
+
 ### show
+
 ```shell
 $ curl -v --basic -u $APPSECRET -k 'http://localhost:8081/api/v4/rules/rule:bc987915'
 

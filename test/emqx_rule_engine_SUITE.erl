@@ -352,6 +352,14 @@ t_crud_rule_api(_Config) ->
     %ct:pal("RShow : ~p", [Rule1]),
     ?assertEqual(Rule, Rule1),
 
+    {ok, [{code, 0}, {data, Rule2}]} = emqx_rule_engine_api:update_rule(#{id => RuleID},
+                [{<<"rawsql">>, <<"select * from \"t/b\"">>}]),
+
+    {ok, [{code, 0}, {data, Rule3 = #{rawsql := SQL}}]} = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
+    %ct:pal("RShow : ~p", [Rule1]),
+    ?assertEqual(Rule3, Rule2),
+    ?assertEqual(<<"select * from \"t/b\"">>, SQL),
+
     ?assertMatch({ok, [{code, 0}]}, emqx_rule_engine_api:delete_rule(#{id => RuleID}, [])),
 
     NotFound = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
@@ -423,6 +431,11 @@ t_rules_cli(_Config) ->
     RShow = emqx_rule_engine_cli:rules(["show", RuleId]),
     ?assertMatch({match, _}, re:run(RShow, RuleId)),
     %ct:pal("RShow : ~p", [RShow]),
+
+    RUpdate = emqx_rule_engine_cli:rules(["update",
+                                          RuleId,
+                                          "-s", "select * from \"t2\""]),
+    ?assertMatch({match, _}, re:run(RUpdate, "updated")),
 
     RDelete = emqx_rule_engine_cli:rules(["delete", RuleId]),
     ?assertEqual("ok~n", RDelete),
