@@ -40,6 +40,7 @@
         , init_action/4
         , clear_resource/3
         , clear_action/3
+        , prepare_action/1
         ]).
 
 -type(rule() :: #rule{}).
@@ -152,7 +153,7 @@ module_attributes(Module) ->
 create_rule(Params = #{rawsql := Sql, actions := Actions}) ->
     case emqx_rule_sqlparser:parse_select(Sql) of
         {ok, Select} ->
-            RuleId = rule_id(),
+            RuleId = maps:get(id, Params, rule_id()),
             Rule = #rule{id = RuleId,
                          rawsql = Sql,
                          for = emqx_rule_sqlparser:select_from(Select),
@@ -189,7 +190,7 @@ create_resource(#{type := Type, config := Config} = Params) ->
     case emqx_rule_registry:find_resource_type(Type) of
         {ok, #resource_type{on_create = {M, F}, params_spec = ParamSpec}} ->
             ok = emqx_rule_validator:validate_params(Config, ParamSpec),
-            ResId = resource_id(),
+            ResId = maps:get(id, Params, resource_id()),
             Resource = #resource{id = ResId,
                                  type = Type,
                                  config = Config,
@@ -315,6 +316,15 @@ refresh_resource_status() ->
 %% Internal Functions
 %%------------------------------------------------------------------------------
 
+prepare_action({ActionInstId, Name, Args}) ->
+    case emqx_rule_registry:find_action(Name) of
+        {ok, #action{module = Mod, on_create = Create, params_spec = ParamSpec}} ->
+            ok = emqx_rule_validator:validate_params(Args, ParamSpec),
+            cluster_call(init_action, [Mod, Create, ActionInstId, with_resource_params(Args)]),
+            #action_instance{id = ActionInstId, name = Name, args = Args};
+        not_found ->
+            throw({action_not_found, Name})
+    end;
 prepare_action({Name, Args}) ->
     case emqx_rule_registry:find_action(Name) of
         {ok, #action{module = Mod, on_create = Create, params_spec = ParamSpec}} ->
