@@ -32,15 +32,15 @@ $ curl -v --basic -u $APPSECRET -k 'http://localhost:8081/api/v4/rules' -d \
 
 ```shell
 ## modify all of the params
-$ curl -v --basic -u $APPSECRET -k 'http://localhost:8081/api/v4/rules/rule:bc987915' -d \
+$ curl -XPUT -v --basic -u $APPSECRET -k 'http://localhost:8081/api/v4/rules/rule:bc987915' -d \
 '{"rawsql":"select * from \"t/a\"","actions":[{"name":"inspect","params":{"a":1}}],"description":"test-rule"}'
 
 ## modify some of the params: disable it
-$ curl -v --basic -u $APPSECRET -k 'http://localhost:8081/api/v4/rules/rule:bc987915' -d \
+$ curl -XPUT -v --basic -u $APPSECRET -k 'http://localhost:8081/api/v4/rules/rule:bc987915' -d \
 '{"enabled": false}'
 
 ## modify some of the params: add fallback actions
-$ curl -v --basic -u $APPSECRET -k 'http://localhost:8081/api/v4/rules/rule:bc987915' -d \
+$ curl -XPUT -v --basic -u $APPSECRET -k 'http://localhost:8081/api/v4/rules/rule:bc987915' -d \
 '{"actions":[{"name":"inspect","params":{"a":1}, "fallbacks": [{"name":"donothing"}]}]}'
 ```
 
