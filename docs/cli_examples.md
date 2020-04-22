@@ -5,9 +5,27 @@
 ### create
 
 ```shell
-  $ ./bin/emqx_ctl rules create 'SELECT payload FROM "message.publish" where topic = "#" and username="Steven"' '[{"name":"data_to_webserver", "params": {"$resource": "resource:9093f1cb"}}]' --descr="Msg From Steven to WebServer"
+  $ ./bin/emqx_ctl rules create 'SELECT payload FROM "t/#" username="Steven"' '[{"name":"data_to_webserver", "params": {"$resource": "resource:9093f1cb"}}]' --descr="Msg From Steven to WebServer"
 
 Rule rule:98a75239 created
+```
+
+### modify
+
+
+```shell
+  ## update sql, action, description
+  $ ./bin/emqx_ctl rules update 'rule:98a75239' \
+      -s "select * from \"t/a\" " \
+      -a '[{"name":"do_nothing", "fallbacks": []' -g continue \
+      -d 'Rule for debug2' \
+
+  ## update sql only
+  $ ./bin/emqx_ctl rules update 'rule:98a75239' -s 'SELECT * FROM "t/a"'
+
+  ## disable the rule
+  $ ./bin/emqx_ctl rules update 'rule:98a75239' -e false
+
 ```
 
 ### show
@@ -15,7 +33,7 @@ Rule rule:98a75239 created
 ```shell
 $ ./bin/emqx_ctl rules show rule:98a75239
 
-rule(id='rule:98a75239', rawsql='SELECT payload FROM "message.publish" where topic = "#" and username="Steven"', actions=[{"name":"data_to_webserver","params":{"$resource":"resource:9093f1cb","url":"http://host-name/chats"}}], enabled='true', description='Msg From Steven to WebServer')
+rule(id='rule:98a75239', rawsql='SELECT payload FROM "t/#" username="Steven"', actions=[{"name":"data_to_webserver","params":{"$resource":"resource:9093f1cb","url":"http://host-name/chats"}}], enabled='true', description='Msg From Steven to WebServer')
 ```
 
 ### list
@@ -23,7 +41,7 @@ rule(id='rule:98a75239', rawsql='SELECT payload FROM "message.publish" where top
 ```shell
 $ ./bin/emqx_ctl rules list
 
-rule(id='rule:98a75239', rawsql='SELECT payload FROM "message.publish" where topic = "#" and username="Steven"', actions=[{"name":"data_to_webserver","params":{"$resource":"resource:9093f1cb","url":"http://host-name/chats"}}], enabled='true', description='Msg From Steven to WebServer')
+rule(id='rule:98a75239', rawsql='SELECT payload FROM "t/#" username="Steven"', actions=[{"name":"data_to_webserver","params":{"$resource":"resource:9093f1cb","url":"http://host-name/chats"}}], enabled='true', description='Msg From Steven to WebServer')
 
 ```
 

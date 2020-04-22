@@ -40,6 +40,8 @@
 -export([ init_resource/4
         , init_action/4
         , clear_resource/3
+        , clear_rule/1
+        , clear_actions/1
         , clear_action/3
         , prepare_action/1
         ]).
@@ -176,7 +178,6 @@ create_rule(Params = #{rawsql := Sql, actions := Actions}) ->
 update_rule(Params = #{id := RuleId}) ->
     case emqx_rule_registry:get_rule(RuleId) of
         {ok, Rule0} ->
-            delete_rule(RuleId),
             Rule = may_update_rule_params(Rule0, Params),
             ok = emqx_rule_registry:add_rule(Rule),
             {ok, Rule};
@@ -187,14 +188,15 @@ update_rule(Params = #{id := RuleId}) ->
 -spec(delete_rule(RuleId :: rule_id()) -> ok).
 delete_rule(RuleId) ->
     case emqx_rule_registry:get_rule(RuleId) of
-        {ok, #rule{actions = Actions}} ->
-            lists:foreach(
-                fun(#action_instance{id = Id, name = ActName}) ->
-                    {ok, #action{module = Mod, on_destroy = Destory}} = emqx_rule_registry:find_action(ActName),
-                    cluster_call(clear_action, [Mod, Destory, Id])
-                end, Actions),
-            emqx_rule_metrics:clear(RuleId),
-            emqx_rule_registry:remove_rule(RuleId);
+        {ok, Rule = #rule{actions = Actions}} ->
+            try
+                cluster_call(clear_rule, [Rule]),
+                ok = emqx_rule_registry:remove_rule(Rule)
+            catch
+                Error:Reason:ST ->
+                    ?LOG(error, "clear_rule rule failed: ~p", [{Error, Reason, ST}]),
+                    refresh_actions(Actions, fun(_) -> true end)
+            end;
         not_found ->
             ok
     end.
@@ -368,6 +370,7 @@ may_update_rule_params(Rule, Params = #{description := Descr}) ->
 may_update_rule_params(Rule, Params = #{on_action_failed := OnFailed}) ->
     may_update_rule_params(Rule#rule{on_action_failed = OnFailed}, maps:remove(on_action_failed, Params));
 may_update_rule_params(Rule, Params = #{actions := Actions}) ->
+    cluster_call(clear_rule, [Rule]),
     may_update_rule_params(Rule#rule{actions = prepare_actions(Actions)}, maps:remove(actions, Params));
 may_update_rule_params(Rule, Params = #{rawsql := SQL}) ->
     case emqx_rule_sqlparser:parse_select(SQL) of
@@ -454,6 +457,19 @@ clear_resource(Module, Destroy, ResId) ->
         not_found ->
             ok
     end.
+
+clear_rule(#rule{id = RuleId, actions = Actions}) ->
+    clear_actions(Actions),
+    emqx_rule_metrics:clear(RuleId),
+    ok.
+
+clear_actions(Actions) ->
+    lists:foreach(
+        fun(#action_instance{id = Id, name = ActName, fallbacks = Fallbacks}) ->
+            {ok, #action{module = Mod, on_destroy = Destory}} = emqx_rule_registry:find_action(ActName),
+            clear_action(Mod, Destory, Id),
+            clear_actions(Fallbacks)
+        end, Actions).
 
 clear_action(_Module, undefined, ActionInstId) ->
     emqx_rule_metrics:clear(ActionInstId),
