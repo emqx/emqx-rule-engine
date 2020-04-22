@@ -363,15 +363,6 @@ with_resource_params(Args) -> Args.
 
 may_update_rule_params(Rule, Params) when map_size(Params) =:= 0 ->
     Rule;
-may_update_rule_params(Rule, Params = #{enabled := Enabled}) ->
-    may_update_rule_params(Rule#rule{enabled = Enabled}, maps:remove(enabled, Params));
-may_update_rule_params(Rule, Params = #{description := Descr}) ->
-    may_update_rule_params(Rule#rule{description = Descr}, maps:remove(description, Params));
-may_update_rule_params(Rule, Params = #{on_action_failed := OnFailed}) ->
-    may_update_rule_params(Rule#rule{on_action_failed = OnFailed}, maps:remove(on_action_failed, Params));
-may_update_rule_params(Rule, Params = #{actions := Actions}) ->
-    cluster_call(clear_rule, [Rule]),
-    may_update_rule_params(Rule#rule{actions = prepare_actions(Actions)}, maps:remove(actions, Params));
 may_update_rule_params(Rule, Params = #{rawsql := SQL}) ->
     case emqx_rule_sqlparser:parse_select(SQL) of
         {ok, Select} ->
@@ -388,6 +379,17 @@ may_update_rule_params(Rule, Params = #{rawsql := SQL}) ->
                 maps:remove(rawsql, Params));
         Error -> error(Error)
     end;
+may_update_rule_params(Rule, Params = #{enabled := Enabled}) ->
+    may_update_rule_params(Rule#rule{enabled = Enabled}, maps:remove(enabled, Params));
+may_update_rule_params(Rule, Params = #{description := Descr}) ->
+    may_update_rule_params(Rule#rule{description = Descr}, maps:remove(description, Params));
+may_update_rule_params(Rule, Params = #{on_action_failed := OnFailed}) ->
+    may_update_rule_params(Rule#rule{on_action_failed = OnFailed}, maps:remove(on_action_failed, Params));
+may_update_rule_params(Rule, Params = #{actions := Actions}) ->
+    %% prepare new actions before removing old ones
+    NewActions = prepare_actions(Actions),
+    cluster_call(clear_actions, [Actions]),
+    may_update_rule_params(Rule#rule{actions = NewActions}, maps:remove(actions, Params));
 may_update_rule_params(Rule, _Params) -> %% ignore all the unsupported params
     Rule.
 
