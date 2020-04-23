@@ -155,7 +155,7 @@ module_attributes(Module) ->
 create_rule(Params = #{rawsql := Sql, actions := Actions}) ->
     case emqx_rule_sqlparser:parse_select(Sql) of
         {ok, Select} ->
-            RuleId = rule_id(),
+            RuleId = maps:get(id, Params, rule_id()),
             Rule = #rule{id = RuleId,
                          rawsql = Sql,
                          for = emqx_rule_sqlparser:select_from(Select),
@@ -205,7 +205,7 @@ create_resource(#{type := Type, config := Config} = Params) ->
     case emqx_rule_registry:find_resource_type(Type) of
         {ok, #resource_type{on_create = {M, F}, params_spec = ParamSpec}} ->
             ok = emqx_rule_validator:validate_params(Config, ParamSpec),
-            ResId = resource_id(),
+            ResId = maps:get(id, Params, resource_id()),
             Resource = #resource{id = ResId,
                                  type = Type,
                                  config = Config,
@@ -329,15 +329,16 @@ refresh_resource_status() ->
 prepare_actions(Actions) ->
     [prepare_action(Action) || Action <- Actions].
 
-prepare_action({Name, Args}) ->
-    prepare_action({Name, Args, []});
-prepare_action({Name, Args, Fallbacks}) ->
+prepare_action(#{name := Name, args := Args} = Action) ->
     case emqx_rule_registry:find_action(Name) of
         {ok, #action{module = Mod, on_create = Create, params_spec = ParamSpec}} ->
             ok = emqx_rule_validator:validate_params(Args, ParamSpec),
-            ActionInstId = action_instance_id(Name),
+            ActionInstId = maps:get(id, Action, action_instance_id(Name)),
             cluster_call(init_action, [Mod, Create, ActionInstId, with_resource_params(Args)]),
-            #action_instance{id = ActionInstId, name = Name, args = Args, fallbacks = prepare_actions(Fallbacks)};
+            #action_instance{
+                id = ActionInstId, name = Name, args = Args,
+                fallbacks = prepare_actions(maps:get(fallbacks, Action, []))
+            };
         not_found ->
             throw({action_not_found, Name})
     end.

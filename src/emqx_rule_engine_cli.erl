@@ -332,9 +332,9 @@ parse_actions(Actions) ->
 
 parse_action(Action) ->
     ActName = maps:get(<<"name">>, Action),
-    {?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}),
-     maps:get(<<"params">>, Action, #{}),
-     parse_actions(maps:get(<<"fallbacks">>, Action, []))}.
+    #{name => ?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}),
+      args => maps:get(<<"params">>, Action, #{}),
+      fallbacks => parse_actions(maps:get(<<"fallbacks">>, Action, []))}.
 
 get_actions() ->
     emqx_rule_registry:get_actions().
