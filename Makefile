@@ -23,7 +23,8 @@ xref:
 cover:
 	$(REBAR) cover
 
-clean: distclean
+clean:
+	$(REBAR) clean
 
 distclean:
 	@rm -rf _build

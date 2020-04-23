@@ -330,24 +330,16 @@ refresh_resource_status() ->
 prepare_actions(Actions) ->
     [prepare_action(Action) || Action <- Actions].
 
-prepare_action({ActionInstId, Name, Args}) ->
+prepare_action(#{name := Name, args := Args} = Action) ->
     case emqx_rule_registry:find_action(Name) of
         {ok, #action{module = Mod, on_create = Create, params_spec = ParamSpec}} ->
             ok = emqx_rule_validator:validate_params(Args, ParamSpec),
+            ActionInstId = maps:get(id, Action, action_instance_id(Name)),
             cluster_call(init_action, [Mod, Create, ActionInstId, with_resource_params(Args)]),
-            #action_instance{id = ActionInstId, name = Name, args = Args};
-        not_found ->
-            throw({action_not_found, Name})
-    end;
-prepare_action({Name, Args}) ->
-    prepare_action({Name, Args, []});
-prepare_action({Name, Args, Fallbacks}) ->
-    case emqx_rule_registry:find_action(Name) of
-        {ok, #action{module = Mod, on_create = Create, params_spec = ParamSpec}} ->
-            ok = emqx_rule_validator:validate_params(Args, ParamSpec),
-            ActionInstId = action_instance_id(Name),
-            cluster_call(init_action, [Mod, Create, ActionInstId, with_resource_params(Args)]),
-            #action_instance{id = ActionInstId, name = Name, args = Args, fallbacks = prepare_actions(Fallbacks)};
+            #action_instance{
+                id = ActionInstId, name = Name, args = Args,
+                fallbacks = prepare_actions(maps:get(fallbacks, Action, []))
+            };
         not_found ->
             throw({action_not_found, Name})
     end.

@@ -495,9 +495,9 @@ parse_actions(Actions) ->
     [parse_action(json_term_to_map(A)) || A <- Actions].
 
 parse_action(Action) ->
-    {binary_to_existing_atom(maps:get(<<"name">>, Action), utf8),
-     maps:get(<<"params">>, Action, #{}),
-     parse_actions(maps:get(<<"fallbacks">>, Action, []))}.
+    #{name => binary_to_existing_atom(maps:get(<<"name">>, Action), utf8),
+      args => maps:get(<<"params">>, Action, #{}),
+      fallbacks => parse_actions(maps:get(<<"fallbacks">>, Action, []))}.
 
 parse_resource_params(Params) ->
     parse_resource_params(Params, #{config => #{}, description => <<"">>}).
