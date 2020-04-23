@@ -172,8 +172,8 @@ init_per_testcase(t_events, Config) ->
                         "\"t1\"",
     {ok, Rule} = emqx_rule_engine:create_rule(
                     #{rawsql => SQL,
-                      actions => [{'inspect', #{}},
-                                  {'hook-metrics-action', #{}}],
+                      actions => [#{name => 'inspect', args => #{}},
+                                  #{name => 'hook-metrics-action', args => #{}}],
                       description => <<"Debug rule">>}),
     [{hook_points_rules, Rule} | Config];
 init_per_testcase(Test, Config)
@@ -260,7 +260,7 @@ t_create_rule(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     {ok, #rule{id = Id}} = emqx_rule_engine:create_rule(
             #{rawsql => <<"select * from \"t/a\"">>,
-              actions => [{'inspect', #{arg1 => 1}}],
+              actions => [#{name => 'inspect', args => #{arg1 => 1}}],
               description => <<"debug rule">>}),
     %ct:pal("======== emqx_rule_registry:get_rules :~p", [emqx_rule_registry:get_rules()]),
     ?assertMatch({ok,#rule{id = Id, for = [<<"t/a">>]}}, emqx_rule_registry:get_rule(Id)),
@@ -292,8 +292,8 @@ t_inspect_action(_Config) ->
     {ok, #rule{id = Id}} = emqx_rule_engine:create_rule(
                 #{rawsql => "select clientid as c, username as u "
                             "from \"t1\" ",
-                  actions => [{'inspect',
-                              #{'$resource' => ResId, a=>1, b=>2}}],
+                  actions => [#{name => 'inspect',
+                                args => #{'$resource' => ResId, a=>1, b=>2}}],
                   type => built_in,
                   description => <<"Inspect rule">>
                   }),
@@ -310,10 +310,10 @@ t_republish_action(_Config) ->
     {ok, #rule{id = Id, for = [<<"t1">>]}} =
         emqx_rule_engine:create_rule(
                     #{rawsql => <<"select topic, payload, qos from \"t1\"">>,
-                      actions => [{'republish',
-                                  #{<<"target_topic">> => <<"t1">>,
-                                    <<"target_qos">> => -1,
-                                    <<"payload_tmpl">> => <<"${payload}">>}}],
+                      actions => [#{name => 'republish',
+                                    args => #{<<"target_topic">> => <<"t1">>,
+                                              <<"target_qos">> => -1,
+                                              <<"payload_tmpl">> => <<"${payload}">>}}],
                       description => <<"builtin-republish-rule">>}),
     {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqtt:connect(Client),
@@ -940,12 +940,13 @@ t_sqlselect_multi_actoins_1(Config) ->
     {ok, Rule} = emqx_rule_engine:create_rule(
                     #{rawsql => ?config(connsql, Config),
                       actions => [
-                          {'crash_action', #{}, []},
-                          {'republish',
-                            #{<<"target_topic">> => <<"t2">>,
-                              <<"target_qos">> => -1,
-                              <<"payload_tmpl">> => <<"clientid=${clientid}">>
-                             }, []}
+                          #{name => 'crash_action', args => #{}, fallbacks => []},
+                          #{name => 'republish',
+                            args => #{<<"target_topic">> => <<"t2">>,
+                                      <<"target_qos">> => -1,
+                                      <<"payload_tmpl">> => <<"clientid=${clientid}">>
+                                     },
+                            fallbacks => []}
                       ]
                      }),
 
@@ -965,12 +966,13 @@ t_sqlselect_multi_actoins_1_1(Config) ->
                     #{rawsql => ?config(connsql, Config),
                       on_action_failed => 'continue',
                       actions => [
-                          {'crash_action', #{}, []},
-                          {'republish',
-                            #{<<"target_topic">> => <<"t2">>,
-                              <<"target_qos">> => -1,
-                              <<"payload_tmpl">> => <<"clientid=${clientid}">>
-                             }, []}
+                          #{name => 'crash_action', args => #{}, fallbacks => []},
+                          #{name => 'republish',
+                            args => #{<<"target_topic">> => <<"t2">>,
+                                      <<"target_qos">> => -1,
+                                      <<"payload_tmpl">> => <<"clientid=${clientid}">>
+                                    },
+                            fallbacks => []}
                       ]
                      }),
 
@@ -992,12 +994,13 @@ t_sqlselect_multi_actoins_2(Config) ->
                     #{rawsql => ?config(connsql, Config),
                       on_action_failed => stop,
                       actions => [
-                          {'crash_action', #{}, []},
-                          {'republish',
-                            #{<<"target_topic">> => <<"t2">>,
-                              <<"target_qos">> => -1,
-                              <<"payload_tmpl">> => <<"clientid=${clientid}">>
-                             }, []}
+                          #{name => 'crash_action', args => #{}, fallbacks => []},
+                          #{name => 'republish',
+                            args => #{<<"target_topic">> => <<"t2">>,
+                                      <<"target_qos">> => -1,
+                                      <<"payload_tmpl">> => <<"clientid=${clientid}">>
+                                    },
+                            fallbacks => []}
                       ]
                      }),
 
@@ -1019,15 +1022,16 @@ t_sqlselect_multi_actoins_3(Config) ->
                     #{rawsql => ?config(connsql, Config),
                       on_action_failed => continue,
                       actions => [
-                          {'crash_action', #{}, [
-                              {'plus_by_one', #{}, []},
-                              {'plus_by_one', #{}, []}
+                          #{name => 'crash_action', args => #{}, fallbacks =>[
+                              #{name => 'plus_by_one', args => #{}, fallbacks =>[]},
+                              #{name => 'plus_by_one', args => #{}, fallbacks =>[]}
                           ]},
-                          {'republish',
-                            #{<<"target_topic">> => <<"t2">>,
-                              <<"target_qos">> => -1,
-                              <<"payload_tmpl">> => <<"clientid=${clientid}">>
-                             }, []}
+                          #{name => 'republish',
+                            args => #{<<"target_topic">> => <<"t2">>,
+                                      <<"target_qos">> => -1,
+                                      <<"payload_tmpl">> => <<"clientid=${clientid}">>
+                                    },
+                            fallbacks => []}
                       ]
                      }),
 
@@ -1056,16 +1060,17 @@ t_sqlselect_multi_actoins_4(Config) ->
                     #{rawsql => ?config(connsql, Config),
                       on_action_failed => continue,
                       actions => [
-                          {'crash_action', #{}, [
-                              {'plus_by_one', #{}, []},
-                              {'crash_action', #{}, []},
-                              {'plus_by_one', #{}, []}
+                          #{name => 'crash_action', args => #{}, fallbacks => [
+                              #{name =>'plus_by_one', args => #{}, fallbacks =>[]},
+                              #{name =>'crash_action', args => #{}, fallbacks =>[]},
+                              #{name =>'plus_by_one', args => #{}, fallbacks =>[]}
                           ]},
-                          {'republish',
-                            #{<<"target_topic">> => <<"t2">>,
-                              <<"target_qos">> => -1,
-                              <<"payload_tmpl">> => <<"clientid=${clientid}">>
-                             }, []}
+                          #{name => 'republish',
+                            args => #{<<"target_topic">> => <<"t2">>,
+                                      <<"target_qos">> => -1,
+                                      <<"payload_tmpl">> => <<"clientid=${clientid}">>
+                                    },
+                            fallbacks => []}
                       ]
                      }),
 
@@ -1437,10 +1442,11 @@ create_simple_repub_rule(TargetTopic, SQL) ->
 create_simple_repub_rule(TargetTopic, SQL, Template) ->
     {ok, Rule} = emqx_rule_engine:create_rule(
                     #{rawsql => SQL,
-                      actions => [{'republish',
-                                  #{<<"target_topic">> => TargetTopic,
-                                    <<"target_qos">> => -1,
-                                    <<"payload_tmpl">> => Template}}],
+                      actions => [#{name => 'republish',
+                                    args => #{<<"target_topic">> => TargetTopic,
+                                              <<"target_qos">> => -1,
+                                              <<"payload_tmpl">> => Template}
+                                    }],
                       description => <<"simple repub rule">>}),
     Rule.
 
