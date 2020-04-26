@@ -29,6 +29,13 @@
             descr  => "Create a rule"
            }).
 
+-rest_api(#{name   => update_rule,
+            method => 'PUT',
+            path   => "/rules/:bin:id",
+            func   => update_rule,
+            descr  => "Update a rule"
+           }).
+
 -rest_api(#{name   => list_rules,
             method => 'GET',
             path   => "/rules/",
@@ -135,6 +142,7 @@
            }).
 
 -export([ create_rule/2
+        , update_rule/2
         , list_rules/2
         , show_rule/2
         , delete_rule/2
@@ -159,6 +167,7 @@
 
 -export([list_events/2]).
 
+-define(ERR_NO_RULE(ID), list_to_binary(io_lib:format("Rule ~s Not Found", [(ID)]))).
 -define(ERR_NO_ACTION(NAME), list_to_binary(io_lib:format("Action ~s Not Found", [(NAME)]))).
 -define(ERR_NO_RESOURCE(RESID), list_to_binary(io_lib:format("Resource ~s Not Found", [(RESID)]))).
 -define(ERR_NO_HOOK(HOOK), list_to_binary(io_lib:format("Event ~s Not Found", [(HOOK)]))).
@@ -199,6 +208,28 @@ do_create_rule(Params) ->
     try emqx_rule_engine:create_rule(parse_rule_params(Params)) of
         {ok, Rule} ->
             return({ok, record_to_map(Rule)});
+        {error, {action_not_found, ActionName}} ->
+            return({error, 400, ?ERR_NO_ACTION(ActionName)})
+    catch
+        throw:{resource_not_found, ResId} ->
+            return({error, 400, ?ERR_NO_RESOURCE(ResId)});
+        throw:{invalid_hook, Hook} ->
+            return({error, 400, ?ERR_NO_HOOK(Hook)});
+        throw:Reason ->
+            return({error, 400, ?ERR_BADARGS(Reason)});
+        _:{parse_error,{unknown_column, Column}} ->
+            return({error, 400, ?ERR_UNKNOWN_COLUMN(Column)});
+        _Error:Reason:StackT ->
+            ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
+            return({error, 400, ?ERR_BADARGS(Reason)})
+    end.
+
+update_rule(#{id := Id}, Params) ->
+    try emqx_rule_engine:update_rule(parse_rule_params(Params, #{id => Id})) of
+        {ok, Rule} ->
+            return({ok, record_to_map(Rule)});
+        {error, {not_found, RuleId}} ->
+            return({error, 400, ?ERR_NO_RULE(RuleId)});
         {error, {action_not_found, ActionName}} ->
             return({error, 400, ?ERR_NO_ACTION(ActionName)})
     catch
@@ -377,12 +408,14 @@ record_to_map(#rule{id = Id,
                     for = Hook,
                     rawsql = RawSQL,
                     actions = Actions,
+                    on_action_failed = OnFailed,
                     enabled = Enabled,
                     description = Descr}) ->
     #{id => Id,
       for => Hook,
       rawsql => RawSQL,
       actions => printable_actions(Actions),
+      on_action_failed => OnFailed,
       metrics => get_rule_metrics(Id),
       enabled => Enabled,
       description => Descr
@@ -429,8 +462,10 @@ record_to_map(#resource_type{name = Name,
      }.
 
 printable_actions(Actions) ->
-    [#{id => Id, name => Name, params => Args, metrics => get_action_metrics(Id)}
-     || #action_instance{id = Id, name = Name, args = Args} <- Actions].
+    [#{id => Id, name => Name, params => Args,
+       metrics => get_action_metrics(Id),
+       fallbacks => printable_actions(Fallbacks)}
+     || #action_instance{id = Id, name = Name, args = Args, fallbacks = Fallbacks} <- Actions].
 
 parse_rule_params(Params) ->
     parse_rule_params(Params, #{description => <<"">>}).
@@ -438,21 +473,31 @@ parse_rule_params([], Rule) ->
     Rule;
 parse_rule_params([{<<"rawsql">>, RawSQL} | Params], Rule) ->
     parse_rule_params(Params, Rule#{rawsql => RawSQL});
+parse_rule_params([{<<"enabled">>, Enabled} | Params], Rule) ->
+    parse_rule_params(Params, Rule#{enabled => enabled(Enabled)});
+parse_rule_params([{<<"on_action_failed">>, OnFailed} | Params], Rule) ->
+    parse_rule_params(Params, Rule#{on_action_failed => on_failed(OnFailed)});
 parse_rule_params([{<<"actions">>, Actions} | Params], Rule) ->
-    parse_rule_params(Params, Rule#{actions => [parse_action(json_term_to_map(A)) || A <- Actions]});
+    parse_rule_params(Params, Rule#{actions => parse_actions(Actions)});
 parse_rule_params([{<<"description">>, Descr} | Params], Rule) ->
     parse_rule_params(Params, Rule#{description => Descr});
 parse_rule_params([_ | Params], Res) ->
     parse_rule_params(Params, Res).
 
-parse_action(Actions) ->
-    case maps:find(<<"params">>, Actions) of
-        error ->
-            {binary_to_existing_atom(maps:get(<<"name">>, Actions), utf8), #{}};
-        {ok, Params} ->
-            {binary_to_existing_atom(maps:get(<<"name">>, Actions), utf8),
-             Params}
-    end.
+on_failed(<<"continue">>) -> continue;
+on_failed(<<"stop">>) -> stop;
+on_failed(OnFailed) -> error({invalid_on_failed, OnFailed}).
+
+enabled(Enabled) when is_boolean(Enabled) -> Enabled;
+enabled(Enabled) -> error({invalid_enabled, Enabled}).
+
+parse_actions(Actions) ->
+    [parse_action(json_term_to_map(A)) || A <- Actions].
+
+parse_action(Action) ->
+    #{name => binary_to_existing_atom(maps:get(<<"name">>, Action), utf8),
+      args => maps:get(<<"params">>, Action, #{}),
+      fallbacks => parse_actions(maps:get(<<"fallbacks">>, Action, []))}.
 
 parse_resource_params(Params) ->
     parse_resource_params(Params, #{config => #{}, description => <<"">>}).

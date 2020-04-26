@@ -37,6 +37,7 @@ all() ->
     , {group, funcs}
     , {group, registry}
     , {group, runtime}
+    , {group, multi_actions}
     ].
 
 suite() ->
@@ -72,6 +73,8 @@ groups() ->
      {registry, [sequence],
       [t_add_get_remove_rule,
        t_add_get_remove_rules,
+       t_create_existing_rule,
+       t_update_rule,
        t_get_rules_for,
        t_get_rules_for_2,
        t_add_get_remove_action,
@@ -104,6 +107,13 @@ groups() ->
        t_sqlparse_case_when_1,
        t_sqlparse_case_when_2,
        t_sqlparse_case_when_3
+      ]},
+     {multi_actions, [],
+      [t_sqlselect_multi_actoins_1,
+       t_sqlselect_multi_actoins_1_1,
+       t_sqlselect_multi_actoins_2,
+       t_sqlselect_multi_actoins_3,
+       t_sqlselect_multi_actoins_4
       ]}
     ].
 
@@ -164,10 +174,48 @@ init_per_testcase(t_events, Config) ->
                         "\"t1\"",
     {ok, Rule} = emqx_rule_engine:create_rule(
                     #{rawsql => SQL,
-                      actions => [{'inspect', #{}},
-                                  {'hook-metrics-action', #{}}],
+                      actions => [#{name => 'inspect', args => #{}},
+                                  #{name => 'hook-metrics-action', args => #{}}],
                       description => <<"Debug rule">>}),
     [{hook_points_rules, Rule} | Config];
+init_per_testcase(Test, Config)
+        when Test =:= t_sqlselect_multi_actoins_1
+            ;Test =:= t_sqlselect_multi_actoins_1_1
+            ;Test =:= t_sqlselect_multi_actoins_2
+            ;Test =:= t_sqlselect_multi_actoins_3
+            ;Test =:= t_sqlselect_multi_actoins_4
+        ->
+    ok = emqx_rule_engine:load_providers(),
+    ok = emqx_rule_registry:add_action(
+            #action{name = 'crash_action', app = ?APP,
+                    module = ?MODULE, on_create = crash_action,
+                    types=[], params_spec = #{},
+                    title = #{en => <<"Crash Action">>},
+                    description = #{en => <<"This action will always fail!">>}}),
+    ok = emqx_rule_registry:add_action(
+            #action{name = 'plus_by_one', app = ?APP,
+                    module = ?MODULE, on_create = plus_by_one_action,
+                    types=[], params_spec = #{},
+                    title = #{en => <<"Plus an integer by 1">>}
+                    }),
+    init_plus_by_one_action(),
+    SQL = "SELECT * "
+          "FROM \"$events/client_connected\" "
+          "WHERE username = 'emqx1'",
+    {ok, SubClient} = emqtt:start_link([{clientid, <<"emqx0">>}, {username, <<"emqx0">>}]),
+    {ok, _} = emqtt:connect(SubClient),
+    {ok, _, _} = emqtt:subscribe(SubClient, <<"t2">>, 0),
+    ct:sleep(100),
+
+    {ok, ConnClient} = emqtt:start_link([{clientid, <<"c_emqx1">>}, {username, <<"emqx1">>}]),
+    TriggerConnEvent = fun() ->
+        {ok, _} = emqtt:connect(ConnClient)
+    end,
+    [{subclient, SubClient},
+     {connclient, ConnClient},
+     {conn_event, TriggerConnEvent},
+     {connsql, SQL}
+    | Config];
 init_per_testcase(_TestCase, Config) ->
     ok = emqx_rule_registry:register_resource_types(
             [#resource_type{
@@ -186,6 +234,13 @@ end_per_testcase(t_events, Config) ->
     ets:delete(?HOOK_METRICS_TAB),
     ok = emqx_rule_registry:remove_rule(?config(hook_points_rules, Config)),
     ok = emqx_rule_registry:remove_action('hook-metrics-action');
+end_per_testcase(Test, Config)
+        when Test =:= t_sqlselect_multi_actoins_1,
+             Test =:= t_sqlselect_multi_actoins_2
+            ->
+    emqtt:stop(?config(subclient, Config)),
+    emqtt:stop(?config(connclient, Config)),
+    Config;
 end_per_testcase(_TestCase, _Config) ->
     ok.
 
@@ -207,7 +262,7 @@ t_create_rule(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     {ok, #rule{id = Id}} = emqx_rule_engine:create_rule(
             #{rawsql => <<"select * from \"t/a\"">>,
-              actions => [{'inspect', #{arg1 => 1}}],
+              actions => [#{name => 'inspect', args => #{arg1 => 1}}],
               description => <<"debug rule">>}),
     %ct:pal("======== emqx_rule_registry:get_rules :~p", [emqx_rule_registry:get_rules()]),
     ?assertMatch({ok,#rule{id = Id, for = [<<"t/a">>]}}, emqx_rule_registry:get_rule(Id)),
@@ -239,8 +294,8 @@ t_inspect_action(_Config) ->
     {ok, #rule{id = Id}} = emqx_rule_engine:create_rule(
                 #{rawsql => "select clientid as c, username as u "
                             "from \"t1\" ",
-                  actions => [{'inspect',
-                              #{'$resource' => ResId, a=>1, b=>2}}],
+                  actions => [#{name => 'inspect',
+                                args => #{'$resource' => ResId, a=>1, b=>2}}],
                   type => built_in,
                   description => <<"Inspect rule">>
                   }),
@@ -257,10 +312,10 @@ t_republish_action(_Config) ->
     {ok, #rule{id = Id, for = [<<"t1">>]}} =
         emqx_rule_engine:create_rule(
                     #{rawsql => <<"select topic, payload, qos from \"t1\"">>,
-                      actions => [{'republish',
-                                  #{<<"target_topic">> => <<"t1">>,
-                                    <<"target_qos">> => -1,
-                                    <<"payload_tmpl">> => <<"${payload}">>}}],
+                      actions => [#{name => 'republish',
+                                    args => #{<<"target_topic">> => <<"t1">>,
+                                              <<"target_qos">> => -1,
+                                              <<"payload_tmpl">> => <<"${payload}">>}}],
                       description => <<"builtin-republish-rule">>}),
     {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
     {ok, _} = emqtt:connect(Client),
@@ -299,6 +354,32 @@ t_crud_rule_api(_Config) ->
     %ct:pal("RShow : ~p", [Rule1]),
     ?assertEqual(Rule, Rule1),
 
+    {ok, [{code, 0}, {data, Rule2}]} = emqx_rule_engine_api:update_rule(#{id => RuleID},
+                [{<<"rawsql">>, <<"select * from \"t/b\"">>}]),
+
+    {ok, [{code, 0}, {data, Rule3 = #{rawsql := SQL}}]} = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
+    %ct:pal("RShow : ~p", [Rule1]),
+    ?assertEqual(Rule3, Rule2),
+    ?assertEqual(<<"select * from \"t/b\"">>, SQL),
+
+    {ok, [{code, 0}, {data, Rule4}]} = emqx_rule_engine_api:update_rule(#{id => RuleID},
+                [{<<"actions">>,
+                    [[
+                        {<<"name">>,<<"republish">>},
+                        {<<"params">>,[
+                            {<<"arg1">>,1},
+                            {<<"target_topic">>, <<"t2">>},
+                            {<<"target_qos">>, -1},
+                            {<<"payload_tmpl">>, <<"${payload}">>}
+                        ]}
+                    ]]
+                 }]),
+
+    {ok, [{code, 0}, {data, Rule5 = #{actions := Actions}}]} = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
+    %ct:pal("RShow : ~p", [Rule1]),
+    ?assertEqual(Rule5, Rule4),
+    ?assertMatch([#{name := republish }], Actions),
+
     ?assertMatch({ok, [{code, 0}]}, emqx_rule_engine_api:delete_rule(#{id => RuleID}, [])),
 
     NotFound = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
@@ -321,9 +402,9 @@ t_crud_resources_api(_Config) ->
     {ok, [{code, 0}, {data, #{id := ResId}}]} =
         emqx_rule_engine_api:create_resource(#{},
             [{<<"name">>, <<"Simple Resource">>},
-            {<<"type">>, <<"built_in">>},
-            {<<"config">>, [{<<"a">>, 1}]},
-            {<<"description">>, <<"Simple Resource">>}]),
+             {<<"type">>, <<"built_in">>},
+             {<<"config">>, [{<<"a">>, 1}]},
+             {<<"description">>, <<"Simple Resource">>}]),
     {ok, [{code, 0}, {data, Resources}]} = emqx_rule_engine_api:list_resources(#{},[]),
     ?assert(length(Resources) > 0),
 
@@ -370,6 +451,11 @@ t_rules_cli(_Config) ->
     RShow = emqx_rule_engine_cli:rules(["show", RuleId]),
     ?assertMatch({match, _}, re:run(RShow, RuleId)),
     %ct:pal("RShow : ~p", [RShow]),
+
+    RUpdate = emqx_rule_engine_cli:rules(["update",
+                                          RuleId,
+                                          "-s", "select * from \"t2\""]),
+    ?assertMatch({match, _}, re:run(RUpdate, "updated")),
 
     RDelete = emqx_rule_engine_cli:rules(["delete", RuleId]),
     ?assertEqual("ok~n", RDelete),
@@ -470,6 +556,52 @@ t_add_get_remove_rules(_Config) ->
     ?assertEqual(2, length(emqx_rule_registry:get_rules())),
     ok = emqx_rule_registry:remove_rules([Rule3, Rule4]),
     ?assertEqual([], emqx_rule_registry:get_rules()),
+    ok.
+
+t_create_existing_rule(_Config) ->
+    %% create a rule using given rule id
+    {ok, _} = emqx_rule_engine:create_rule(
+                    #{id => <<"an_existing_rule">>,
+                      rawsql => <<"select * from \"t/#\"">>,
+                      actions => [
+                          #{name => 'inspect', args => #{}}
+                      ]
+                     }),
+    {ok, #rule{rawsql = SQL}} = emqx_rule_registry:get_rule(<<"an_existing_rule">>),
+    ?assertEqual(<<"select * from \"t/#\"">>, SQL),
+
+    ok = emqx_rule_engine:delete_rule(<<"an_existing_rule">>),
+    ?assertEqual(not_found, emqx_rule_registry:get_rule(<<"an_existing_rule">>)),
+    ok.
+
+t_update_rule(_Config) ->
+    {ok, #rule{actions = [#action_instance{id = ActInsId0}]}} = emqx_rule_engine:create_rule(
+                    #{id => <<"an_existing_rule">>,
+                      rawsql => <<"select * from \"t/#\"">>,
+                      actions => [
+                          #{name => 'inspect', args => #{}}
+                      ]
+                     }),
+    ?assertMatch({ok, #action_instance_params{apply = _}},
+                 emqx_rule_registry:get_action_instance_params(ActInsId0)),
+    %% update the rule and verify the old action instances has been cleared
+    %% and the new action instances has been created.
+    emqx_rule_engine:update_rule(#{ id => <<"an_existing_rule">>,
+                                    actions => [
+                                        #{name => 'do_nothing', args => #{}}
+                                    ]}),
+
+    {ok, #rule{actions = [#action_instance{id = ActInsId1}]}}
+        = emqx_rule_registry:get_rule(<<"an_existing_rule">>),
+
+    ?assertMatch(not_found,
+                 emqx_rule_registry:get_action_instance_params(ActInsId0)),
+
+    ?assertMatch({ok, #action_instance_params{apply = _}},
+                 emqx_rule_registry:get_action_instance_params(ActInsId1)),
+
+    ok = emqx_rule_engine:delete_rule(<<"an_existing_rule">>),
+    ?assertEqual(not_found, emqx_rule_registry:get_rule(<<"an_existing_rule">>)),
     ok.
 
 t_get_rules_for(_Config) ->
@@ -651,7 +783,7 @@ t_match_atom_and_binary(_Config) ->
     receive {publish, #{topic := T, payload := Payload}} ->
         ?assertEqual(<<"t2">>, T),
         <<"user:", ConnAt/binary>> = Payload,
-        binary_to_integer(ConnAt)
+        _ = binary_to_integer(ConnAt)
     after 1000 ->
         ct:fail(wait_for_t2)
     end,
@@ -865,6 +997,165 @@ t_sqlselect_3(_Config) ->
 
     emqtt:stop(Client),
     emqx_rule_registry:remove_rule(TopicRule).
+
+t_sqlselect_multi_actoins_1(Config) ->
+    %% We create 2 actions in the same rule:
+    %% The first will fail and we need to make sure the
+    %% second one can still execute as the on_action_failed
+    %% defaults to 'continue'
+    {ok, Rule} = emqx_rule_engine:create_rule(
+                    #{rawsql => ?config(connsql, Config),
+                      actions => [
+                          #{name => 'crash_action', args => #{}, fallbacks => []},
+                          #{name => 'republish',
+                            args => #{<<"target_topic">> => <<"t2">>,
+                                      <<"target_qos">> => -1,
+                                      <<"payload_tmpl">> => <<"clientid=${clientid}">>
+                                     },
+                            fallbacks => []}
+                      ]
+                     }),
+
+    (?config(conn_event, Config))(),
+    receive {publish, #{topic := T, payload := Payload}} ->
+        ?assertEqual(<<"t2">>, T),
+        ?assertEqual(<<"clientid=c_emqx1">>, Payload)
+    after 1000 ->
+        ct:fail(wait_for_t2)
+    end,
+
+    emqx_rule_registry:remove_rule(Rule).
+
+t_sqlselect_multi_actoins_1_1(Config) ->
+    %% Try again but set on_action_failed = 'continue' explicitly
+    {ok, Rule2} = emqx_rule_engine:create_rule(
+                    #{rawsql => ?config(connsql, Config),
+                      on_action_failed => 'continue',
+                      actions => [
+                          #{name => 'crash_action', args => #{}, fallbacks => []},
+                          #{name => 'republish',
+                            args => #{<<"target_topic">> => <<"t2">>,
+                                      <<"target_qos">> => -1,
+                                      <<"payload_tmpl">> => <<"clientid=${clientid}">>
+                                    },
+                            fallbacks => []}
+                      ]
+                     }),
+
+    (?config(conn_event, Config))(),
+    receive {publish, #{topic := T2, payload := Payload2}} ->
+        ?assertEqual(<<"t2">>, T2),
+        ?assertEqual(<<"clientid=c_emqx1">>, Payload2)
+    after 1000 ->
+        ct:fail(wait_for_t2)
+    end,
+
+    emqx_rule_registry:remove_rule(Rule2).
+
+t_sqlselect_multi_actoins_2(Config) ->
+    %% We create 2 actions in the same rule:
+    %% The first will fail and we need to make sure the
+    %% second one cannot execute as we've set the on_action_failed = 'stop'
+    {ok, Rule} = emqx_rule_engine:create_rule(
+                    #{rawsql => ?config(connsql, Config),
+                      on_action_failed => stop,
+                      actions => [
+                          #{name => 'crash_action', args => #{}, fallbacks => []},
+                          #{name => 'republish',
+                            args => #{<<"target_topic">> => <<"t2">>,
+                                      <<"target_qos">> => -1,
+                                      <<"payload_tmpl">> => <<"clientid=${clientid}">>
+                                    },
+                            fallbacks => []}
+                      ]
+                     }),
+
+    (?config(conn_event, Config))(),
+    receive {publish, #{topic := <<"t2">>}} ->
+        ct:fail(unexpected_t2)
+    after 1000 ->
+        ok
+    end,
+
+    emqx_rule_registry:remove_rule(Rule).
+
+t_sqlselect_multi_actoins_3(Config) ->
+    %% We create 2 actions in the same rule (on_action_failed = continue):
+    %% The first will fail and we need to make sure the
+    %% fallback actions can be executed, and the next actoins
+    %% will be run without influence
+    {ok, Rule} = emqx_rule_engine:create_rule(
+                    #{rawsql => ?config(connsql, Config),
+                      on_action_failed => continue,
+                      actions => [
+                          #{name => 'crash_action', args => #{}, fallbacks =>[
+                              #{name => 'plus_by_one', args => #{}, fallbacks =>[]},
+                              #{name => 'plus_by_one', args => #{}, fallbacks =>[]}
+                          ]},
+                          #{name => 'republish',
+                            args => #{<<"target_topic">> => <<"t2">>,
+                                      <<"target_qos">> => -1,
+                                      <<"payload_tmpl">> => <<"clientid=${clientid}">>
+                                    },
+                            fallbacks => []}
+                      ]
+                     }),
+
+    (?config(conn_event, Config))(),
+    timer:sleep(100),
+
+    %% verfiy the fallback actions has been run
+    ?assertEqual(2, ets:lookup_element(plus_by_one_action, num, 2)),
+
+    %% verfiy the next actions can be run
+    receive {publish, #{topic := T, payload := Payload}} ->
+        ?assertEqual(<<"t2">>, T),
+        ?assertEqual(<<"clientid=c_emqx1">>, Payload)
+    after 1000 ->
+        ct:fail(wait_for_t2)
+    end,
+
+    emqx_rule_registry:remove_rule(Rule).
+
+t_sqlselect_multi_actoins_4(Config) ->
+    %% We create 2 actions in the same rule (on_action_failed = continue):
+    %% The first will fail and we need to make sure the
+    %% fallback actions can be executed, and the next actoins
+    %% will be run without influence
+    {ok, Rule} = emqx_rule_engine:create_rule(
+                    #{rawsql => ?config(connsql, Config),
+                      on_action_failed => continue,
+                      actions => [
+                          #{name => 'crash_action', args => #{}, fallbacks => [
+                              #{name =>'plus_by_one', args => #{}, fallbacks =>[]},
+                              #{name =>'crash_action', args => #{}, fallbacks =>[]},
+                              #{name =>'plus_by_one', args => #{}, fallbacks =>[]}
+                          ]},
+                          #{name => 'republish',
+                            args => #{<<"target_topic">> => <<"t2">>,
+                                      <<"target_qos">> => -1,
+                                      <<"payload_tmpl">> => <<"clientid=${clientid}">>
+                                    },
+                            fallbacks => []}
+                      ]
+                     }),
+
+    (?config(conn_event, Config))(),
+    timer:sleep(100),
+
+    %% verfiy all the fallback actions were run, even if the second
+    %% fallback action crashed
+    ?assertEqual(2, ets:lookup_element(plus_by_one_action, num, 2)),
+
+    %% verfiy the next actions can be run
+    receive {publish, #{topic := T, payload := Payload}} ->
+        ?assertEqual(<<"t2">>, T),
+        ?assertEqual(<<"clientid=c_emqx1">>, Payload)
+    after 1000 ->
+        ct:fail(wait_for_t2)
+    end,
+
+    emqx_rule_registry:remove_rule(Rule).
 
 t_sqlparse_event_1(_Config) ->
     Sql = "select topic as tp "
@@ -1217,10 +1508,11 @@ create_simple_repub_rule(TargetTopic, SQL) ->
 create_simple_repub_rule(TargetTopic, SQL, Template) ->
     {ok, Rule} = emqx_rule_engine:create_rule(
                     #{rawsql => SQL,
-                      actions => [{'republish',
-                                  #{<<"target_topic">> => TargetTopic,
-                                    <<"target_qos">> => -1,
-                                    <<"payload_tmpl">> => Template}}],
+                      actions => [#{name => 'republish',
+                                    args => #{<<"target_topic">> => TargetTopic,
+                                              <<"target_qos">> => -1,
+                                              <<"payload_tmpl">> => Template}
+                                    }],
                       description => <<"simple repub rule">>}),
     Rule.
 
@@ -1263,6 +1555,22 @@ hook_metrics_action(_Id, _Params) ->
     fun(Data = #{event := EventName}, _Events) ->
         ct:pal("applying hook_metrics_action: ~p", [Data]),
         ets:update_counter(?HOOK_METRICS_TAB, EventName, 1, {EventName, 1})
+    end.
+crash_action(_Id, _Params) ->
+    fun(Data, _Events) ->
+        ct:pal("applying crash action, Data: ~p", [Data]),
+        1/0
+    end.
+
+init_plus_by_one_action() ->
+    ets:new(plus_by_one_action, [named_table, set, public]),
+    ets:insert(plus_by_one_action, {num, 0}).
+
+plus_by_one_action(_Id, #{}) ->
+    fun(Data, _Events) ->
+        ct:pal("applying plus_by_one_action, Data: ~p", [Data]),
+        Num = ets:lookup_element(plus_by_one_action, num, 2),
+        ets:insert(plus_by_one_action, {num, Num + 1})
     end.
 
 verify_events_counter(EventName) ->

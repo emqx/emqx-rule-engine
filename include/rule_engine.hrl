@@ -56,6 +56,7 @@
 -record(action_instance,
         { id :: action_instance_id()
         , name :: action_name()
+        , fallbacks :: list(#action_instance{})
         , args :: #{atom() => term()} %% the args got from API for initializing action_instance
         }).
 
@@ -68,6 +69,7 @@
         , doeach :: term()
         , incase :: list()
         , conditions :: tuple()
+        , on_action_failed :: continue | stop
         , actions :: list(#action_instance{})
         , enabled :: boolean()
         , description :: binary()

@@ -46,7 +46,18 @@
 -define(OPTSPEC_RULES_CREATE,
         [ {sql, undefined, undefined, binary, "Filter Condition SQL"}
         , {actions, undefined, undefined, binary, "Action List in JSON format: [{\"name\": <action_name>, \"params\": {<key>: <value>}}]"}
+        , {enabled, $e, "enabled", {atom, true}, "'true' or 'false' to enable or disable the rule"}
+        , {on_action_failed, $g, "on_action_failed", {atom, continue}, "'continue' or 'stop' when an action in the rule fails"}
         , {descr, $d, "descr", {binary, <<"">>}, "Description"}
+        ]).
+
+-define(OPTSPEC_RULES_UPDATE,
+        [ {id, undefined, undefined, binary, "Rule ID"}
+        , {sql, $s, "sql", {binary, undefined}, "Filter Condition SQL"}
+        , {actions, $a, "actions", {binary, undefined}, "Action List in JSON format: [{\"name\": <action_name>, \"params\": {<key>: <value>}}]"}
+        , {enabled, $e, "enabled", {atom, undefined}, "'true' or 'false' to enable or disable the rule"}
+        , {on_action_failed, $g, "on_action_failed", {atom, undefined}, "'continue' or 'stop' when an action in the rule fails"}
+        , {descr, $d, "descr", {binary, undefined}, "Description"}
         ]).
 
 %%-----------------------------------------------------------------------------
@@ -97,6 +108,19 @@ rules(["create" | Params]) ->
                         emqx_ctl:print("Invalid options: ~0p~n", [Error])
                 end
               end, Params, ?OPTSPEC_RULES_CREATE, {?FUNCTION_NAME, create});
+
+rules(["update" | Params]) ->
+    with_opts(fun({Opts, _}) ->
+                try emqx_rule_engine:update_rule(make_updated_rule(Opts)) of
+                    {ok, #rule{id = RuleId}} ->
+                        emqx_ctl:print("Rule ~s updated~n", [RuleId]);
+                    {error, Reason} ->
+                        emqx_ctl:print("Invalid options: ~0p~n", [Reason])
+                catch
+                    throw:Error ->
+                        emqx_ctl:print("Invalid options: ~0p~n", [Error])
+                end
+              end, Params, ?OPTSPEC_RULES_UPDATE, {?FUNCTION_NAME, update});
 
 rules(["delete", RuleId]) ->
     ok = emqx_rule_engine:delete_rule(list_to_binary(RuleId)),
@@ -219,9 +243,10 @@ format(#rule{id = Id,
              for = Hook,
              rawsql = Sql,
              actions = Actions,
+             on_action_failed = OnFailed,
              enabled = Enabled,
              description = Descr}) ->
-    lists:flatten(io_lib:format("rule(id='~s', for='~0p', rawsql='~s', actions=~0p, metrics=~0p, enabled='~s', description='~s')~n", [Id, Hook, rmlf(Sql), printable_actions(Actions), get_rule_metrics(Id), Enabled, Descr]));
+    lists:flatten(io_lib:format("rule(id='~s', for='~0p', rawsql='~s', actions=~0p, on_action_failed='~s', metrics=~0p, enabled='~s', description='~s')~n", [Id, Hook, rmlf(Sql), printable_actions(Actions), OnFailed, get_rule_metrics(Id), Enabled, Descr]));
 
 format(#action{hidden = true}) ->
     ok;
@@ -253,8 +278,31 @@ format(#resource_type{name = Name,
 make_rule(Opts) ->
     Actions = get_value(actions, Opts),
     #{rawsql => get_value(sql, Opts),
-      actions => parse_action_params(Actions),
+      enabled => get_value(enabled, Opts),
+      actions => parse_actions(emqx_json:decode(Actions, [return_maps])),
+      on_action_failed => on_failed(get_value(on_action_failed, Opts)),
       description => get_value(descr, Opts)}.
+
+make_updated_rule(Opts) ->
+    KeyNameParsers = [{sql, rawsql, fun(SQL) -> SQL end},
+                      enabled,
+                      {actions, actions, fun(Actions) ->
+                            parse_actions(emqx_json:decode(Actions, [return_maps]))
+                        end},
+                      on_action_failed,
+                      {descr, description, fun(Descr) -> Descr end}],
+    lists:foldl(fun
+        ({Key, Name, Parser}, ParamsAcc) ->
+            case get_value(Key, Opts) of
+                undefined -> ParamsAcc;
+                Val -> ParamsAcc#{Name => Parser(Val)}
+            end;
+        (Key, ParamsAcc) ->
+            case get_value(Key, Opts) of
+                undefined -> ParamsAcc;
+                Val -> ParamsAcc#{Key => Val}
+            end
+        end, #{id => get_value(id, Opts)}, KeyNameParsers).
 
 make_resource(Opts) ->
     Config = get_value(config, Opts),
@@ -263,8 +311,10 @@ make_resource(Opts) ->
       description => get_value(descr, Opts)}.
 
 printable_actions(Actions) when is_list(Actions) ->
-    emqx_json:encode([#{id => Id, name => Name, params => Args, metrics => get_action_metrics(Id)}
-                      || #action_instance{id = Id, name = Name, args = Args} <- Actions]).
+    emqx_json:encode([#{id => Id, name => Name, params => Args,
+                        metrics => get_action_metrics(Id),
+                        fallbacks => printable_actions(Fallbacks)}
+                      || #action_instance{id = Id, name = Name, args = Args, fallbacks = Fallbacks} <- Actions]).
 
 with_opts(Action, RawParams, OptSpecList, {CmdObject, CmdName}) ->
     case getopt:parse_and_check(OptSpecList, RawParams) of
@@ -276,16 +326,15 @@ with_opts(Action, RawParams, OptSpecList, {CmdObject, CmdName}) ->
             emqx_ctl:print("~0p~n", [Reason])
     end.
 
-parse_action_params(Actions) ->
-    ?RAISE(
-        lists:map(fun
-            (#{<<"name">> := ActName, <<"params">> := ActParam}) ->
-                {?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}),
-                ActParam};
-            (#{<<"name">> := ActName}) ->
-                {?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}), #{}}
-            end, emqx_json:decode(Actions, [return_maps])),
+parse_actions(Actions) ->
+    ?RAISE([parse_action(Action) || Action <- Actions],
         {invalid_action_params, _REASON_}).
+
+parse_action(Action) ->
+    ActName = maps:get(<<"name">>, Action),
+    #{name => ?RAISE(binary_to_existing_atom(ActName, utf8), {action_not_found, ActName}),
+      args => maps:get(<<"params">>, Action, #{}),
+      fallbacks => parse_actions(maps:get(<<"fallbacks">>, Action, []))}.
 
 get_actions() ->
     emqx_rule_registry:get_actions().
@@ -297,6 +346,10 @@ get_rule_metrics(Id) ->
 get_action_metrics(Id) ->
     [maps:put(node, Node, rpc:call(Node, emqx_rule_metrics, get_action_metrics, [Id]))
      || Node <- [node()| nodes()]].
+
+on_failed(continue) -> continue;
+on_failed(stop) -> stop;
+on_failed(OnFailed) -> error({invalid_on_failed, OnFailed}).
 
 rmlf(Str) ->
     re:replace(Str, "\n", "", [global]).
