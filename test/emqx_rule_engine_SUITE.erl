@@ -73,6 +73,8 @@ groups() ->
      {registry, [sequence],
       [t_add_get_remove_rule,
        t_add_get_remove_rules,
+       t_create_existing_rule,
+       t_update_rule,
        t_get_rules_for,
        t_get_rules_for_2,
        t_add_get_remove_action,
@@ -360,6 +362,24 @@ t_crud_rule_api(_Config) ->
     ?assertEqual(Rule3, Rule2),
     ?assertEqual(<<"select * from \"t/b\"">>, SQL),
 
+    {ok, [{code, 0}, {data, Rule4}]} = emqx_rule_engine_api:update_rule(#{id => RuleID},
+                [{<<"actions">>,
+                    [[
+                        {<<"name">>,<<"republish">>},
+                        {<<"params">>,[
+                            {<<"arg1">>,1},
+                            {<<"target_topic">>, <<"t2">>},
+                            {<<"target_qos">>, -1},
+                            {<<"payload_tmpl">>, <<"${payload}">>}
+                        ]}
+                    ]]
+                 }]),
+
+    {ok, [{code, 0}, {data, Rule5 = #{actions := Actions}}]} = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
+    %ct:pal("RShow : ~p", [Rule1]),
+    ?assertEqual(Rule5, Rule4),
+    ?assertMatch([#{name := republish }], Actions),
+
     ?assertMatch({ok, [{code, 0}]}, emqx_rule_engine_api:delete_rule(#{id => RuleID}, [])),
 
     NotFound = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
@@ -382,9 +402,9 @@ t_crud_resources_api(_Config) ->
     {ok, [{code, 0}, {data, #{id := ResId}}]} =
         emqx_rule_engine_api:create_resource(#{},
             [{<<"name">>, <<"Simple Resource">>},
-            {<<"type">>, <<"built_in">>},
-            {<<"config">>, [{<<"a">>, 1}]},
-            {<<"description">>, <<"Simple Resource">>}]),
+             {<<"type">>, <<"built_in">>},
+             {<<"config">>, [{<<"a">>, 1}]},
+             {<<"description">>, <<"Simple Resource">>}]),
     {ok, [{code, 0}, {data, Resources}]} = emqx_rule_engine_api:list_resources(#{},[]),
     ?assert(length(Resources) > 0),
 
@@ -536,6 +556,52 @@ t_add_get_remove_rules(_Config) ->
     ?assertEqual(2, length(emqx_rule_registry:get_rules())),
     ok = emqx_rule_registry:remove_rules([Rule3, Rule4]),
     ?assertEqual([], emqx_rule_registry:get_rules()),
+    ok.
+
+t_create_existing_rule(_Config) ->
+    %% create a rule using given rule id
+    {ok, _} = emqx_rule_engine:create_rule(
+                    #{id => <<"an_existing_rule">>,
+                      rawsql => <<"select * from \"t/#\"">>,
+                      actions => [
+                          #{name => 'inspect', args => #{}}
+                      ]
+                     }),
+    {ok, #rule{rawsql = SQL}} = emqx_rule_registry:get_rule(<<"an_existing_rule">>),
+    ?assertEqual(<<"select * from \"t/#\"">>, SQL),
+
+    ok = emqx_rule_engine:delete_rule(<<"an_existing_rule">>),
+    ?assertEqual(not_found, emqx_rule_registry:get_rule(<<"an_existing_rule">>)),
+    ok.
+
+t_update_rule(_Config) ->
+    {ok, #rule{actions = [#action_instance{id = ActInsId0}]}} = emqx_rule_engine:create_rule(
+                    #{id => <<"an_existing_rule">>,
+                      rawsql => <<"select * from \"t/#\"">>,
+                      actions => [
+                          #{name => 'inspect', args => #{}}
+                      ]
+                     }),
+    ?assertMatch({ok, #action_instance_params{apply = _}},
+                 emqx_rule_registry:get_action_instance_params(ActInsId0)),
+    %% update the rule and verify the old action instances has been cleared
+    %% and the new action instances has been created.
+    emqx_rule_engine:update_rule(#{ id => <<"an_existing_rule">>,
+                                    actions => [
+                                        #{name => 'do_nothing', args => #{}}
+                                    ]}),
+
+    {ok, #rule{actions = [#action_instance{id = ActInsId1}]}}
+        = emqx_rule_registry:get_rule(<<"an_existing_rule">>),
+
+    ?assertMatch(not_found,
+                 emqx_rule_registry:get_action_instance_params(ActInsId0)),
+
+    ?assertMatch({ok, #action_instance_params{apply = _}},
+                 emqx_rule_registry:get_action_instance_params(ActInsId1)),
+
+    ok = emqx_rule_engine:delete_rule(<<"an_existing_rule">>),
+    ?assertEqual(not_found, emqx_rule_registry:get_rule(<<"an_existing_rule">>)),
     ok.
 
 t_get_rules_for(_Config) ->

@@ -376,10 +376,10 @@ may_update_rule_params(Rule, Params = #{description := Descr}) ->
     may_update_rule_params(Rule#rule{description = Descr}, maps:remove(description, Params));
 may_update_rule_params(Rule, Params = #{on_action_failed := OnFailed}) ->
     may_update_rule_params(Rule#rule{on_action_failed = OnFailed}, maps:remove(on_action_failed, Params));
-may_update_rule_params(Rule, Params = #{actions := Actions}) ->
+may_update_rule_params(Rule = #rule{actions = OldActions}, Params = #{actions := Actions}) ->
     %% prepare new actions before removing old ones
     NewActions = prepare_actions(Actions),
-    cluster_call(clear_actions, [Actions]),
+    cluster_call(clear_actions, [OldActions]),
     may_update_rule_params(Rule#rule{actions = NewActions}, maps:remove(actions, Params));
 may_update_rule_params(Rule, _Params) -> %% ignore all the unsupported params
     Rule.
