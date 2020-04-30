@@ -87,6 +87,7 @@ t_str(_) ->
     ?assertEqual(<<"abc">>, emqx_rule_funcs:str("abc")),
     ?assertEqual(<<"abc">>, emqx_rule_funcs:str(abc)),
     ?assertEqual(<<"{\"a\":1}">>, emqx_rule_funcs:str(#{a => 1})),
+    ?assertEqual(<<"[{\"a\":1},{\"b\":1}]">>, emqx_rule_funcs:str([#{a => 1},#{b => 1}])),
     ?assertEqual(<<"1">>, emqx_rule_funcs:str(1)),
     ?assertEqual(<<"2.0">>, emqx_rule_funcs:str(2.0)),
     ?assertEqual(<<"true">>, emqx_rule_funcs:str(true)),
