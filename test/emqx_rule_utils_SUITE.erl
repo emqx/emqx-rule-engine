@@ -57,6 +57,7 @@ t_bin(_) ->
     ?assertEqual(<<"abc">>, emqx_rule_utils:bin("abc")),
     ?assertEqual(<<"abc">>, emqx_rule_utils:bin(abc)),
     ?assertEqual(<<"{\"a\":1}">>, emqx_rule_utils:bin(#{a => 1})),
+    ?assertEqual(<<"[{\"a\":1}]">>, emqx_rule_utils:bin([#{a => 1}])),
     ?assertEqual(<<"1">>, emqx_rule_utils:bin(1)),
     ?assertEqual(<<"2.0">>, emqx_rule_utils:bin(2.0)),
     ?assertEqual(<<"true">>, emqx_rule_utils:bin(true)),

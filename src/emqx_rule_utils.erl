@@ -194,11 +194,15 @@ sql_data(Bool) when is_boolean(Bool) -> Bool;
 sql_data(Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8);
 sql_data(Map) when is_map(Map) -> emqx_json:encode(Map).
 
-str(List) when is_list(List) -> List;
 str(Bin) when is_binary(Bin) -> binary_to_list(Bin);
 str(Num) when is_number(Num) -> number_to_list(Num);
 str(Atom) when is_atom(Atom) -> atom_to_list(Atom);
 str(Map) when is_map(Map) -> binary_to_list(emqx_json:encode(Map));
+str(List) when is_list(List) ->
+    case io_lib:printable_list(List) of
+        true -> List;
+        false ->  binary_to_list(emqx_json:encode(List))
+    end;
 str(Data) -> error({invalid_str, Data}).
 
 utf8_bin(Str) when is_binary(Str); is_list(Str) ->
@@ -211,11 +215,15 @@ utf8_str(Str) when is_binary(Str); is_list(Str) ->
 utf8_str(Str) ->
     unicode:characters_to_list(str(Str)).
 
-bin(List) when is_list(List) -> list_to_binary(List);
 bin(Bin) when is_binary(Bin) -> Bin;
 bin(Num) when is_number(Num) -> number_to_binary(Num);
 bin(Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8);
 bin(Map) when is_map(Map) -> emqx_json:encode(Map);
+bin(List) when is_list(List) ->
+    case io_lib:printable_list(List) of
+        true -> list_to_binary(List);
+        false -> emqx_json:encode(List)
+    end;
 bin(Data) -> error({invalid_bin, Data}).
 
 int(List) when is_list(List) ->
