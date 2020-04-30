@@ -61,7 +61,6 @@ test_rule(Sql, Select, Context, EventTopics) ->
                 #action_instance_params{id = ActInstId,
                                         params = #{},
                                         apply = sql_test_action()}),
-        emqx_rule_runtime:clear_rule_payload(),
         emqx_rule_runtime:apply_rule(Rule, FullContext)
     of
         {ok, Data} -> {ok, flatten(Data)};

@@ -39,7 +39,6 @@
 %%------------------------------------------------------------------------------
 -spec(apply_rules(list(emqx_rule_engine:rule()), input()) -> ok).
 apply_rules([], _Input) ->
-    clear_rule_payload(),
     ok;
 apply_rules([#rule{enabled = false}|More], Input) ->
     apply_rules(More, Input);
@@ -65,7 +64,11 @@ apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
     end,
     apply_rules(More, Input).
 
-apply_rule(#rule{id = RuleId,
+apply_rule(Rule, Input) ->
+    clear_rule_payload(),
+    do_apply_rule(Rule, Input).
+
+do_apply_rule(#rule{id = RuleId,
                  is_foreach = true,
                  fields = Fields,
                  doeach = DoEach,
@@ -86,7 +89,7 @@ apply_rule(#rule{id = RuleId,
             {error, nomatch}
     end;
 
-apply_rule(#rule{id = RuleId,
+do_apply_rule(#rule{id = RuleId,
                  is_foreach = false,
                  fields = Fields,
                  conditions = Conditions,
