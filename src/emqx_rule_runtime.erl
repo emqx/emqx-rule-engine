@@ -231,13 +231,15 @@ take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected, Envs, On
         emqx_rule_metrics:inc(Id, 'actions.success'),
         Result
     catch
-        _Error:Reason:Stack ->
+        Error:Reason:Stack ->
             emqx_rule_metrics:inc(Id, 'actions.failure'),
             case OnFailed of
                 continue ->
+                    ?LOG(error, "Take action ~p failed, continue next action, reason: ~0p, Stack: ~0p", [Id, {Error, Reason}, Stack]),
                     take_actions(Fallbacks, Selected, Envs, continue),
                     failed;
                 stop ->
+                    ?LOG(error, "Take action ~p failed, skip all actions, reason: ~0p, Stack: ~0p", [Id, {Error, Reason}, Stack]),
                     take_actions(Fallbacks, Selected, Envs, continue),
                     error({take_action_failed, {Id, Reason, Stack}})
             end
