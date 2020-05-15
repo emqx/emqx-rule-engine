@@ -284,33 +284,32 @@ delete_resource(ResId) ->
 
 -spec(refresh_resources() -> ok).
 refresh_resources() ->
-    try
-        lists:foreach(
-            fun(#resource{id = ResId, config = Config, type = Type}) ->
+    lists:foreach(
+        fun(#resource{id = ResId, config = Config, type = Type}) ->
+            try
                 {ok, #resource_type{on_create = {M, F}}} = emqx_rule_registry:find_resource_type(Type),
                 cluster_call(init_resource, [M, F, ResId, Config])
-            end, emqx_rule_registry:get_resources())
-    catch
-        _:Error:StackTrace ->
-            logger:critical("Can not re-stablish resource: ~p,"
-                            "Fix the issue and establish it manually.\n"
-                            "Stacktrace: ~p",
-                            [Error, StackTrace])
-    end.
+            catch
+                _:Error:StackTrace ->
+                    logger:critical("Can not re-stablish resource ~p: ~0p,"
+                                    "Fix the issue and establish it manually.\n"
+                                    "Stacktrace: ~0p",
+                                    [ResId, Error, StackTrace])
+            end
+        end, emqx_rule_registry:get_resources()).
 
 -spec(refresh_rules() -> ok).
 refresh_rules() ->
-    try
-        [refresh_actions(Actions, fun(_) -> true end)
-        || #rule{actions = Actions} <- emqx_rule_registry:get_rules()],
-        ok
-    catch
+    [try
+        refresh_actions(Actions, fun(_) -> true end)
+     catch
         _:Error:StackTrace ->
-            logger:critical("Can not re-build rule: ~p,"
-                            "Fix the issue and establish it manually.\n"
-                            "Stacktrace: ~p",
-                            [Error, StackTrace])
-    end.
+            logger:critical("Can not re-build rule ~p: ~0p,"
+                            "Fix the issue and enable it manually.\n"
+                            "Stacktrace: ~0p",
+                            [RuleId, Error, StackTrace])
+     end || #rule{id = RuleId, actions = Actions} <- emqx_rule_registry:get_rules()],
+    ok.
 
 -spec(refresh_resource_status() -> ok).
 refresh_resource_status() ->
