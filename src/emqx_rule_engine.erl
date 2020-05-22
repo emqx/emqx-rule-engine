@@ -44,7 +44,6 @@
         , clear_rule/1
         , clear_actions/1
         , clear_action/3
-        , prepare_action/1
         ]).
 
 -type(rule() :: #rule{}).
