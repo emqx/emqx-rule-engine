@@ -28,6 +28,7 @@
                 , {<<"qos">>, 1}
                 , {<<"flags">>, #{}}
                 , {<<"headers">>, undefined}
+                , {<<"publish_received_at">>, erlang:system_time(millisecond)}
                 , {<<"timestamp">>, erlang:system_time(millisecond)}
                 , {<<"node">>, node()}
                 ];
@@ -43,6 +44,7 @@
                 , {<<"topic">>, <<"t/a">>}
                 , {<<"qos">>, 1}
                 , {<<"flags">>, #{}}
+                , {<<"publish_received_at">>, erlang:system_time(millisecond)}
                 , {<<"timestamp">>, erlang:system_time(millisecond)}
                 , {<<"node">>, node()}
                 ];
@@ -58,6 +60,7 @@
                 , {<<"topic">>, <<"t/a">>}
                 , {<<"qos">>, 1}
                 , {<<"flags">>, #{}}
+                , {<<"publish_received_at">>, erlang:system_time(millisecond)}
                 , {<<"timestamp">>, erlang:system_time(millisecond)}
                 , {<<"node">>, node()}
                 ];
@@ -72,6 +75,7 @@
                 , {<<"topic">>, <<"t/a">>}
                 , {<<"qos">>, 1}
                 , {<<"flags">>, #{}}
+                , {<<"publish_received_at">>, erlang:system_time(millisecond)}
                 , {<<"timestamp">>, erlang:system_time(millisecond)}
                 , {<<"node">>, node()}
                 ];
@@ -274,6 +278,7 @@
               topic => <<"t/a">>,
               qos => 1,
               flags => #{sys => true, event => true},
+              publish_received_at => emqx_rule_utils:now_ms(),
               timestamp => emqx_rule_utils:now_ms(),
               node => node()
               }
