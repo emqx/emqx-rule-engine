@@ -239,11 +239,11 @@ eventmsg_acked(_ClientInfo = #{
                     peerhost := PeerHost,
                     clientid := ReceiverCId,
                     username := ReceiverUsername
-                  }, #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp, headers = Headers}) ->
+                  }, Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp}) ->
     with_basic_columns('message.acked',
         #{id => emqx_guid:to_hexstr(Id),
           from_clientid => ClientId,
-          from_username => maps:get(username, Headers, undefined),
+          from_username => emqx_message:get_header(username, Message, undefined),
           clientid => ReceiverCId,
           username => ReceiverUsername,
           payload => Payload,
