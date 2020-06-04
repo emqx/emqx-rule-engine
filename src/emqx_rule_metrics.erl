@@ -149,7 +149,7 @@ start_link() ->
 init([]) ->
     erlang:process_flag(trap_exit, true),
     %% the overall counters
-    [ok = emqx_metrics:new(Metric)|| Metric <- overall_metrics()],
+    [ok = emqx_metrics:ensure(Metric)|| Metric <- overall_metrics()],
     %% the speed metrics
     erlang:send_after(timer:seconds(?SAMPLING), self(), ticking),
     {ok, #state{overall_rule_speed = #rule_speed{}}}.
