@@ -51,7 +51,7 @@
 -ifdef(TEST).
 -export([ reason/1
         , hook_fun/1
-        , printable_headers/1
+        , printable_maps/1
         ]).
 -endif.
 
@@ -136,7 +136,9 @@ eventmsg_publish(Message = #message{id = Id, from = ClientId, qos = QoS, flags =
           topic => Topic,
           qos => QoS,
           flags => Flags,
-          headers => printable_headers(Headers),
+          pub_props => printable_maps(emqx_message:get_header(properties, Message, #{})),
+          %% the column 'headers' will be removed in the next major release
+          headers => printable_maps(Headers),
           publish_received_at => Timestamp
         }).
 
@@ -154,6 +156,8 @@ eventmsg_connected(_ClientInfo = #{
                     proto_ver := ProtoVer,
                     keepalive := Keepalive,
                     connected_at := ConnectedAt,
+                    conn_props := ConnProps,
+                    receive_maximum := RcvMax,
                     expiry_interval := ExpiryInterval
                    }) ->
     with_basic_columns('client.connected',
@@ -166,8 +170,10 @@ eventmsg_connected(_ClientInfo = #{
           proto_ver => ProtoVer,
           keepalive => Keepalive,
           clean_start => CleanStart,
+          receive_maximum => RcvMax,
           expiry_interval => ExpiryInterval,
           is_bridge => IsBridge,
+          conn_props => printable_maps(ConnProps),
           connected_at => ConnectedAt
         }).
 
@@ -175,7 +181,7 @@ eventmsg_disconnected(_ClientInfo = #{
                        clientid := ClientId,
                        username := Username
                       },
-                      _ConnInfo = #{
+                      ConnInfo = #{
                         peername := PeerName,
                         sockname := SockName,
                         disconnected_at := DisconnectedAt
@@ -186,6 +192,7 @@ eventmsg_disconnected(_ClientInfo = #{
           username => Username,
           peername => ntoa(PeerName),
           sockname => ntoa(SockName),
+          disconn_props => printable_maps(maps:get(disconn_props, ConnInfo, #{})),
           disconnected_at => DisconnectedAt
         }).
 
@@ -193,11 +200,13 @@ eventmsg_sub_or_unsub(Event, _ClientInfo = #{
                     clientid := ClientId,
                     username := Username,
                     peerhost := PeerHost
-                   }, Topic, _SubOpts = #{qos := QoS}) ->
+                   }, Topic, SubOpts = #{qos := QoS}) ->
+    PropKey = sub_unsub_prop_key(Event),
     with_basic_columns(Event,
         #{clientid => ClientId,
           username => Username,
           peerhost => ntoa(PeerHost),
+          PropKey => printable_maps(maps:get(PropKey, SubOpts, #{})),
           topic => Topic,
           qos => QoS
         }).
@@ -213,6 +222,7 @@ eventmsg_dropped(Message = #message{id = Id, from = ClientId, qos = QoS, flags =
           topic => Topic,
           qos => QoS,
           flags => Flags,
+          pub_props => printable_maps(emqx_message:get_header(properties, Message, #{})),
           publish_received_at => Timestamp
         }).
 
@@ -232,6 +242,7 @@ eventmsg_delivered(_ClientInfo = #{
           topic => Topic,
           qos => QoS,
           flags => Flags,
+          pub_props => printable_maps(emqx_message:get_header(properties, Message, #{})),
           publish_received_at => Timestamp
         }).
 
@@ -251,8 +262,13 @@ eventmsg_acked(_ClientInfo = #{
           topic => Topic,
           qos => QoS,
           flags => Flags,
+          pub_props => printable_maps(emqx_message:get_header(properties, Message, #{})),
+          puback_props => printable_maps(emqx_message:get_header(puback_props, Message, #{})),
           publish_received_at => Timestamp
         }).
+
+sub_unsub_prop_key('session.subscribed') -> sub_props;
+sub_unsub_prop_key('session.unsubscribed') -> unsub_props.
 
 with_basic_columns(EventName, Data) when is_map(Data) ->
     Data#{event => EventName,
@@ -332,10 +348,12 @@ event_topic('message.delivered') -> <<"$events/message_delivered">>;
 event_topic('message.acked') -> <<"$events/message_acked">>;
 event_topic('message.dropped') -> <<"$events/message_dropped">>.
 
-printable_headers(undefined) -> #{};
-printable_headers(Headers) ->
-    maps:map(
-        fun (K, V0) when K =:= peerhost; K =:= peername; K =:= sockname ->
-                ntoa(V0);
-            (_, V0) -> V0
-        end, Headers).
+printable_maps(undefined) -> #{};
+printable_maps(Headers) ->
+    maps:fold(
+        fun (K, V0, AccIn) when K =:= peerhost; K =:= peername; K =:= sockname ->
+                AccIn#{K => ntoa(V0)};
+            ('User-Property', V0, AccIn) when is_list(V0) ->
+                AccIn#{'User-Property' => maps:from_list(V0)};
+            (K, V0, AccIn) -> AccIn#{K => V0}
+        end, #{}, Headers).
