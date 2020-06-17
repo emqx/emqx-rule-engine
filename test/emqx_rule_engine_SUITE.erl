@@ -174,10 +174,12 @@ init_per_testcase(t_events, Config) ->
                         "\"$events/message_dropped\", "
                         "\"t1\"",
     {ok, Rule} = emqx_rule_engine:create_rule(
-                    #{rawsql => SQL,
-                      actions => [#{name => 'inspect', args => #{}},
-                                  #{name => 'hook-metrics-action', args => #{}}],
+                    #{id => <<"rule:t_events">>,
+                      rawsql => SQL,
+                      actions => [#{id => <<"action:inspect">>, name => 'inspect', args => #{}},
+                                  #{id => <<"action:hook-metrics-action">>, name => 'hook-metrics-action', args => #{}}],
                       description => <<"Debug rule">>}),
+    ?assertMatch(#rule{id = <<"rule:t_events">>}, Rule),
     [{hook_points_rules, Rule} | Config];
 init_per_testcase(Test, Config)
         when Test =:= t_sqlselect_multi_actoins_1
@@ -1597,10 +1599,18 @@ verify_event(EventName) ->
             [begin
                 %% verify fields can be formatted to JSON string
                 _ = emqx_json:encode(Fields),
+                %% verify metadata fields
+                verify_metadata_fields(EventName, Fields),
                 %% verify available fields for each event name
                 verify_event_fields(EventName, Fields)
             end || {_Name, Fields} <- Records]
     end.
+
+verify_metadata_fields(_EventName, #{metadata := Metadata}) ->
+    ?assertMatch(
+        #{rule_id := <<"rule:t_events">>,
+          action_id := <<"action:hook-metrics-action">>},
+        Metadata).
 
 verify_event_fields('message.publish', Fields) ->
     #{id := ID,
