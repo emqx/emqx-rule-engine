@@ -1202,25 +1202,40 @@ t_sqlparse_foreach_1(_Config) ->
     %% Verify foreach with and without 'AS'
     Sql = "foreach payload.sensors as s "
           "from \"t/#\" ",
-    ?assertMatch({ok,[1, 2]},
+    ?assertMatch({ok,[#{s := 1}, #{s := 2}]},
                  emqx_rule_sqltester:test(
                     #{<<"rawsql">> => Sql,
                       <<"ctx">> => #{<<"payload">> => <<"{\"sensors\": [1, 2]}">>,
                                      <<"topic">> => <<"t/a">>}})),
     Sql2 = "foreach payload.sensors "
           "from \"t/#\" ",
-    ?assertMatch({ok,[1,2]},
+    ?assertMatch({ok,[#{item := 1}, #{item := 2}]},
                  emqx_rule_sqltester:test(
                     #{<<"rawsql">> => Sql2,
                       <<"ctx">> => #{<<"payload">> => <<"{\"sensors\": [1, 2]}">>,
                                      <<"topic">> => <<"t/a">>}})),
     Sql3 = "foreach payload.sensors "
           "from \"t/#\" ",
-    ?assertMatch({ok,[#{<<"cmd">> := <<"1">>},
-                       #{<<"cmd">> := <<"2">>,<<"name">> := <<"ct">>}]},
+    ?assertMatch({ok,[#{item := #{<<"cmd">> := <<"1">>}, clientid := <<"c_a">>},
+                       #{item := #{<<"cmd">> := <<"2">>, <<"name">> := <<"ct">>}, clientid := <<"c_a">>}]},
                  emqx_rule_sqltester:test(
                     #{<<"rawsql">> => Sql3,
-                      <<"ctx">> => #{<<"payload">> => <<"{\"sensors\": [{\"cmd\":\"1\"}, {\"cmd\":\"2\",\"name\":\"ct\"}]}">>, <<"topic">> => <<"t/a">>}})).
+                      <<"ctx">> => #{
+                          <<"payload">> => <<"{\"sensors\": [{\"cmd\":\"1\"}, {\"cmd\":\"2\",\"name\":\"ct\"}]}">>, <<"clientid">> => <<"c_a">>,
+                          <<"topic">> => <<"t/a">>}})),
+    Sql4 = "foreach payload.sensors "
+          "from \"t/#\" ",
+    {ok,[#{metadata := #{action_id := TAction,
+                         rule_id := TRuleId}},
+         #{metadata := #{action_id := TAction,
+                         rule_id := TRuleId}}]} =
+                 emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql4,
+                      <<"ctx">> => #{
+                          <<"payload">> => <<"{\"sensors\": [1, 2]}">>,
+                          <<"topic">> => <<"t/a">>}}),
+    ?assert(is_binary(TRuleId)),
+    ?assert(is_binary(TAction)).
 
 t_sqlparse_foreach_2(_Config) ->
     %% Verify foreach-do with and without 'AS'
@@ -1260,8 +1275,8 @@ t_sqlparse_foreach_3(_Config) ->
     Sql = "foreach payload.sensors as s "
           "incase s.cmd != 1 "
           "from \"t/#\" ",
-    ?assertMatch({ok,[#{<<"cmd">> := 2},
-                      #{<<"cmd">> := 3}
+    ?assertMatch({ok,[#{s := #{<<"cmd">> := 2}},
+                      #{s := #{<<"cmd">> := 3}}
                       ]},
                  emqx_rule_sqltester:test(
                     #{<<"rawsql">> => Sql,
@@ -1272,8 +1287,8 @@ t_sqlparse_foreach_3(_Config) ->
     Sql2 = "foreach payload.sensors "
           "incase item.cmd != 1 "
           "from \"t/#\" ",
-    ?assertMatch({ok,[#{<<"cmd">> := 2},
-                      #{<<"cmd">> := 3}
+    ?assertMatch({ok,[#{item := #{<<"cmd">> := 2}},
+                      #{item := #{<<"cmd">> := 3}}
                       ]},
                  emqx_rule_sqltester:test(
                     #{<<"rawsql">> => Sql2,
