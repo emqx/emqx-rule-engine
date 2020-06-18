@@ -69,13 +69,13 @@ apply_rule(Rule = #rule{id = RuleID}, Input) ->
     do_apply_rule(Rule, add_metadata(Input, #{rule_id => RuleID})).
 
 do_apply_rule(#rule{id = RuleId,
-                 is_foreach = true,
-                 fields = Fields,
-                 doeach = DoEach,
-                 incase = InCase,
-                 conditions = Conditions,
-                 on_action_failed = OnFailed,
-                 actions = Actions}, Input) ->
+                    is_foreach = true,
+                    fields = Fields,
+                    doeach = DoEach,
+                    incase = InCase,
+                    conditions = Conditions,
+                    on_action_failed = OnFailed,
+                    actions = Actions}, Input) ->
     {Selected, Collection} = ?RAISE(select_and_collect(Fields, Input),
                                         {select_and_collect_error, _REASON_}),
     ColumnsAndSelected = maps:merge(Input, Selected),
@@ -90,11 +90,11 @@ do_apply_rule(#rule{id = RuleId,
     end;
 
 do_apply_rule(#rule{id = RuleId,
-                 is_foreach = false,
-                 fields = Fields,
-                 conditions = Conditions,
-                 on_action_failed = OnFailed,
-                 actions = Actions}, Input) ->
+                    is_foreach = false,
+                    fields = Fields,
+                    conditions = Conditions,
+                    on_action_failed = OnFailed,
+                    actions = Actions}, Input) ->
     Selected = ?RAISE(select_and_transform(Fields, Input),
                       {select_and_transform_error, _REASON_}),
     case ?RAISE(match_conditions(Conditions, maps:merge(Input, Selected)),
@@ -163,7 +163,7 @@ filter_collection(Input, InCase, DoEach, {CollKey, CollVal}) ->
             InputAndItem = maps:merge(Input, #{CollKey => Item}),
             case ?RAISE(match_conditions(InCase, InputAndItem),
                     {match_incase_error, _REASON_}) of
-                true when DoEach == [] -> true;
+                true when DoEach == [] -> {true, InputAndItem};
                 true ->
                     {true, ?RAISE(select_and_transform(DoEach, InputAndItem),
                                   {doeach_error, _REASON_})};
@@ -314,7 +314,7 @@ apply_func(Name, Args, Input) when is_atom(Name) ->
         Result -> Result
     end.
 
-add_metadata(Input, Metadata) ->
+add_metadata(Input, Metadata) when is_map(Input), is_map(Metadata) ->
     NewMetadata = maps:merge(maps:get(metadata, Input, #{}), Metadata),
     Input#{metadata => NewMetadata}.
 

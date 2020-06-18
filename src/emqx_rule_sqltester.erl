@@ -42,8 +42,10 @@ test(#{<<"rawsql">> := Sql, <<"ctx">> := Context}) ->
     end.
 
 test_rule(Sql, Select, Context, EventTopics) ->
-    ActInstId = {test_rule_sql, self()},
+    RuleId = iolist_to_binary(["test_rule", emqx_rule_id:gen()]),
+    ActInstId = iolist_to_binary(["test_action", emqx_rule_id:gen()]),
     Rule = #rule{
+        id = RuleId,
         rawsql = Sql,
         for = EventTopics,
         is_foreach = emqx_rule_sqlparser:select_is_foreach(Select),
