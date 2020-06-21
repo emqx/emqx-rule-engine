@@ -25,8 +25,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
 
--define(HOOK_METRICS_TAB, hook_metrics_tab).
-
 %%-define(PROPTEST(M,F), true = proper:quickcheck(M:F())).
 
 all() ->
@@ -37,6 +35,7 @@ all() ->
     , {group, funcs}
     , {group, registry}
     , {group, runtime}
+    , {group, events}
     , {group, multi_actions}
     ].
 
@@ -85,8 +84,7 @@ groups() ->
        t_resource_types
       ]},
      {runtime, [],
-      [t_events,
-       t_match_atom_and_binary,
+      [t_match_atom_and_binary,
        t_sqlselect_0,
        t_sqlselect_01,
        t_sqlselect_02,
@@ -107,6 +105,9 @@ groups() ->
        t_sqlparse_case_when_1,
        t_sqlparse_case_when_2,
        t_sqlparse_case_when_3
+      ]},
+     {events, [],
+      [t_events
       ]},
      {multi_actions, [],
       [t_sqlselect_multi_actoins_1,
@@ -173,10 +174,12 @@ init_per_testcase(t_events, Config) ->
                         "\"$events/message_dropped\", "
                         "\"t1\"",
     {ok, Rule} = emqx_rule_engine:create_rule(
-                    #{rawsql => SQL,
-                      actions => [#{name => 'inspect', args => #{}},
-                                  #{name => 'hook-metrics-action', args => #{}}],
+                    #{id => <<"rule:t_events">>,
+                      rawsql => SQL,
+                      actions => [#{id => <<"action:inspect">>, name => 'inspect', args => #{}},
+                                  #{id => <<"action:hook-metrics-action">>, name => 'hook-metrics-action', args => #{}}],
                       description => <<"Debug rule">>}),
+    ?assertMatch(#rule{id = <<"rule:t_events">>}, Rule),
     [{hook_points_rules, Rule} | Config];
 init_per_testcase(Test, Config)
         when Test =:= t_sqlselect_multi_actoins_1
@@ -231,7 +234,7 @@ init_per_testcase(_TestCase, Config) ->
     Config.
 
 end_per_testcase(t_events, Config) ->
-    ets:delete(?HOOK_METRICS_TAB),
+    ets:delete(events_record_tab),
     ok = emqx_rule_registry:remove_rule(?config(hook_points_rules, Config)),
     ok = emqx_rule_registry:remove_action('hook-metrics-action');
 end_per_testcase(Test, Config)
@@ -715,11 +718,22 @@ unregister_resource_types_of() ->
 %%------------------------------------------------------------------------------
 
 t_events(_Config) ->
-    {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
+    {ok, Client} = emqtt:start_link(
+        [ {username, <<"u_event">>}
+        , {clientid, <<"c_event">>}
+        , {proto_ver, v5}
+        , {properties, #{'Session-Expiry-Interval' => 60}}
+        ]),
+    {ok, Client2} = emqtt:start_link(
+        [ {username, <<"u_event2">>}
+        , {clientid, <<"c_event2">>}
+        , {proto_ver, v5}
+        , {properties, #{'Session-Expiry-Interval' => 60}}
+        ]),
     ct:pal("====== verify $events/client_connected"),
-    client_connected(Client),
+    client_connected(Client, Client2),
     ct:pal("====== verify $events/session_subscribed"),
-    session_subscribed(Client),
+    session_subscribed(Client2),
     ct:pal("====== verify t1"),
     message_publish(Client),
     ct:pal("====== verify $events/message_delivered"),
@@ -727,43 +741,46 @@ t_events(_Config) ->
     ct:pal("====== verify $events/message_acked"),
     message_acked(Client),
     ct:pal("====== verify $events/session_unsubscribed"),
-    session_unsubscribed(Client),
+    session_unsubscribed(Client2),
     ct:pal("====== verify $events/message_dropped"),
     message_dropped(Client),
     ct:pal("====== verify $events/client_disconnected"),
-    client_disconnected(Client),
+    client_disconnected(Client, Client2),
     ok.
 
 message_publish(Client) ->
-    emqtt:publish(Client, <<"t1">>, <<"{\"id\": 1, \"name\": \"ha\"}">>, 1),
-    verify_events_counter('message.publish'),
+    emqtt:publish(Client, <<"t1">>, #{'Message-Expiry-Interval' => 60},
+        <<"{\"id\": 1, \"name\": \"ha\"}">>, [{qos, 1}]),
+    verify_event('message.publish'),
     ok.
-client_connected(Client) ->
+client_connected(Client, Client2) ->
     {ok, _} = emqtt:connect(Client),
-    verify_events_counter('client.connected'),
+    {ok, _} = emqtt:connect(Client2),
+    verify_event('client.connected'),
     ok.
-client_disconnected(Client) ->
-    ok = emqtt:stop(Client),
-    verify_events_counter('client.disconnected'),
+client_disconnected(Client, Client2) ->
+    ok = emqtt:disconnect(Client, 0, #{'User-Property' => {<<"reason">>, <<"normal">>}}),
+    ok = emqtt:disconnect(Client2, 0, #{'User-Property' => {<<"reason">>, <<"normal">>}}),
+    verify_event('client.disconnected'),
     ok.
-session_subscribed(Client) ->
-    {ok, _, _} = emqtt:subscribe(Client, <<"t1">>, 1),
-    verify_events_counter('session.subscribed'),
+session_subscribed(Client2) ->
+    {ok, _, _} = emqtt:subscribe(Client2, #{'User-Property' => {<<"topic_name">>, <<"t1">>}}, <<"t1">>, 1),
+    verify_event('session.subscribed'),
     ok.
-session_unsubscribed(Client) ->
-    {ok, _, _} = emqtt:unsubscribe(Client, <<"t1">>),
-    verify_events_counter('session.unsubscribed'),
+session_unsubscribed(Client2) ->
+    {ok, _, _} = emqtt:unsubscribe(Client2, #{'User-Property' => {<<"topic_name">>, <<"t1">>}}, <<"t1">>),
+    verify_event('session.unsubscribed'),
     ok.
 
 message_delivered(_Client) ->
-    verify_events_counter('message.delivered'),
+    verify_event('message.delivered'),
     ok.
 message_dropped(Client) ->
     message_publish(Client),
-    verify_events_counter('message.dropped'),
+    verify_event('message.dropped'),
     ok.
 message_acked(_Client) ->
-    verify_events_counter('message.acked'),
+    verify_event('message.acked'),
     ok.
 
 t_match_atom_and_binary(_Config) ->
@@ -1185,25 +1202,40 @@ t_sqlparse_foreach_1(_Config) ->
     %% Verify foreach with and without 'AS'
     Sql = "foreach payload.sensors as s "
           "from \"t/#\" ",
-    ?assertMatch({ok,[1, 2]},
+    ?assertMatch({ok,[#{s := 1}, #{s := 2}]},
                  emqx_rule_sqltester:test(
                     #{<<"rawsql">> => Sql,
                       <<"ctx">> => #{<<"payload">> => <<"{\"sensors\": [1, 2]}">>,
                                      <<"topic">> => <<"t/a">>}})),
     Sql2 = "foreach payload.sensors "
           "from \"t/#\" ",
-    ?assertMatch({ok,[1,2]},
+    ?assertMatch({ok,[#{item := 1}, #{item := 2}]},
                  emqx_rule_sqltester:test(
                     #{<<"rawsql">> => Sql2,
                       <<"ctx">> => #{<<"payload">> => <<"{\"sensors\": [1, 2]}">>,
                                      <<"topic">> => <<"t/a">>}})),
     Sql3 = "foreach payload.sensors "
           "from \"t/#\" ",
-    ?assertMatch({ok,[#{<<"cmd">> := <<"1">>},
-                       #{<<"cmd">> := <<"2">>,<<"name">> := <<"ct">>}]},
+    ?assertMatch({ok,[#{item := #{<<"cmd">> := <<"1">>}, clientid := <<"c_a">>},
+                       #{item := #{<<"cmd">> := <<"2">>, <<"name">> := <<"ct">>}, clientid := <<"c_a">>}]},
                  emqx_rule_sqltester:test(
                     #{<<"rawsql">> => Sql3,
-                      <<"ctx">> => #{<<"payload">> => <<"{\"sensors\": [{\"cmd\":\"1\"}, {\"cmd\":\"2\",\"name\":\"ct\"}]}">>, <<"topic">> => <<"t/a">>}})).
+                      <<"ctx">> => #{
+                          <<"payload">> => <<"{\"sensors\": [{\"cmd\":\"1\"}, {\"cmd\":\"2\",\"name\":\"ct\"}]}">>, <<"clientid">> => <<"c_a">>,
+                          <<"topic">> => <<"t/a">>}})),
+    Sql4 = "foreach payload.sensors "
+          "from \"t/#\" ",
+    {ok,[#{metadata := #{action_id := TAction,
+                         rule_id := TRuleId}},
+         #{metadata := #{action_id := TAction,
+                         rule_id := TRuleId}}]} =
+                 emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql4,
+                      <<"ctx">> => #{
+                          <<"payload">> => <<"{\"sensors\": [1, 2]}">>,
+                          <<"topic">> => <<"t/a">>}}),
+    ?assert(is_binary(TRuleId)),
+    ?assert(is_binary(TAction)).
 
 t_sqlparse_foreach_2(_Config) ->
     %% Verify foreach-do with and without 'AS'
@@ -1243,8 +1275,8 @@ t_sqlparse_foreach_3(_Config) ->
     Sql = "foreach payload.sensors as s "
           "incase s.cmd != 1 "
           "from \"t/#\" ",
-    ?assertMatch({ok,[#{<<"cmd">> := 2},
-                      #{<<"cmd">> := 3}
+    ?assertMatch({ok,[#{s := #{<<"cmd">> := 2}},
+                      #{s := #{<<"cmd">> := 3}}
                       ]},
                  emqx_rule_sqltester:test(
                     #{<<"rawsql">> => Sql,
@@ -1255,8 +1287,8 @@ t_sqlparse_foreach_3(_Config) ->
     Sql2 = "foreach payload.sensors "
           "incase item.cmd != 1 "
           "from \"t/#\" ",
-    ?assertMatch({ok,[#{<<"cmd">> := 2},
-                      #{<<"cmd">> := 3}
+    ?assertMatch({ok,[#{item := #{<<"cmd">> := 2}},
+                      #{item := #{<<"cmd">> := 3}}
                       ]},
                  emqx_rule_sqltester:test(
                     #{<<"rawsql">> => Sql2,
@@ -1552,12 +1584,12 @@ on_simple_resource_type_destroy(_Id, #{}) -> ok.
 on_simple_resource_type_status(_Id, #{}, #{}) -> #{is_alive => true}.
 
 hook_metrics_action(_Id, _Params) ->
-    fun(Data = #{event := EventName}, _Events) ->
+    fun(Data = #{event := EventName}, _Envs) ->
         ct:pal("applying hook_metrics_action: ~p", [Data]),
-        ets:update_counter(?HOOK_METRICS_TAB, EventName, 1, {EventName, 1})
+        ets:insert(events_record_tab, {EventName, Data})
     end.
 crash_action(_Id, _Params) ->
-    fun(Data, _Events) ->
+    fun(Data, _Envs) ->
         ct:pal("applying crash action, Data: ~p", [Data]),
         1/0
     end.
@@ -1567,24 +1599,261 @@ init_plus_by_one_action() ->
     ets:insert(plus_by_one_action, {num, 0}).
 
 plus_by_one_action(_Id, #{}) ->
-    fun(Data, _Events) ->
+    fun(Data, _Envs) ->
         ct:pal("applying plus_by_one_action, Data: ~p", [Data]),
         Num = ets:lookup_element(plus_by_one_action, num, 2),
         ets:insert(plus_by_one_action, {num, Num + 1})
     end.
 
-verify_events_counter(EventName) ->
+verify_event(EventName) ->
     ct:sleep(50),
-    Counter = case ets:lookup(?HOOK_METRICS_TAB, EventName) of
-                [] ->
-                    ct:pal("HOOK_METRICS_TAB: ~p", [ets:tab2list(?HOOK_METRICS_TAB)]),
-                    0;
-                [{_, C}] -> C
-              end,
-    ?assert(Counter > 0).
+    case ets:lookup(events_record_tab, EventName) of
+        [] ->
+            ct:fail({no_such_event, EventName, ets:tab2list(events_record_tab)});
+        Records ->
+            [begin
+                %% verify fields can be formatted to JSON string
+                _ = emqx_json:encode(Fields),
+                %% verify metadata fields
+                verify_metadata_fields(EventName, Fields),
+                %% verify available fields for each event name
+                verify_event_fields(EventName, Fields)
+            end || {_Name, Fields} <- Records]
+    end.
+
+verify_metadata_fields(_EventName, #{metadata := Metadata}) ->
+    ?assertMatch(
+        #{rule_id := <<"rule:t_events">>,
+          action_id := <<"action:hook-metrics-action">>},
+        Metadata).
+
+verify_event_fields('message.publish', Fields) ->
+    #{id := ID,
+      clientid := ClientId,
+      username := Username,
+      payload := Payload,
+      peerhost := PeerHost,
+      topic := Topic,
+      qos := QoS,
+      flags := Flags,
+      headers := Headers,
+      pub_props := Properties,
+      timestamp := Timestamp,
+      publish_received_at := EventAt
+    } = Fields,
+    Now = erlang:system_time(millisecond),
+    TimestampElapse = Now - Timestamp,
+    RcvdAtElapse = Now - EventAt,
+    ?assert(is_binary(ID)),
+    ?assertEqual(<<"c_event">>, ClientId),
+    ?assertEqual(<<"u_event">>, Username),
+    ?assertEqual(<<"{\"id\": 1, \"name\": \"ha\"}">>, Payload),
+    verify_ipaddr(PeerHost),
+    ?assertEqual(<<"t1">>, Topic),
+    ?assertEqual(1, QoS),
+    ?assert(is_map(Flags)),
+    ?assert(is_map(Headers)),
+    ?assertMatch(#{'Message-Expiry-Interval' := 60}, Properties),
+    ?assert(0 =< TimestampElapse andalso TimestampElapse =< 60*1000),
+    ?assert(0 =< RcvdAtElapse andalso RcvdAtElapse =< 60*1000),
+    ?assert(EventAt =< Timestamp);
+
+verify_event_fields('client.connected', Fields) ->
+    #{clientid := ClientId,
+      username := Username,
+      mountpoint := MountPoint,
+      peername := PeerName,
+      sockname := SockName,
+      proto_name := ProtoName,
+      proto_ver := ProtoVer,
+      keepalive := Keepalive,
+      clean_start := CleanStart,
+      expiry_interval := ExpiryInterval,
+      is_bridge := IsBridge,
+      conn_props := Properties,
+      timestamp := Timestamp,
+      connected_at := EventAt
+    } = Fields,
+    Now = erlang:system_time(millisecond),
+    TimestampElapse = Now - Timestamp,
+    RcvdAtElapse = Now - EventAt,
+    ?assert(is_binary(MountPoint) orelse MountPoint == undefined),
+    ?assert(lists:member(ClientId, [<<"c_event">>, <<"c_event2">>])),
+    ?assert(lists:member(Username, [<<"u_event">>, <<"u_event2">>])),
+    verify_peername(PeerName),
+    verify_peername(SockName),
+    ?assertEqual(<<"MQTT">>, ProtoName),
+    ?assertEqual(5, ProtoVer),
+    ?assert(is_integer(Keepalive)),
+    ?assert(is_boolean(CleanStart)),
+    ?assertEqual(60, ExpiryInterval),
+    ?assertEqual(false, IsBridge),
+    ?assertMatch(#{'Session-Expiry-Interval' := 60}, Properties),
+    ?assert(0 =< TimestampElapse andalso TimestampElapse =< 60*1000),
+    ?assert(0 =< RcvdAtElapse andalso RcvdAtElapse =< 60*1000),
+    ?assert(EventAt =< Timestamp);
+
+verify_event_fields('client.disconnected', Fields) ->
+    #{reason := Reason,
+      clientid := ClientId,
+      username := Username,
+      peername := PeerName,
+      sockname := SockName,
+      disconn_props := Properties,
+      timestamp := Timestamp,
+      disconnected_at := EventAt
+    } = Fields,
+    Now = erlang:system_time(millisecond),
+    TimestampElapse = Now - Timestamp,
+    RcvdAtElapse = Now - EventAt,
+    ?assert(is_atom(Reason)),
+    ?assert(lists:member(ClientId, [<<"c_event">>, <<"c_event2">>])),
+    ?assert(lists:member(Username, [<<"u_event">>, <<"u_event2">>])),
+    verify_peername(PeerName),
+    verify_peername(SockName),
+    ?assertMatch(#{'User-Property' := #{<<"reason">> := <<"normal">>}}, Properties),
+    ?assert(0 =< TimestampElapse andalso TimestampElapse =< 60*1000),
+    ?assert(0 =< RcvdAtElapse andalso RcvdAtElapse =< 60*1000),
+    ?assert(EventAt =< Timestamp);
+
+verify_event_fields(SubUnsub, Fields) when SubUnsub == 'session.subscribed'
+                                         ; SubUnsub == 'session.unsubscribed' ->
+    #{clientid := ClientId,
+      username := Username,
+      peerhost := PeerHost,
+      topic := Topic,
+      qos := QoS,
+      timestamp := Timestamp
+    } = Fields,
+    Now = erlang:system_time(millisecond),
+    TimestampElapse = Now - Timestamp,
+    ?assert(is_atom(reason)),
+    ?assertEqual(<<"c_event2">>, ClientId),
+    ?assertEqual(<<"u_event2">>, Username),
+    verify_ipaddr(PeerHost),
+    ?assertEqual(<<"t1">>, Topic),
+    ?assertEqual(1, QoS),
+    PropKey =
+        case SubUnsub of
+            'session.subscribed' -> sub_props;
+            'session.unsubscribed' -> unsub_props
+        end,
+    ?assertMatch(#{'User-Property' := #{<<"topic_name">> := <<"t1">>}},
+                 maps:get(PropKey, Fields)),
+    ?assert(0 =< TimestampElapse andalso TimestampElapse =< 60*1000);
+
+verify_event_fields('message.dropped', Fields) ->
+    #{id := ID,
+      reason := Reason,
+      clientid := ClientId,
+      username := Username,
+      payload := Payload,
+      peerhost := PeerHost,
+      topic := Topic,
+      qos := QoS,
+      flags := Flags,
+      pub_props := Properties,
+      timestamp := Timestamp,
+      publish_received_at := EventAt
+    } = Fields,
+    Now = erlang:system_time(millisecond),
+    TimestampElapse = Now - Timestamp,
+    RcvdAtElapse = Now - EventAt,
+    ?assert(is_binary(ID)),
+    ?assert(is_atom(Reason)),
+    ?assertEqual(<<"c_event">>, ClientId),
+    ?assertEqual(<<"u_event">>, Username),
+    ?assertEqual(<<"{\"id\": 1, \"name\": \"ha\"}">>, Payload),
+    verify_ipaddr(PeerHost),
+    ?assertEqual(<<"t1">>, Topic),
+    ?assertEqual(1, QoS),
+    ?assert(is_map(Flags)),
+    ?assertMatch(#{'Message-Expiry-Interval' := 60}, Properties),
+    ?assert(0 =< TimestampElapse andalso TimestampElapse =< 60*1000),
+    ?assert(0 =< RcvdAtElapse andalso RcvdAtElapse =< 60*1000),
+    ?assert(EventAt =< Timestamp);
+
+verify_event_fields('message.delivered', Fields) ->
+    #{id := ID,
+      clientid := ClientId,
+      username := Username,
+      from_clientid := FromClientId,
+      from_username := FromUsername,
+      payload := Payload,
+      peerhost := PeerHost,
+      topic := Topic,
+      qos := QoS,
+      flags := Flags,
+      pub_props := Properties,
+      timestamp := Timestamp,
+      publish_received_at := EventAt
+    } = Fields,
+    Now = erlang:system_time(millisecond),
+    TimestampElapse = Now - Timestamp,
+    RcvdAtElapse = Now - EventAt,
+    ?assert(is_binary(ID)),
+    ?assertEqual(<<"c_event2">>, ClientId),
+    ?assertEqual(<<"u_event2">>, Username),
+    ?assertEqual(<<"c_event">>, FromClientId),
+    ?assertEqual(<<"u_event">>, FromUsername),
+    ?assertEqual(<<"{\"id\": 1, \"name\": \"ha\"}">>, Payload),
+    verify_ipaddr(PeerHost),
+    ?assertEqual(<<"t1">>, Topic),
+    ?assertEqual(1, QoS),
+    ?assert(is_map(Flags)),
+    ?assertMatch(#{'Message-Expiry-Interval' := 60}, Properties),
+    ?assert(0 =< TimestampElapse andalso TimestampElapse =< 60*1000),
+    ?assert(0 =< RcvdAtElapse andalso RcvdAtElapse =< 60*1000),
+    ?assert(EventAt =< Timestamp);
+
+verify_event_fields('message.acked', Fields) ->
+    #{id := ID,
+      clientid := ClientId,
+      username := Username,
+      from_clientid := FromClientId,
+      from_username := FromUsername,
+      payload := Payload,
+      peerhost := PeerHost,
+      topic := Topic,
+      qos := QoS,
+      flags := Flags,
+      pub_props := PubProps,
+      puback_props := PubAckProps,
+      timestamp := Timestamp,
+      publish_received_at := EventAt
+    } = Fields,
+    Now = erlang:system_time(millisecond),
+    TimestampElapse = Now - Timestamp,
+    RcvdAtElapse = Now - EventAt,
+    ?assert(is_binary(ID)),
+    ?assertEqual(<<"c_event2">>, ClientId),
+    ?assertEqual(<<"u_event2">>, Username),
+    ?assertEqual(<<"c_event">>, FromClientId),
+    ?assertEqual(<<"u_event">>, FromUsername),
+    ?assertEqual(<<"{\"id\": 1, \"name\": \"ha\"}">>, Payload),
+    verify_ipaddr(PeerHost),
+    ?assertEqual(<<"t1">>, Topic),
+    ?assertEqual(1, QoS),
+    ?assert(is_map(Flags)),
+    ?assertMatch(#{'Message-Expiry-Interval' := 60}, PubProps),
+    ?assert(is_map(PubAckProps)),
+    ?assert(0 =< TimestampElapse andalso TimestampElapse =< 60*1000),
+    ?assert(0 =< RcvdAtElapse andalso RcvdAtElapse =< 60*1000),
+    ?assert(EventAt =< Timestamp).
+
+verify_peername(PeerName) ->
+    case string:split(PeerName, ":") of
+        [IPAddrS, PortS] ->
+            verify_ipaddr(IPAddrS),
+            _ = binary_to_integer(PortS);
+        _ -> ct:fail({invalid_peername, PeerName})
+    end.
+
+verify_ipaddr(IPAddrS) ->
+    ?assertMatch({ok, _}, inet:parse_address(binary_to_list(IPAddrS))).
 
 init_events_counters() ->
-    ets:new(?HOOK_METRICS_TAB, [named_table, set, public]).
+    ets:new(events_record_tab, [named_table, bag, public]).
 
 %%------------------------------------------------------------------------------
 %% Start Apps

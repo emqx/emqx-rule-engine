@@ -19,7 +19,7 @@ t_mod_hook_fun(_) ->
                'message.delivered'
               ]].
 
-t_printable_headers(_) ->
+t_printable_maps(_) ->
     Headers = #{peerhost => {127,0,0,1},
                 peername => {{127,0,0,1}, 9980},
                 sockname => {{127,0,0,1}, 1883}
@@ -28,4 +28,4 @@ t_printable_headers(_) ->
         #{peerhost := <<"127.0.0.1">>,
           peername := <<"127.0.0.1:9980">>,
           sockname := <<"127.0.0.1:1883">>
-        }, emqx_rule_events:printable_headers(Headers)).
+        }, emqx_rule_events:printable_maps(Headers)).

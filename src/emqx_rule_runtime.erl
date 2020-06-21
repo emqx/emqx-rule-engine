@@ -64,18 +64,18 @@ apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
     end,
     apply_rules(More, Input).
 
-apply_rule(Rule, Input) ->
+apply_rule(Rule = #rule{id = RuleID}, Input) ->
     clear_rule_payload(),
-    do_apply_rule(Rule, Input).
+    do_apply_rule(Rule, add_metadata(Input, #{rule_id => RuleID})).
 
 do_apply_rule(#rule{id = RuleId,
-                 is_foreach = true,
-                 fields = Fields,
-                 doeach = DoEach,
-                 incase = InCase,
-                 conditions = Conditions,
-                 on_action_failed = OnFailed,
-                 actions = Actions}, Input) ->
+                    is_foreach = true,
+                    fields = Fields,
+                    doeach = DoEach,
+                    incase = InCase,
+                    conditions = Conditions,
+                    on_action_failed = OnFailed,
+                    actions = Actions}, Input) ->
     {Selected, Collection} = ?RAISE(select_and_collect(Fields, Input),
                                         {select_and_collect_error, _REASON_}),
     ColumnsAndSelected = maps:merge(Input, Selected),
@@ -90,11 +90,11 @@ do_apply_rule(#rule{id = RuleId,
     end;
 
 do_apply_rule(#rule{id = RuleId,
-                 is_foreach = false,
-                 fields = Fields,
-                 conditions = Conditions,
-                 on_action_failed = OnFailed,
-                 actions = Actions}, Input) ->
+                    is_foreach = false,
+                    fields = Fields,
+                    conditions = Conditions,
+                    on_action_failed = OnFailed,
+                    actions = Actions}, Input) ->
     Selected = ?RAISE(select_and_transform(Fields, Input),
                       {select_and_transform_error, _REASON_}),
     case ?RAISE(match_conditions(Conditions, maps:merge(Input, Selected)),
@@ -163,7 +163,7 @@ filter_collection(Input, InCase, DoEach, {CollKey, CollVal}) ->
             InputAndItem = maps:merge(Input, #{CollKey => Item}),
             case ?RAISE(match_conditions(InCase, InputAndItem),
                     {match_incase_error, _REASON_}) of
-                true when DoEach == [] -> true;
+                true when DoEach == [] -> {true, InputAndItem};
                 true ->
                     {true, ?RAISE(select_and_transform(DoEach, InputAndItem),
                                   {doeach_error, _REASON_})};
@@ -223,7 +223,9 @@ number(Bin) ->
 take_actions(Actions, Selected, Envs, OnFailed) ->
     lists:map(fun(Action) -> take_action(Action, Selected, Envs, OnFailed) end, Actions).
 
-take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected, Envs, OnFailed) ->
+take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected0, Envs0, OnFailed) ->
+    Selected = add_metadata(Selected0, #{action_id => Id}),
+    Envs = add_metadata(Envs0, #{action_id => Id}),
     try
         {ok, #action_instance_params{apply = Apply}}
             = emqx_rule_registry:get_action_instance_params(Id),
@@ -311,6 +313,10 @@ apply_func(Name, Args, Input) when is_atom(Name) ->
             erlang:apply(Func, [Input]);
         Result -> Result
     end.
+
+add_metadata(Input, Metadata) when is_map(Input), is_map(Metadata) ->
+    NewMetadata = maps:merge(maps:get(metadata, Input, #{}), Metadata),
+    Input#{metadata => NewMetadata}.
 
 %%------------------------------------------------------------------------------
 %% Internal Functions
