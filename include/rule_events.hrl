@@ -19,7 +19,8 @@
 -define(EG_COLUMNS(EVENT),
         case EVENT of
         'message.publish' ->
-                [ {<<"id">>, emqx_guid:to_hexstr(emqx_guid:gen())}
+                [ {<<"event">>, 'message.publish'}
+                , {<<"id">>, emqx_guid:to_hexstr(emqx_guid:gen())}
                 , {<<"clientid">>, <<"c_emqx">>}
                 , {<<"username">>, <<"u_emqx">>}
                 , {<<"payload">>, <<"{\"msg\": \"hello\"}">>}
@@ -27,7 +28,7 @@
                 , {<<"topic">>, <<"t/a">>}
                 , {<<"qos">>, 1}
                 , {<<"flags">>, #{}}
-                , {<<"headers">>, undefined}
+                , {<<"headers">>, #{}}
                 , {<<"publish_received_at">>, erlang:system_time(millisecond)}
                 , {<<"timestamp">>, erlang:system_time(millisecond)}
                 , {<<"node">>, node()}
@@ -265,21 +266,6 @@
         ]).
 
 -define(EG_ENVS(EVENT_TOPIC),
-        case EVENT_TOPIC of
-        <<"$events/", _/binary>> ->
-            EventName = emqx_rule_events:event_name(EVENT_TOPIC),
-            emqx_rule_maps:atom_key_map(maps:from_list(?EG_COLUMNS(EventName)));
-        _PublishTopic ->
-            #{id => emqx_guid:to_hexstr(emqx_guid:gen()),
-              clientid => <<"c_emqx">>,
-              username => <<"u_emqx">>,
-              payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,
-              peerhost => <<"127.0.0.1">>,
-              topic => <<"t/a">>,
-              qos => 1,
-              flags => #{sys => true, event => true},
-              publish_received_at => emqx_rule_utils:now_ms(),
-              timestamp => emqx_rule_utils:now_ms(),
-              node => node()
-              }
-        end).
+        emqx_rule_maps:atom_key_map(
+            maps:from_list(
+                ?EG_COLUMNS(emqx_rule_events:event_name(EVENT_TOPIC))))).

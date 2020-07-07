@@ -322,7 +322,8 @@ event_name(<<"$events/session_subscribed", _/binary>>) -> 'session.subscribed';
 event_name(<<"$events/session_unsubscribed", _/binary>>) -> 'session.unsubscribed';
 event_name(<<"$events/message_delivered", _/binary>>) -> 'message.delivered';
 event_name(<<"$events/message_acked", _/binary>>) -> 'message.acked';
-event_name(<<"$events/message_dropped", _/binary>>) -> 'message.dropped'.
+event_name(<<"$events/message_dropped", _/binary>>) -> 'message.dropped';
+event_name(<<_/binary>>) -> 'message.publish'.
 
 event_topic('client.connected') -> <<"$events/client_connected">>;
 event_topic('client.disconnected') -> <<"$events/client_disconnected">>;
