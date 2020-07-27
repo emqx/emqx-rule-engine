@@ -56,7 +56,7 @@
 -spec(parse_select(string() | binary())
       -> {ok, select()} | {parse_error, term()} | {lex_error, term()}).
 parse_select(Sql) ->
-    try case sqlparse:parsetree(Sql) of
+    try case rulesql:parsetree(Sql) of
             {ok, [{{select, Clauses}, _Extra}]} ->
                 {ok, preprocess(#select{is_foreach = false,
                                         fields = get_value(fields, Clauses),
