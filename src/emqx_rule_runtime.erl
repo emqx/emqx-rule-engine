@@ -34,6 +34,9 @@
 -type(alias() :: atom()).
 -type(collection() :: {alias(), [term()]}).
 
+-define(ephemeral_alias(TYPE, NAME),
+    emqx_rule_utils:bin(io_lib:format("_v_~s_~p_~p", [TYPE, NAME, erlang:system_time()]))).
+
 %%------------------------------------------------------------------------------
 %% Apply rules
 %%------------------------------------------------------------------------------
@@ -118,14 +121,13 @@ select_and_transform([], _Input, Output) ->
 select_and_transform(['*'|More], Input, Output) ->
     select_and_transform(More, Input, maps:merge(Output, Input));
 select_and_transform([{as, Field, Alias}|More], Input, Output) ->
-    Key = emqx_rule_utils:unsafe_atom_key(Alias),
     Val = eval(Field, Input),
     select_and_transform(More,
-        nested_put(Key, Val, Input),
-        nested_put(Key, Val, Output));
+        nested_put(Alias, Val, Input),
+        nested_put(Alias, Val, Output));
 select_and_transform([Field|More], Input, Output) ->
     Val = eval(Field, Input),
-    Key = alias(Field, Val),
+    Key = alias(Field),
     select_and_transform(More,
         nested_put(Key, Val, Input),
         nested_put(Key, Val, Output)).
@@ -136,22 +138,20 @@ select_and_collect(Fields, Input) ->
     select_and_collect(Fields, Input, {#{}, {'item', []}}).
 
 select_and_collect([{as, Field, Alias}], Input, {Output, _}) ->
-    Key = emqx_rule_utils:unsafe_atom_key(Alias),
     Val = eval(Field, Input),
-    {nested_put(Key, Val, Output), {Key, ensure_list(Val)}};
+    {nested_put(Alias, Val, Output), {Alias, ensure_list(Val)}};
 select_and_collect([{as, Field, Alias}|More], Input, {Output, LastKV}) ->
-    Key = emqx_rule_utils:unsafe_atom_key(Alias),
     Val = eval(Field, Input),
     select_and_collect(More,
-        nested_put(Key, Val, Input),
-        {nested_put(Key, Val, Output), LastKV});
+        nested_put(Alias, Val, Input),
+        {nested_put(Alias, Val, Output), LastKV});
 select_and_collect([Field], Input, {Output, _}) ->
     Val = eval(Field, Input),
-    Key = alias(Field, Val),
+    Key = alias(Field),
     {nested_put(Key, Val, Output), {'item', ensure_list(Val)}};
 select_and_collect([Field|More], Input, {Output, LastKV}) ->
     Val = eval(Field, Input),
-    Key = alias(Field, Val),
+    Key = alias(Field),
     select_and_collect(More,
         nested_put(Key, Val, Input),
         {nested_put(Key, Val, Output), LastKV}).
@@ -247,15 +247,17 @@ take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected0, Envs0, 
             end
     end.
 
-eval({var, [<<"payload">> | Vars]}, Input) ->
-    nested_get(Vars,
+eval({path, [{key, <<"payload">>} | Path]}, Input) ->
+    nested_get({path, Path},
         case erlang:get(rule_payload) of
             undefined ->
-                Map = ensure_map(nested_get(<<"payload">>, Input)),
+                Map = ensure_map(maps:get(<<"payload">>, Input, undefined)),
                 erlang:put(rule_payload, Map), Map;
             Map -> Map
         end);
-eval({var, Var}, Input) ->
+eval({path, _} = Path, Input) ->
+    nested_get(Path, Input);
+eval({var, _} = Var, Input) ->
     nested_get(Var, Input);
 eval({const, Val}, _Input) ->
     Val;
@@ -268,17 +270,22 @@ eval({'case', CaseOn, CaseClauses, ElseClauses}, Input) ->
 eval({'fun', Name, Args}, Input) ->
     apply_func(Name, [eval(Arg, Input) || Arg <- Args], Input).
 
-alias(Field, Val) ->
-    case alias(Field) of
-        undefined -> Val;
-        Alias -> Alias
-    end.
-
 alias({var, Var}) ->
-    emqx_rule_utils:unsafe_atom_key(Var);
+    {var, emqx_rule_utils:unsafe_atom_key(Var)};
+alias({const, Val}) when is_binary(Val) ->
+    {var, emqx_rule_utils:unsafe_atom_key(Val)};
+alias({path, Path}) ->
+    {path, Path};
 alias({const, Val}) ->
-    Val;
-alias(_) -> undefined.
+    {var, ?ephemeral_alias(const, Val)};
+alias({Op, _L, _R}) ->
+    {var, ?ephemeral_alias(op, Op)};
+alias({'case', On, _, _}) ->
+    {var, ?ephemeral_alias('case', On)};
+alias({'fun', Name, _}) ->
+    {var, ?ephemeral_alias('fun', Name)};
+alias(_) ->
+    ?ephemeral_alias(unknown, unknown).
 
 eval_case_clauses([], ElseClauses, Input) ->
     case ElseClauses of
