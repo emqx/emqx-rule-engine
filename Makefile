@@ -11,11 +11,18 @@ all: compile
 compile:
 	$(REBAR) compile
 
+proper: compile
+	$(REBAR) as test proper -v -n 1000
+
 ct: compile
 	$(REBAR) as test ct -v
 
 eunit: compile
 	$(REBAR) as test eunit
+
+test: ct proper eunit
+
+tests: test
 
 xref:
 	$(REBAR) xref
