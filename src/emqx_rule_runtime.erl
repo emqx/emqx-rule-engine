@@ -137,9 +137,9 @@ select_and_transform([Field|More], Input, Output) ->
 select_and_collect(Fields, Input) ->
     select_and_collect(Fields, Input, {#{}, {'item', []}}).
 
-select_and_collect([{as, Field, Alias}], Input, {Output, _}) ->
+select_and_collect([{as, Field, {_, A} = Alias}], Input, {Output, _}) ->
     Val = eval(Field, Input),
-    {nested_put(Alias, Val, Output), {Alias, ensure_list(Val)}};
+    {nested_put(Alias, Val, Output), {A, ensure_list(Val)}};
 select_and_collect([{as, Field, Alias}|More], Input, {Output, LastKV}) ->
     Val = eval(Field, Input),
     select_and_collect(More,
@@ -184,7 +184,7 @@ match_conditions({'not', Var}, Data) ->
     end;
 match_conditions({in, Var, {list, Vals}}, Data) ->
     lists:member(eval(Var, Data), [eval(V, Data) || V <- Vals]);
-match_conditions({'fun', Name, Args}, Data) ->
+match_conditions({'fun', {_, Name}, Args}, Data) ->
     apply_func(Name, [eval(Arg, Data) || Arg <- Args], Data);
 match_conditions({Op, L, R}, Data) when ?is_comp(Op) ->
     compare(Op, eval(L, Data), eval(R, Data));
@@ -247,12 +247,13 @@ take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected0, Envs0, 
             end
     end.
 
-eval({path, [{key, <<"payload">>} | Path]}, Input) ->
+eval({path, [{key, <<"payload">>} | Path]}, #{payload := Payload}) ->
     nested_get({path, Path},
         case erlang:get(rule_payload) of
             undefined ->
-                Map = ensure_map(maps:get(<<"payload">>, Input, undefined)),
-                erlang:put(rule_payload, Map), Map;
+                Map = ensure_decoded(Payload),
+                erlang:put(rule_payload, Map),
+                Map;
             Map -> Map
         end);
 eval({path, _} = Path, Input) ->
@@ -263,22 +264,24 @@ eval({const, Val}, _Input) ->
     Val;
 eval({Op, L, R}, Input) when ?is_arith(Op) ->
     apply_func(Op, [eval(L, Input), eval(R, Input)], Input);
-eval({'case', undefined, CaseClauses, ElseClauses}, Input) ->
+eval({Op, L, R}, Input) when ?is_comp(Op) ->
+    compare(Op, eval(L, Input), eval(R, Input));
+eval({'case', <<>>, CaseClauses, ElseClauses}, Input) ->
     eval_case_clauses(CaseClauses, ElseClauses, Input);
 eval({'case', CaseOn, CaseClauses, ElseClauses}, Input) ->
     eval_switch_clauses(CaseOn, CaseClauses, ElseClauses, Input);
-eval({'fun', Name, Args}, Input) ->
+eval({'fun', {_, Name}, Args}, Input) ->
     apply_func(Name, [eval(Arg, Input) || Arg <- Args], Input).
 
 alias({var, Var}) ->
-    {var, emqx_rule_utils:unsafe_atom_key(Var)};
+    {var, Var};
 alias({const, Val}) when is_binary(Val) ->
-    {var, emqx_rule_utils:unsafe_atom_key(Val)};
+    {var, Val};
 alias({path, Path}) ->
     {path, Path};
 alias({const, Val}) ->
     {var, ?ephemeral_alias(const, Val)};
-alias({Op, _L, _R}) ->
+alias({Op, _L, _R}) when ?is_arith(Op); ?is_comp(Op) ->
     {var, ?ephemeral_alias(op, Op)};
 alias({'case', On, _, _}) ->
     {var, ?ephemeral_alias('case', On)};
@@ -289,7 +292,7 @@ alias(_) ->
 
 eval_case_clauses([], ElseClauses, Input) ->
     case ElseClauses of
-        undefined -> undefined;
+        {} -> undefined;
         _ -> eval(ElseClauses, Input)
     end;
 eval_case_clauses([{Cond, Clause} | CaseClauses], ElseClauses, Input) ->
@@ -302,7 +305,7 @@ eval_case_clauses([{Cond, Clause} | CaseClauses], ElseClauses, Input) ->
 
 eval_switch_clauses(_CaseOn, [], ElseClauses, Input) ->
     case ElseClauses of
-        undefined -> undefined;
+        {} -> undefined;
         _ -> eval(ElseClauses, Input)
     end;
 eval_switch_clauses(CaseOn, [{Cond, Clause} | CaseClauses], ElseClauses, Input) ->
@@ -315,6 +318,15 @@ eval_switch_clauses(CaseOn, [{Cond, Clause} | CaseClauses], ElseClauses, Input) 
     end.
 
 apply_func(Name, Args, Input) when is_atom(Name) ->
+    do_apply_func(Name, Args, Input);
+apply_func(Name, Args, Input) when is_binary(Name) ->
+    FunName =
+        try binary_to_existing_atom(Name, utf8)
+        catch error:badarg -> error({sql_function_not_supported, Name})
+        end,
+    do_apply_func(FunName, Args, Input).
+
+do_apply_func(Name, Args, Input) ->
     case erlang:apply(emqx_rule_funcs, Name, Args) of
         Func when is_function(Func) ->
             erlang:apply(Func, [Input]);
@@ -328,11 +340,11 @@ add_metadata(Input, Metadata) when is_map(Input), is_map(Metadata) ->
 %%------------------------------------------------------------------------------
 %% Internal Functions
 %%------------------------------------------------------------------------------
-ensure_map(Map) when is_map(Map) ->
-    Map;
-ensure_map(MaybeJson) ->
+ensure_decoded(Json) when is_map(Json); is_list(Json) ->
+    Json;
+ensure_decoded(MaybeJson) ->
     try emqx_json:decode(MaybeJson, [return_maps]) of
-        JsonMap when is_map(JsonMap) -> JsonMap;
+        Json when is_map(Json); is_list(Json) -> Json;
         _Val -> #{}
     catch _:_ -> #{}
     end.

@@ -19,26 +19,25 @@
 -export([ nested_get/2
         , nested_get/3
         , nested_put/3
-        , put_value/3
         , atom_key_map/1
         , unsafe_atom_key_map/1
         ]).
 
 nested_get(Key, Data) ->
     nested_get(Key, Data, undefined).
-nested_get(Key, Data, Default) when is_binary(Data) ->
+
+nested_get({var, Key}, Data, Default) ->
+    general_map_get({key, Key}, Data, Data, Default);
+nested_get({path, Path}, Data, Default) when is_map(Data) orelse is_list(Data),
+                                             is_list(Path) ->
+    do_nested_get(Path, Data, Data, Default);
+nested_get(Key, Data, Default) when not is_map(Data) ->
     try emqx_json:decode(Data, [return_maps]) of
         Json -> nested_get(Key, Json, Default)
     catch
         _:_ -> Default
-    end;
-nested_get({var, Key}, Data, Default) ->
-    general_map_get({key, Key}, Data, Data, Default);
-nested_get({path, Path}, Data, Default) when is_list(Path) ->
-    do_nested_get(Path, Data, Data, Default).
+    end.
 
-do_nested_get([Key], Data, OrgData, Default) ->
-    general_map_get(Key, Data, OrgData, Default);
 do_nested_get([Key|More], Data, OrgData, Default) ->
     case general_map_get(Key, Data, OrgData, undefined) of
         undefined -> Default;
@@ -47,55 +46,54 @@ do_nested_get([Key|More], Data, OrgData, Default) ->
 do_nested_get([], Val, _OrgData, _Default) ->
     Val.
 
-nested_put(Key, Val, Map) when not is_map(Map) ->
+nested_put(Key, Val, Data) when not is_map(Data),
+                                not is_list(Data) ->
     nested_put(Key, Val, #{});
 nested_put(_, undefined, Map) ->
     Map;
-nested_put(Key, Val, Map) when not is_list(Key) ->
-    put_value(Key, Val, Map);
-nested_put([Key], Val, Map) ->
-    put_value(Key, Val, Map);
-nested_put([Key|More], Val, Map) ->
-    SubMap = general_map_get(Key, Map, Map, #{}),
-    put_value(Key, nested_put(More, Val, SubMap), Map);
-nested_put([], Val, _Map) ->
+nested_put({var, Key}, Val, Map) ->
+    general_map_put({key, Key}, Val, Map, Map);
+nested_put({path, Path}, Val, Map) when is_list(Path) ->
+    do_nested_put(Path, Val, Map, Map).
+
+do_nested_put([Key|More], Val, Map, OrgData) ->
+    SubMap = general_map_get(Key, Map, OrgData, undefined),
+    general_map_put(Key, do_nested_put(More, Val, SubMap, OrgData), Map, OrgData);
+do_nested_put([], Val, _Map, _OrgData) ->
     Val.
 
-put_value(_Key, undefined, Map) ->
-    Map;
-put_value(Key, Val, Map) ->
-    general_map_put(Key, Val, Map).
-
 general_map_get(Key, Map, OrgData, Default) ->
-    general_map(Key, Map, OrgData,
+    general_find(Key, Map, OrgData,
         fun
             ({equivalent, {_EquiKey, Val}}) -> Val;
             ({found, {_Key, Val}}) -> Val;
             (not_found) -> Default
         end).
 
-general_map_put(Key, Val, Map) ->
-    general_map(Key, Map, #{},
+general_map_put(_Key, undefined, Map, _OrgData) ->
+    Map;
+general_map_put(Key, Val, Map, OrgData) ->
+    general_find(Key, Map, OrgData,
         fun
-            ({equivalent, {EquiKey, _Val}}) -> maps:put(EquiKey, Val, Map);
-            (_) -> maps:put(Key, Val, Map)
+            ({equivalent, {EquiKey, _Val}}) -> do_put(EquiKey, Val, Map, OrgData);
+            (_) -> do_put(Key, Val, Map, OrgData)
         end).
 
-general_map({key, Key}, Map, _OrgData, Handler) when is_map(Map) ->
+general_find({key, Key}, Map, _OrgData, Handler) when is_map(Map) ->
     case maps:find(Key, Map) of
-        {ok, Val} -> Handler({found, {Key, Val}});
+        {ok, Val} -> Handler({found, {{key, Key}, Val}});
         error when is_atom(Key) ->
             %% the map may have an equivalent binary-form key
             BinKey = emqx_rule_utils:bin(Key),
             case maps:find(BinKey, Map) of
-                {ok, Val} -> Handler({equivalent, {BinKey, Val}});
+                {ok, Val} -> Handler({equivalent, {{key, BinKey}, Val}});
                 error -> Handler(not_found)
             end;
         error when is_binary(Key) ->
             try %% the map may have an equivalent atom-form key
                 AtomKey = list_to_existing_atom(binary_to_list(Key)),
                 case maps:find(AtomKey, Map) of
-                    {ok, Val} -> Handler({equivalent, {AtomKey, Val}});
+                    {ok, Val} -> Handler({equivalent, {{key, AtomKey}, Val}});
                     error -> Handler(not_found)
                 end
             catch error:badarg ->
@@ -104,17 +102,44 @@ general_map({key, Key}, Map, _OrgData, Handler) when is_map(Map) ->
         error ->
             Handler(not_found)
     end;
-general_map({key, _Key}, _Map, _OrgData, Handler) ->
+general_find({key, _Key}, _Map, _OrgData, Handler) ->
     Handler(not_found);
-general_map({index, {const, Index}}, List, _OrgData, Handler) when is_list(List) ->
-    Val = lists:nth(Index, List),
-    Handler({found, {Index, Val}});
-general_map({index, Index}, List, OrgData, Handler) when is_list(List) ->
-    Index0 = nested_get(Index, OrgData),
-    Val = lists:nth(Index0, List),
-    Handler({found, {Index, Val}});
-general_map({index, _}, List, _OrgData, Handler) when not is_list(List) ->
+general_find({index, {const, Index0}} = IndexP, List, _OrgData, Handler) when is_list(List) ->
+    handle_getnth(Index0, List, IndexP, Handler);
+general_find({index, Index0} = IndexP, List, OrgData, Handler) when is_list(List) ->
+    Index1 = nested_get(Index0, OrgData),
+    handle_getnth(Index1, List, IndexP, Handler);
+general_find({index, _}, List, _OrgData, Handler) when not is_list(List) ->
     Handler(not_found).
+
+do_put({key, Key}, Val, Map, _OrgData) when is_map(Map) ->
+    maps:put(Key, Val, Map);
+do_put({key, Key}, Val, Data, _OrgData) when not is_map(Data) ->
+    #{Key => Val};
+do_put({index, {const, Index}}, Val, List, _OrgData) ->
+    setnth(Index, List, Val);
+do_put({index, Index0}, Val, List, OrgData) ->
+    Index1 = nested_get(Index0, OrgData),
+    setnth(Index1, List, Val).
+
+setnth(I, List, _New) when not is_integer(I) -> List;
+setnth(_, Data, _New) when not is_list(Data) -> Data;
+setnth(1, [_|Rest], New) -> [New|Rest];
+setnth(I, [E|Rest], New) -> [E|setnth(I-1, Rest, New)];
+setnth(_, [], _New) -> [].
+
+getnth(I, L) ->
+    try {ok, lists:nth(I, L)}
+    catch error:_ -> {error, not_found}
+    end.
+
+handle_getnth(Index, List, IndexPattern, Handler) ->
+    case getnth(Index, List) of
+        {ok, Val} ->
+            Handler({found, {IndexPattern, Val}});
+        {error, _} ->
+            Handler(not_found)
+    end.
 
 %%%-------------------------------------------------------------------
 %%% atom key map

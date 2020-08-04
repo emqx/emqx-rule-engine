@@ -160,10 +160,6 @@
 
 -export(['$handle_undefined_function'/2]).
 
--import(emqx_rule_maps,
-        [ get_value/2
-        ]).
-
 -compile({no_auto_import,
           [ abs/1
           , ceil/1
@@ -199,7 +195,7 @@ flags() ->
 
 %% @doc "flags(Name)" Func
 flag(Name) ->
-    fun(#{flags := Flags}) -> get_value(Name, Flags); (_) -> undefined end.
+    fun(#{flags := Flags}) -> emqx_rule_maps:nested_get({var,Name}, Flags); (_) -> undefined end.
 
 %% @doc "clientid()" Func
 clientid() ->
@@ -592,11 +588,10 @@ map_get(Key, Map) ->
     map_get(Key, Map, undefined).
 
 map_get(Key, Map, Default) ->
-    emqx_rule_maps:nested_get(split_nested_key(Key), Map, Default).
+    emqx_rule_maps:nested_get(map_path(Key), Map, Default).
 
 map_put(Key, Val, Map) ->
-    emqx_rule_maps:nested_put(
-        emqx_rule_utils:unsafe_atom_key(split_nested_key(Key)), Val, Map).
+    emqx_rule_maps:nested_put(map_path(Key), Val, Map).
 
 %%------------------------------------------------------------------------------
 %% Hash Funcs
@@ -635,8 +630,7 @@ json_encode(Data) ->
     emqx_json:encode(Data).
 
 json_decode(Data) ->
-    emqx_rule_maps:unsafe_atom_key_map(
-      emqx_json:decode(Data, [return_maps])).
+    emqx_json:decode(Data, [return_maps]).
 
 %% @doc This is for sql funcs that should be handled in the specific modules.
 %% Here the emqx_rule_funcs module acts as a proxy, forwarding
@@ -658,8 +652,8 @@ json_decode(Data) ->
 '$handle_undefined_function'(Fun, Args) ->
     error({sql_function_not_supported, function_literal(Fun, Args)}).
 
-split_nested_key(Key) ->
-    string:split(Key, ".", all).
+map_path(Key) ->
+    {path, [{key, P} || P <- string:split(Key, ".", all)]}.
 
 function_literal(Fun, []) when is_atom(Fun) ->
     atom_to_list(Fun) ++ "()";
