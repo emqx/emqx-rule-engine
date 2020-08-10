@@ -64,14 +64,28 @@ t_nested_put_index(_) ->
     ?assertEqual([1,[a],3], nested_put(?path([{ic,2}, {ic,1}]), a, [1,[2],3])),
     ?assertEqual([1,[[a]],3], nested_put(?path([{ic,2}, {ic,1}, {ic,1}]), a, [1,[[2]],3])),
     ?assertEqual([1,[[2]],3], nested_put(?path([{ic,2}, {ic,1}, {ic,2}]), a, [1,[[2]],3])),
-    ?assertEqual([1,[a],1], nested_put(?path([{ic,2}, {i,?path([{ic,3}])}]), a, [1,[2],1])).
+    ?assertEqual([1,[a],1], nested_put(?path([{ic,2}, {i,?path([{ic,3}])}]), a, [1,[2],1])),
+    %% nested_put to the first or tail of a list:
+    ?assertEqual([a], nested_put(?path([{ic,head}]), a, not_list)),
+    ?assertEqual([a], nested_put(?path([{ic,head}]), a, [])),
+    ?assertEqual([a,1,2,3], nested_put(?path([{ic,head}]), a, [1,2,3])),
+    ?assertEqual([a], nested_put(?path([{ic,tail}]), a, not_list)),
+    ?assertEqual([a], nested_put(?path([{ic,tail}]), a, [])),
+    ?assertEqual([1,2,3,a], nested_put(?path([{ic,tail}]), a, [1,2,3])).
+
+t_nested_put_negative_index(_) ->
+    ?assertEqual([1,2,a], nested_put(?path([{ic,-1}]), a, [1,2,3])),
+    ?assertEqual([1,a,3], nested_put(?path([{ic,-2}]), a, [1,2,3])),
+    ?assertEqual([a,2,3], nested_put(?path([{ic,-3}]), a, [1,2,3])),
+    ?assertEqual([1,2,3], nested_put(?path([{ic,-4}]), a, [1,2,3])).
 
 t_nested_put_mix_map_index(_) ->
     ?assertEqual(#{a => [1,a,3]}, nested_put(?path([a, {ic,2}]), a, #{a => [1,2,3]})),
     ?assertEqual([1,#{a => c},3], nested_put(?path([{ic,2}, a]), c, [1,#{a => b},3])),
     ?assertEqual([1,#{a => [c]},3], nested_put(?path([{ic,2}, a, {ic, 1}]), c, [1,#{a => [b]},3])),
     ?assertEqual(#{a => [1,a,3], b => 2}, nested_put(?path([a, {iv,b}]), a, #{a => [1,2,3], b => 2})),
-    ?assertEqual(#{a => [1,2,3], b => 2}, nested_put(?path([a, {iv,c}]), a, #{a => [1,2,3], b => 2})).
+    ?assertEqual(#{a => [1,2,3], b => 2}, nested_put(?path([a, {iv,c}]), a, #{a => [1,2,3], b => 2})),
+    ?assertEqual(#{a => [#{c => a},1,2,3]}, nested_put(?path([a, {ic,head}, c]), a, #{a => [1,2,3]})).
 
 t_nested_get_map(_) ->
     ?assertEqual(undefined, nested_get(?path([a]), not_map)),
@@ -99,6 +113,12 @@ t_nested_get_index(_) ->
     ?assertEqual("I", nested_get(?path([{ic,2}, {ic,3}, {ic,1}]), [1,[a,b,["I","II","III"]],3])),
     ?assertEqual(undefined, nested_get(?path([{ic,2}, {ic,1}, {ic,1}]), [1,[a,b,["I","II","III"]],3])),
     ?assertEqual(default, nested_get(?path([{ic,2}, {ic,1}, {ic,1}]), [1,[a,b,["I","II","III"]],3], default)).
+
+t_nested_get_negative_index(_) ->
+    ?assertEqual(3, nested_get(?path([{ic,-1}]), [1,2,3])),
+    ?assertEqual(2, nested_get(?path([{ic,-2}]), [1,2,3])),
+    ?assertEqual(1, nested_get(?path([{ic,-3}]), [1,2,3])),
+    ?assertEqual(undefined, nested_get(?path([{ic,-4}]), [1,2,3])).
 
 t_nested_get_mix_map_index(_) ->
     %% index const
