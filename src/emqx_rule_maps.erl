@@ -126,13 +126,26 @@ setnth(head, List, Val) when is_list(List) -> [Val | List];
 setnth(head, _List, Val) -> [Val];
 setnth(tail, List, Val) when is_list(List) -> List ++ [Val];
 setnth(tail, _List, Val) -> [Val];
-setnth(1, [_|Rest], Val) -> [Val|Rest];
 setnth(I, List, _Val) when not is_integer(I) -> List;
 setnth(_, Data, _Val) when not is_list(Data) -> Data;
-setnth(I, [E|Rest], Val) -> [E|setnth(I-1, Rest, Val)];
-setnth(_, [], _Val) -> [].
+setnth(0, List, _Val) -> List;
+setnth(I, List, _Val) when is_integer(I), I > 0 ->
+    do_setnth(I, List, _Val);
+setnth(I, List, _Val) when is_integer(I), I < 0 ->
+    lists:reverse(do_setnth(-I, lists:reverse(List), _Val)).
 
-getnth(I, L) ->
+do_setnth(1, [_|Rest], Val) -> [Val|Rest];
+do_setnth(I, [E|Rest], Val) -> [E|setnth(I-1, Rest, Val)];
+do_setnth(_, [], _Val) -> [].
+
+getnth(0, _) ->
+    {error, not_found};
+getnth(I, L) when I > 0 ->
+    do_getnth(I, L);
+getnth(I, L) when I < 0 ->
+    do_getnth(-I, lists:reverse(L)).
+
+do_getnth(I, L) ->
     try {ok, lists:nth(I, L)}
     catch error:_ -> {error, not_found}
     end.
