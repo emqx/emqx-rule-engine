@@ -122,11 +122,15 @@ do_put({index, Index0}, Val, List, OrgData) ->
     Index1 = nested_get(Index0, OrgData),
     setnth(Index1, List, Val).
 
-setnth(I, List, _New) when not is_integer(I) -> List;
-setnth(_, Data, _New) when not is_list(Data) -> Data;
-setnth(1, [_|Rest], New) -> [New|Rest];
-setnth(I, [E|Rest], New) -> [E|setnth(I-1, Rest, New)];
-setnth(_, [], _New) -> [].
+setnth(head, List, Val) when is_list(List) -> [Val | List];
+setnth(head, _List, Val) -> [Val];
+setnth(tail, List, Val) when is_list(List) -> List ++ [Val];
+setnth(tail, _List, Val) -> [Val];
+setnth(1, [_|Rest], Val) -> [Val|Rest];
+setnth(I, List, _Val) when not is_integer(I) -> List;
+setnth(_, Data, _Val) when not is_list(Data) -> Data;
+setnth(I, [E|Rest], Val) -> [E|setnth(I-1, Rest, Val)];
+setnth(_, [], _Val) -> [].
 
 getnth(I, L) ->
     try {ok, lists:nth(I, L)}
