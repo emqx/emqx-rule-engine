@@ -278,7 +278,7 @@ alias({var, Var}) ->
 alias({const, Val}) when is_binary(Val) ->
     {var, Val};
 alias({path, Path}) ->
-    {path, Path};
+    {path, path_alias(Path, [])};
 alias({const, Val}) ->
     {var, ?ephemeral_alias(const, Val)};
 alias({Op, _L, _R}) when ?is_arith(Op); ?is_comp(Op) ->
@@ -289,6 +289,13 @@ alias({'fun', Name, _}) ->
     {var, ?ephemeral_alias('fun', Name)};
 alias(_) ->
     ?ephemeral_alias(unknown, unknown).
+
+path_alias([], Res) ->
+    lists:reverse(Res);
+path_alias([{key, Key} | Path], Res) ->
+    path_alias(Path, [{key, Key} | Res]);
+path_alias([{index, _} | Path], Res) ->
+    path_alias(Path, [{index, {const, head}} | Res]).
 
 eval_case_clauses([], ElseClauses, Input) ->
     case ElseClauses of
