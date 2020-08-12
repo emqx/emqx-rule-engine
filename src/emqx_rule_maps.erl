@@ -19,6 +19,8 @@
 -export([ nested_get/2
         , nested_get/3
         , nested_put/3
+        , range_gen/2
+        , range_get/3
         , atom_key_map/1
         , unsafe_atom_key_map/1
         ]).
@@ -157,6 +159,25 @@ handle_getnth(Index, List, IndexPattern, Handler) ->
         {error, _} ->
             Handler(not_found)
     end.
+
+range_gen(Begin, End) ->
+    lists:seq(Begin, End).
+
+range_get(Begin, End, List) when is_list(List) ->
+    do_range_get(Begin, End, List);
+range_get(_, _, _NotList) ->
+    error({range_get, non_list_data}).
+
+do_range_get(Begin, End, List) ->
+    TotalLen = length(List),
+    BeginIndex = index(Begin, TotalLen),
+    EndIndex = index(End, TotalLen),
+    lists:sublist(List, BeginIndex, (EndIndex - BeginIndex + 1)).
+
+index(0, _) -> error({invalid_index, 0});
+index(Index, _) when Index > 0 -> Index;
+index(Index, Len) when Index < 0 ->
+    Len + Index + 1.
 
 %%%-------------------------------------------------------------------
 %%% atom key map

@@ -28,6 +28,8 @@
 -import(emqx_rule_maps,
         [ nested_get/2
         , nested_put/3
+        , range_gen/2
+        , range_get/3
         ]).
 
 -type(input() :: map()).
@@ -35,7 +37,7 @@
 -type(collection() :: {alias(), [term()]}).
 
 -define(ephemeral_alias(TYPE, NAME),
-    emqx_rule_utils:bin(io_lib:format("_v_~s_~p_~p", [TYPE, NAME, erlang:system_time()]))).
+    iolist_to_binary(io_lib:format("_v_~s_~p_~p", [TYPE, NAME, erlang:system_time()]))).
 
 %%------------------------------------------------------------------------------
 %% Apply rules
@@ -248,24 +250,29 @@ take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected0, Envs0, 
     end.
 
 eval({path, [{key, <<"payload">>} | Path]}, #{payload := Payload}) ->
-    nested_get({path, Path},
-        case erlang:get(rule_payload) of
-            undefined ->
-                Map = ensure_decoded(Payload),
-                erlang:put(rule_payload, Map),
-                Map;
-            Map -> Map
-        end);
+    nested_get({path, Path}, may_decode_payload(Payload));
 eval({path, _} = Path, Input) ->
     nested_get(Path, Input);
+eval({range, {Begin, End}}, _Input) ->
+    range_gen(Begin, End);
+eval({get_range, {Begin, End}, Data}, Input) ->
+    range_get(Begin, End, eval(Data, Input));
 eval({var, _} = Var, Input) ->
     nested_get(Var, Input);
 eval({const, Val}, _Input) ->
     Val;
+%% unary add
+eval({'+', L}, Input) ->
+    eval(L, Input);
+%% unary subtract
+eval({'-', L}, Input) ->
+    -(eval(L, Input));
 eval({Op, L, R}, Input) when ?is_arith(Op) ->
     apply_func(Op, [eval(L, Input), eval(R, Input)], Input);
 eval({Op, L, R}, Input) when ?is_comp(Op) ->
     compare(Op, eval(L, Input), eval(R, Input));
+eval({list, List}, Input) ->
+    [eval(L, Input) || L <- List];
 eval({'case', <<>>, CaseClauses, ElseClauses}, Input) ->
     eval_case_clauses(CaseClauses, ElseClauses, Input);
 eval({'case', CaseOn, CaseClauses, ElseClauses}, Input) ->
@@ -277,6 +284,12 @@ alias({var, Var}) ->
     {var, Var};
 alias({const, Val}) when is_binary(Val) ->
     {var, Val};
+alias({range, R}) ->
+    {var, ?ephemeral_alias(range, R)};
+alias({get_range, _, {var, Key}}) ->
+    {var, Key};
+alias({get_range, _, {path, Path}}) ->
+    {path, Path};
 alias({path, Path}) ->
     {path, path_alias(Path, [])};
 alias({const, Val}) ->
@@ -347,12 +360,23 @@ add_metadata(Input, Metadata) when is_map(Input), is_map(Metadata) ->
 %%------------------------------------------------------------------------------
 %% Internal Functions
 %%------------------------------------------------------------------------------
+may_decode_payload(Payload) ->
+    case get_cached_payload() of
+        undefined -> cache_payload(ensure_decoded(Payload));
+        DecodedP -> DecodedP
+    end.
+
+get_cached_payload() ->
+    erlang:get(rule_payload).
+
+cache_payload(DecodedP) ->
+    erlang:put(rule_payload, DecodedP),
+    DecodedP.
+
 ensure_decoded(Json) when is_map(Json); is_list(Json) ->
     Json;
 ensure_decoded(MaybeJson) ->
-    try emqx_json:decode(MaybeJson, [return_maps]) of
-        Json when is_map(Json); is_list(Json) -> Json;
-        _Val -> #{}
+    try emqx_json:decode(MaybeJson, [return_maps])
     catch _:_ -> #{}
     end.
 

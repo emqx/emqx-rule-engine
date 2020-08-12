@@ -86,6 +86,7 @@ groups() ->
      {runtime, [],
       [t_match_atom_and_binary,
        t_sqlselect_0,
+       t_sqlselect_00,
        t_sqlselect_01,
        t_sqlselect_02,
        t_sqlselect_1,
@@ -107,7 +108,8 @@ groups() ->
        t_sqlparse_case_when_3,
        t_sqlparse_array_index_1,
        t_sqlparse_array_index_2,
-       t_sqlparse_array_range_1
+       t_sqlparse_array_range_1,
+       t_sqlparse_array_range_2
       ]},
      {events, [],
       [t_events
@@ -857,6 +859,41 @@ t_sqlselect_0(_Config) ->
                             <<"{\"cmd\": {\"info\":\"tt\"}}">>,
                           <<"topic">> => <<"t/a">>}})).
 
+t_sqlselect_00(_Config) ->
+    %% Verify plus/subtract and unary_add_or_subtract
+    Sql = "select 1-1 as a "
+          "from \"t/#\" ",
+    ?assertMatch({ok,#{<<"a">> := 0}},
+                 emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql,
+                      <<"ctx">> =>
+                        #{<<"payload">> => <<"">>,
+                          <<"topic">> => <<"t/a">>}})),
+    Sql1 = "select -1 + 1 as a "
+           "from \"t/#\" ",
+    ?assertMatch({ok,#{<<"a">> := 0}},
+                 emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql1,
+                      <<"ctx">> =>
+                        #{<<"payload">> => <<"">>,
+                          <<"topic">> => <<"t/a">>}})),
+    Sql2 = "select 1 + 1 as a "
+           "from \"t/#\" ",
+    ?assertMatch({ok,#{<<"a">> := 2}},
+                 emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql2,
+                      <<"ctx">> =>
+                        #{<<"payload">> => <<"">>,
+                          <<"topic">> => <<"t/a">>}})),
+    Sql3 = "select +1 as a "
+           "from \"t/#\" ",
+    ?assertMatch({ok,#{<<"a">> := 1}},
+                 emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql3,
+                      <<"ctx">> =>
+                        #{<<"payload">> => <<"">>,
+                          <<"topic">> => <<"t/a">>}})).
+
 t_sqlselect_01(_Config) ->
     ok = emqx_rule_engine:load_providers(),
     TopicRule1 = create_simple_repub_rule(
@@ -1554,10 +1591,6 @@ t_sqlparse_array_index_1(_Config) ->
                                      <<"topic">> => <<"t/a">>}})).
 
 t_sqlparse_array_index_2(_Config) ->
-    dbg:tracer(),
-    dbg:p(all, c),
-    %dbg:tpl(emqx_rule_runtime,nested_put, '_', cx),
-    dbg:tpl(emqx_rule_maps,nested_put, '_', cx),
     %% array get with negative index
     Sql1 = "select "
            "  payload.x[-2].y as b "
@@ -1568,9 +1601,9 @@ t_sqlparse_array_index_2(_Config) ->
                                      <<"topic">> => <<"t/a">>}})),
     %% array append to head or tail of a list:
     Sql2 = "select "
-           "  payload.x as b "
-           "  1 as c[-0] "
-           "  2 as c[-0] "
+           "  payload.x as b, "
+           "  1 as c[-0], "
+           "  2 as c[-0], "
            "  b as c[0] "
            "from \"t/#\" ",
     ?assertMatch({ok, #{<<"b">> := 0, <<"c">> := [0,1,2]}}, emqx_rule_sqltester:test(
@@ -1579,54 +1612,88 @@ t_sqlparse_array_index_2(_Config) ->
                                      <<"topic">> => <<"t/a">>}})),
     %% construct an empty list:
     Sql3 = "select "
-           "  [] as c "
-           "  1 as c[-0] "
-           "  2 as c[-0] "
+           "  [] as c, "
+           "  1 as c[-0], "
+           "  2 as c[-0], "
            "  0 as c[0] "
            "from \"t/#\" ",
     ?assertMatch({ok, #{<<"c">> := [0,1,2]}}, emqx_rule_sqltester:test(
                     #{<<"rawsql">> => Sql3,
-                      <<"ctx">> => #{<<"payload">> => "",
+                      <<"ctx">> => #{<<"payload">> => <<"">>,
                                      <<"topic">> => <<"t/a">>}})),
     %% construct a list:
     Sql4 = "select "
-           "  [\"a\", \"b\"] as c "
-           "  1 as c[-0] "
-           "  2 as c[-0] "
+           "  [payload.a, \"topic\", 'c'] as c, "
+           "  1 as c[-0], "
+           "  2 as c[-0], "
            "  0 as c[0] "
            "from \"t/#\" ",
-    ?assertMatch({ok, #{<<"c">> := [0,<<"a">>,<<"b">>,1,2]}}, emqx_rule_sqltester:test(
+    ?assertMatch({ok, #{<<"c">> := [0,11,<<"t/a">>,<<"c">>,1,2]}}, emqx_rule_sqltester:test(
                     #{<<"rawsql">> => Sql4,
-                      <<"ctx">> => #{<<"payload">> => "",
-                                     <<"topic">> => <<"t/a">>}})).
+                      <<"ctx">> => #{<<"payload">> => <<"{\"a\":11}">>,
+                                     <<"topic">> => <<"t/a">>
+                                     }})).
 
 t_sqlparse_array_range_1(_Config) ->
     %% get a range of list
     Sql0 = "select "
            "  payload.a[1..4] as c "
            "from \"t/#\" ",
-    ?assertMatch({ok, #{<<"c">> := [1,2,3,4]}}, emqx_rule_sqltester:test(
+    ?assertMatch({ok, #{<<"c">> := [0,1,2,3]}}, emqx_rule_sqltester:test(
                     #{<<"rawsql">> => Sql0,
-                      <<"ctx">> => #{<<"payload">> => "{\"x\":[0,1,2,3,4,5]}",
+                      <<"ctx">> => #{<<"payload">> => <<"{\"a\":[0,1,2,3,4,5]}">>,
                                      <<"topic">> => <<"t/a">>}})),
-    %% get a range of list without 'as'
-    Sql01 = "select "
-           "  payload.a[1..4] "
+    %% get a range from non-list data
+    Sql02 = "select "
+           "  payload.a[1..4] as c "
            "from \"t/#\" ",
-    ?assertMatch({ok, #{<<"payload">> := #{<<"a">> := [1,2,3,4]}}}, emqx_rule_sqltester:test(
-                    #{<<"rawsql">> => Sql01,
-                      <<"ctx">> => #{<<"payload">> => "{\"a\":[0,1,2,3,4,5]}",
-                                     <<"topic">> => <<"t/a">>}})),
+    ?assertThrow({select_and_transform_error,{range_get,non_list_data}},
+        emqx_rule_sqltester:test(
+            #{<<"rawsql">> => Sql02,
+                <<"ctx">> =>
+                    #{<<"payload">> => <<"{\"x\":[0,1,2,3,4,5]}">>,
+                      <<"topic">> => <<"t/a">>}})),
     %% construct a range:
     Sql1 = "select "
-           "  [1..4] as c "
-           "  5 as c[-0] "
-           "  6 as c[-0] "
+           "  [1..4] as c, "
+           "  5 as c[-0], "
+           "  6 as c[-0], "
            "  0 as c[0] "
            "from \"t/#\" ",
     ?assertMatch({ok, #{<<"c">> := [0,1,2,3,4,5,6]}}, emqx_rule_sqltester:test(
                     #{<<"rawsql">> => Sql1,
-                      <<"ctx">> => #{<<"payload">> => "",
+                      <<"ctx">> => #{<<"payload">> => <<"">>,
+                                     <<"topic">> => <<"t/a">>}})).
+
+t_sqlparse_array_range_2(_Config) ->
+    %% construct a range without 'as'
+    Sql00 = "select "
+            "  [1..4] "
+            "from \"t/#\" ",
+    {ok, Res00} =
+        emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql00,
+                      <<"ctx">> => #{<<"payload">> => <<"">>,
+                                     <<"topic">> => <<"t/a">>}}),
+    ?assert(lists:any(fun({_K, V}) ->
+            V =:= [1,2,3,4]
+        end, maps:to_list(Res00))),
+    %% construct a range without 'as'
+    Sql01 = "select "
+            "  a[2..4] "
+            "from \"t/#\" ",
+    ?assertMatch({ok, #{<<"a">> := [2,3,4]}},
+        emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql01,
+                      <<"ctx">> => #{<<"a">> => [1,2,3,4,5],
+                                     <<"topic">> => <<"t/a">>}})),
+    %% get a range of list without 'as'
+    Sql02 = "select "
+           "  payload.a[1..4] "
+           "from \"t/#\" ",
+    ?assertMatch({ok, #{<<"payload">> := #{<<"a">> := [0,1,2,3]}}}, emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql02,
+                      <<"ctx">> => #{<<"payload">> => <<"{\"a\":[0,1,2,3,4,5]}">>,
                                      <<"topic">> => <<"t/a">>}})).
 
 %%------------------------------------------------------------------------------
