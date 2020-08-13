@@ -471,6 +471,8 @@ parse_rule_params(Params) ->
     parse_rule_params(Params, #{description => <<"">>}).
 parse_rule_params([], Rule) ->
     Rule;
+parse_rule_params([{<<"id">>, Id} | Params], Rule) ->
+    parse_rule_params(Params, Rule#{id => Id});
 parse_rule_params([{<<"rawsql">>, RawSQL} | Params], Rule) ->
     parse_rule_params(Params, Rule#{rawsql => RawSQL});
 parse_rule_params([{<<"enabled">>, Enabled} | Params], Rule) ->
@@ -503,6 +505,8 @@ parse_resource_params(Params) ->
     parse_resource_params(Params, #{config => #{}, description => <<"">>}).
 parse_resource_params([], Res) ->
     Res;
+parse_resource_params([{<<"id">>, Id} | Params], Res) ->
+    parse_resource_params(Params, Res#{id => Id});
 parse_resource_params([{<<"type">>, ResourceType} | Params], Res) ->
     try parse_resource_params(Params, Res#{type => binary_to_existing_atom(ResourceType, utf8)})
     catch error:badarg ->
