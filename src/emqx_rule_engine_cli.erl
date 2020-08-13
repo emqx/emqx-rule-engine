@@ -39,6 +39,7 @@
 
 -define(OPTSPEC_RESOURCES_CREATE,
         [ {type, undefined, undefined, atom, "Resource Type"}
+        , {id, $i, "id", {binary, <<"">>}, "The resource id. A random resource id will be used if not provided"}
         , {config, $c, "config", {binary, <<"{}">>}, "Config"}
         , {descr, $d, "descr", {binary, <<"">>}, "Description"}
         ]).
@@ -46,6 +47,7 @@
 -define(OPTSPEC_RULES_CREATE,
         [ {sql, undefined, undefined, binary, "Filter Condition SQL"}
         , {actions, undefined, undefined, binary, "Action List in JSON format: [{\"name\": <action_name>, \"params\": {<key>: <value>}}]"}
+        , {id, $i, "id", {binary, <<"">>}, "The rule id. A random rule id will be used if not provided"}
         , {enabled, $e, "enabled", {atom, true}, "'true' or 'false' to enable or disable the rule"}
         , {on_action_failed, $g, "on_action_failed", {atom, continue}, "'continue' or 'stop' when an action in the rule fails"}
         , {descr, $d, "descr", {binary, <<"">>}, "Description"}
@@ -277,11 +279,12 @@ format(#resource_type{name = Name,
 
 make_rule(Opts) ->
     Actions = get_value(actions, Opts),
-    #{rawsql => get_value(sql, Opts),
-      enabled => get_value(enabled, Opts),
-      actions => parse_actions(emqx_json:decode(Actions, [return_maps])),
-      on_action_failed => on_failed(get_value(on_action_failed, Opts)),
-      description => get_value(descr, Opts)}.
+    may_with_opt(
+        #{rawsql => get_value(sql, Opts),
+          enabled => get_value(enabled, Opts),
+          actions => parse_actions(emqx_json:decode(Actions, [return_maps])),
+          on_action_failed => on_failed(get_value(on_action_failed, Opts)),
+          description => get_value(descr, Opts)}, id, <<"">>, Opts).
 
 make_updated_rule(Opts) ->
     KeyNameParsers = [{sql, rawsql, fun(SQL) -> SQL end},
@@ -306,15 +309,22 @@ make_updated_rule(Opts) ->
 
 make_resource(Opts) ->
     Config = get_value(config, Opts),
-    #{type => get_value(type, Opts),
-      config => ?RAISE(emqx_json:decode(Config, [return_maps]), {invalid_config, Config}),
-      description => get_value(descr, Opts)}.
+    may_with_opt(
+        #{type => get_value(type, Opts),
+          config => ?RAISE(emqx_json:decode(Config, [return_maps]), {invalid_config, Config}),
+          description => get_value(descr, Opts)}, id, <<"">>, Opts).
 
 printable_actions(Actions) when is_list(Actions) ->
     emqx_json:encode([#{id => Id, name => Name, params => Args,
                         metrics => get_action_metrics(Id),
                         fallbacks => printable_actions(Fallbacks)}
                       || #action_instance{id = Id, name = Name, args = Args, fallbacks = Fallbacks} <- Actions]).
+
+may_with_opt(Params, OptName, DefaultVal, Options) when is_map(Params) ->
+    case get_value(OptName, Options) of
+        DefaultVal -> Params;
+        Val -> Params#{OptName => Val}
+    end.
 
 with_opts(Action, RawParams, OptSpecList, {CmdObject, CmdName}) ->
     case getopt:parse_and_check(OptSpecList, RawParams) of
