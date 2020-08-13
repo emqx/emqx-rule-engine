@@ -27,6 +27,8 @@
 -type(action_name() :: atom()).
 -type(resource_type_name() :: atom()).
 
+-type(category() :: data_persist| data_forward | offline_msgs | debug | other).
+
 -type(descr() :: #{en := binary(), zh => binary()}).
 
 -type(mf() :: {Module::atom(), Fun::atom()}).
@@ -41,6 +43,7 @@
 
 -record(action,
         { name :: action_name()
+        , category :: category()
         , for :: hook()
         , app :: atom()
         , types = [] :: list(resource_type_name())

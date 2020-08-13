@@ -424,6 +424,7 @@ record_to_map(#rule{id = Id,
 record_to_map(#action{hidden = true}) ->
     ignore;
 record_to_map(#action{name = Name,
+                      category = Category,
                       app = App,
                       for = Hook,
                       types = Types,
@@ -431,6 +432,7 @@ record_to_map(#action{name = Name,
                       title = Title,
                       description = Descr}) ->
     #{name => Name,
+      category => Category,
       app => App,
       for => Hook,
       types => Types,
