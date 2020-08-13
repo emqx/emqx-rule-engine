@@ -116,6 +116,7 @@ new_action({App, Mod, #{name := Name,
                         params := ParamsSpec} = Params}) ->
     ok = emqx_rule_validator:validate_spec(ParamsSpec),
     #action{name = Name, for = Hook, app = App, types = Types,
+            category = maps:get(category, Params, other),
             module = Mod, on_create = Create,
             hidden = maps:get(hidden, Params, false),
             on_destroy = maps:get(destroy, Params, undefined),

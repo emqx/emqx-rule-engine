@@ -57,6 +57,7 @@
         }).
 
 -rule_action(#{name => inspect,
+               category => debug,
                for => '$any',
                types => [],
                create => on_action_create_inspect,
@@ -68,6 +69,7 @@
               }).
 
 -rule_action(#{name => republish,
+               category => data_forward,
                for => '$any',
                types => [],
                create => on_action_create_republish,
@@ -79,6 +81,7 @@
               }).
 
 -rule_action(#{name => do_nothing,
+               category => debug,
                for => '$any',
                types => [],
                create => on_action_do_nothing,
