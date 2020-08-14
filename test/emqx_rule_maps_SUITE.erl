@@ -80,6 +80,8 @@ t_nested_put_negative_index(_) ->
     ?assertEqual([1,2,3], nested_put(?path([{ic,-4}]), a, [1,2,3])).
 
 t_nested_put_mix_map_index(_) ->
+    ?assertEqual(#{a => [a]}, nested_put(?path([a, {ic,2}]), a, #{})),
+    ?assertEqual(#{a => [#{b => 0}]}, nested_put(?path([a, {ic,2}, b]), 0, #{})),
     ?assertEqual(#{a => [1,a,3]}, nested_put(?path([a, {ic,2}]), a, #{a => [1,2,3]})),
     ?assertEqual([1,#{a => c},3], nested_put(?path([{ic,2}, a]), c, [1,#{a => b},3])),
     ?assertEqual([1,#{a => [c]},3], nested_put(?path([{ic,2}, a, {ic, 1}]), c, [1,#{a => [b]},3])),

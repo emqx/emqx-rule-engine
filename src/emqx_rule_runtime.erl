@@ -27,7 +27,6 @@
 
 -import(emqx_rule_maps,
         [ nested_get/2
-        , nested_put/3
         , range_gen/2
         , range_get/3
         ]).
@@ -280,6 +279,11 @@ eval({'case', CaseOn, CaseClauses, ElseClauses}, Input) ->
 eval({'fun', {_, Name}, Args}, Input) ->
     apply_func(Name, [eval(Arg, Input) || Arg <- Args], Input).
 
+handle_alias({path, [{key, <<"payload">>} | _]}, #{payload := Payload} = Input) ->
+    Input#{payload => may_decode_payload(Payload)};
+handle_alias(_, Input) ->
+    Input.
+
 alias({var, Var}) ->
     {var, Var};
 alias({const, Val}) when is_binary(Val) ->
@@ -382,3 +386,7 @@ ensure_decoded(MaybeJson) ->
 
 ensure_list(List) when is_list(List) -> List;
 ensure_list(_NotList) -> [].
+
+nested_put(Alias, Val, Input0) ->
+    Input = handle_alias(Alias, Input0),
+    emqx_rule_maps:nested_put(Alias, Val, Input).

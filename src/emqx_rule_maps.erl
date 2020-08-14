@@ -124,12 +124,13 @@ do_put({index, Index0}, Val, List, OrgData) ->
     Index1 = nested_get(Index0, OrgData),
     setnth(Index1, List, Val).
 
+setnth(_, Data, Val) when not is_list(Data) ->
+    setnth(head, [], Val);
 setnth(head, List, Val) when is_list(List) -> [Val | List];
 setnth(head, _List, Val) -> [Val];
 setnth(tail, List, Val) when is_list(List) -> List ++ [Val];
 setnth(tail, _List, Val) -> [Val];
 setnth(I, List, _Val) when not is_integer(I) -> List;
-setnth(_, Data, _Val) when not is_list(Data) -> Data;
 setnth(0, List, _Val) -> List;
 setnth(I, List, _Val) when is_integer(I), I > 0 ->
     do_setnth(I, List, _Val);
