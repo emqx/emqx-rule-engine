@@ -108,6 +108,8 @@ groups() ->
        t_sqlparse_case_when_3,
        t_sqlparse_array_index_1,
        t_sqlparse_array_index_2,
+       t_sqlparse_array_index_3,
+       t_sqlparse_array_index_4,
        t_sqlparse_array_range_1,
        t_sqlparse_array_range_2
       ]},
@@ -1633,6 +1635,55 @@ t_sqlparse_array_index_2(_Config) ->
                       <<"ctx">> => #{<<"payload">> => <<"{\"a\":11}">>,
                                      <<"topic">> => <<"t/a">>
                                      }})).
+
+t_sqlparse_array_index_3(_Config) ->
+    %% array with json string payload:
+    Sql0 = "select "
+           "payload,"
+           "payload.x[2].y "
+           "from \"t/#\" ",
+    ?assertMatch({ok, #{<<"payload">> := #{<<"x">> := [1, #{<<"y">> := [1,2]}, 3]}}},
+            emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql0,
+                      <<"ctx">> => #{<<"payload">> => <<"{\"x\": [1,{\"y\": [1,2]},3]}">>,
+                                     <<"topic">> => <<"t/a">>}})),
+    %% same as above but don't select payload:
+    Sql1 = "select "
+           "payload.x[2].y as b "
+           "from \"t/#\" ",
+    ?assertMatch({ok, #{<<"b">> := [1,2]}}, emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql1,
+                      <<"ctx">> => #{<<"payload">> => <<"{\"x\": [1,{\"y\": [1,2]},3]}">>,
+                                     <<"topic">> => <<"t/a">>}})),
+    %% same as above but add 'as' clause:
+    Sql2 = "select "
+           "payload.x[2].y as b.c "
+           "from \"t/#\" ",
+    ?assertMatch({ok, #{<<"b">> := #{<<"c">> := [1,2]}}}, emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql2,
+                      <<"ctx">> => #{<<"payload">> => <<"{\"x\": [1,{\"y\": [1,2]},3]}">>,
+                                     <<"topic">> => <<"t/a">>}})).
+
+t_sqlparse_array_index_4(_Config) ->
+    %% array with json string payload:
+    Sql0 = "select "
+           "0 as payload.x[2].y "
+           "from \"t/#\" ",
+    ?assertMatch({ok, #{<<"payload">> := #{<<"x">> := [#{<<"y">> := 0}]}}},
+            emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql0,
+                      <<"ctx">> => #{<<"payload">> => <<"{\"x\": [1,{\"y\": [1,2]},3]}">>,
+                                     <<"topic">> => <<"t/a">>}})),
+    %% array with json string payload, and also select payload.x:
+    Sql1 = "select "
+           "payload.x, "
+           "0 as payload.x[2].y "
+           "from \"t/#\" ",
+    ?assertMatch({ok, #{<<"payload">> := #{<<"x">> := [1, #{<<"y">> := 0}, 3]}}},
+            emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql1,
+                      <<"ctx">> => #{<<"payload">> => <<"{\"x\": [1,{\"y\": [1,2]},3]}">>,
+                                     <<"topic">> => <<"t/a">>}})).
 
 t_sqlparse_array_range_1(_Config) ->
     %% get a range of list
