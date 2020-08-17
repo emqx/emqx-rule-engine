@@ -290,6 +290,8 @@ alias({var, Var}) ->
     {var, Var};
 alias({const, Val}) when is_binary(Val) ->
     {var, Val};
+alias({list, L}) ->
+    {var, ?ephemeral_alias(list, length(L))};
 alias({range, R}) ->
     {var, ?ephemeral_alias(range, R)};
 alias({get_range, _, {var, Key}}) ->
