@@ -110,6 +110,7 @@ groups() ->
        t_sqlparse_array_index_2,
        t_sqlparse_array_index_3,
        t_sqlparse_array_index_4,
+       t_sqlparse_select_matadata_1,
        t_sqlparse_array_range_1,
        t_sqlparse_array_range_2
       ]},
@@ -1267,17 +1268,14 @@ t_sqlparse_foreach_1(_Config) ->
                           <<"topic">> => <<"t/a">>}})),
     Sql4 = "foreach payload.sensors "
           "from \"t/#\" ",
-    {ok,[#{metadata := #{action_id := TAction,
-                         rule_id := TRuleId}},
-         #{metadata := #{action_id := TAction,
-                         rule_id := TRuleId}}]} =
+    {ok,[#{metadata := #{rule_id := TRuleId}},
+         #{metadata := #{rule_id := TRuleId}}]} =
                  emqx_rule_sqltester:test(
                     #{<<"rawsql">> => Sql4,
                       <<"ctx">> => #{
                           <<"payload">> => <<"{\"sensors\": [1, 2]}">>,
                           <<"topic">> => <<"t/a">>}}),
-    ?assert(is_binary(TRuleId)),
-    ?assert(is_binary(TAction)).
+    ?assert(is_binary(TRuleId)).
 
 t_sqlparse_foreach_2(_Config) ->
     %% Verify foreach-do with and without 'AS'
@@ -1685,6 +1683,25 @@ t_sqlparse_array_index_4(_Config) ->
                       <<"ctx">> => #{<<"payload">> => <<"{\"x\": [1,{\"y\": [1,2]},3]}">>,
                                      <<"topic">> => <<"t/a">>}})).
 
+t_sqlparse_select_matadata_1(_Config) ->
+    %% array with json string payload:
+    Sql0 = "select "
+           "payload "
+           "from \"t/#\" ",
+    ?assertNotMatch({ok, #{<<"payload">> := <<"abc">>, metadata := _}},
+            emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql0,
+                      <<"ctx">> => #{<<"payload">> => <<"abc">>,
+                                     <<"topic">> => <<"t/a">>}})),
+    Sql1 = "select "
+           "payload, metadata "
+           "from \"t/#\" ",
+    ?assertMatch({ok, #{<<"payload">> := <<"abc">>, <<"metadata">> := _}},
+            emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql1,
+                      <<"ctx">> => #{<<"payload">> => <<"abc">>,
+                                     <<"topic">> => <<"t/a">>}})).
+
 t_sqlparse_array_range_1(_Config) ->
     %% get a range of list
     Sql0 = "select "
@@ -1860,8 +1877,7 @@ verify_event(EventName) ->
 
 verify_metadata_fields(_EventName, #{metadata := Metadata}) ->
     ?assertMatch(
-        #{rule_id := <<"rule:t_events">>,
-          action_id := <<"action:hook-metrics-action">>},
+        #{rule_id := <<"rule:t_events">>},
         Metadata).
 
 verify_event_fields('message.publish', Fields) ->
