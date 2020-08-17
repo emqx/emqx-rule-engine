@@ -224,9 +224,7 @@ number(Bin) ->
 take_actions(Actions, Selected, Envs, OnFailed) ->
     lists:map(fun(Action) -> take_action(Action, Selected, Envs, OnFailed) end, Actions).
 
-take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected0, Envs0, OnFailed) ->
-    Selected = add_metadata(Selected0, #{action_id => Id}),
-    Envs = add_metadata(Envs0, #{action_id => Id}),
+take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected, Envs, OnFailed) ->
     try
         {ok, #action_instance_params{apply = Apply}}
             = emqx_rule_registry:get_action_instance_params(Id),
