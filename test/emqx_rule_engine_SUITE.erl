@@ -110,6 +110,7 @@ groups() ->
        t_sqlparse_array_index_2,
        t_sqlparse_array_index_3,
        t_sqlparse_array_index_4,
+       t_sqlparse_array_index_5,
        t_sqlparse_select_matadata_1,
        t_sqlparse_array_range_1,
        t_sqlparse_array_range_2
@@ -1682,6 +1683,19 @@ t_sqlparse_array_index_4(_Config) ->
                     #{<<"rawsql">> => Sql1,
                       <<"ctx">> => #{<<"payload">> => <<"{\"x\": [1,{\"y\": [1,2]},3]}">>,
                                      <<"topic">> => <<"t/a">>}})).
+
+t_sqlparse_array_index_5(_Config) ->
+    Sql00 = "select "
+            "  [1,2,3,4] "
+            "from \"t/#\" ",
+    {ok, Res00} =
+        emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql00,
+                      <<"ctx">> => #{<<"payload">> => <<"">>,
+                                     <<"topic">> => <<"t/a">>}}),
+    ?assert(lists:any(fun({_K, V}) ->
+            V =:= [1,2,3,4]
+        end, maps:to_list(Res00))).
 
 t_sqlparse_select_matadata_1(_Config) ->
     %% array with json string payload:
