@@ -286,7 +286,7 @@ number_to_list(Float) when is_float(Float) ->
 parse_nested(Attr) ->
     case string:split(Attr, <<".">>, all) of
         [Attr] -> {var, Attr};
-        Nested -> [{key, P} || P <- Nested]
+        Nested -> {path, [{key, P} || P <- Nested]}
     end.
 
 now_ms() ->
