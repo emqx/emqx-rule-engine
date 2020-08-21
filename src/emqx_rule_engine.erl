@@ -61,8 +61,6 @@
              , action_instance_params/0
              ]).
 
--define(ALARM_ID_RES_DOWN(RES_ID), <<"resource_down/", RES_ID/binary>>).
-
 %%------------------------------------------------------------------------------
 %% Load resource/action providers from all available applications
 %%------------------------------------------------------------------------------
@@ -493,10 +491,10 @@ fetch_resource_status(Module, OnStatus, ResId) ->
                     case Module:OnStatus(ResId, Params) of
                         #{is_alive := LastIsAlive} = Status -> Status;
                         #{is_alive := true} = Status ->
-                            alarm_handler:clear_alarm(?ALARM_ID_RES_DOWN(ResId)),
+                            emqx_alarm:deactivate(alarm_name_of_resource_down(ResId)),
                             Status;
                         #{is_alive := false} = Status ->
-                            alarm_handler:set_alarm({?ALARM_ID_RES_DOWN(ResId), "Resource Down"}),
+                            emqx_alarm:activate(alarm_name_of_resource_down(ResId)),
                             Status
                     end,
                 emqx_rule_registry:add_resource_params(ResParams#resource_params{status = NewStatus}),
@@ -534,3 +532,7 @@ refresh_actions(Actions, Pred) ->
 
 func_fail(Func) when is_atom(Func) ->
     list_to_atom(atom_to_list(Func) ++ "_failure").
+
+alarm_name_of_resource_down(ResourceID) ->
+    {ok, #resource{type = Type}} = emqx_rule_registry:find_resource(ResourceID),
+    list_to_binary(io_lib:format("resource/~s/~s/down", [Type, ResourceID])).
