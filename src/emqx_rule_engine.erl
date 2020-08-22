@@ -491,10 +491,14 @@ fetch_resource_status(Module, OnStatus, ResId) ->
                     case Module:OnStatus(ResId, Params) of
                         #{is_alive := LastIsAlive} = Status -> Status;
                         #{is_alive := true} = Status ->
-                            emqx_alarm:deactivate(alarm_name_of_resource_down(ResId)),
+                            {ok, Type} = find_type(ResId),
+                            Name = alarm_name_of_resource_down(Type, ResId),
+                            emqx_alarm:deactivate(Name),
                             Status;
                         #{is_alive := false} = Status ->
-                            emqx_alarm:activate(alarm_name_of_resource_down(ResId)),
+                            {ok, Type} = find_type(ResId),
+                            Name = alarm_name_of_resource_down(Type, ResId),
+                            emqx_alarm:activate(Name, #{id => ResId, type => Type}),
                             Status
                     end,
                 emqx_rule_registry:add_resource_params(ResParams#resource_params{status = NewStatus}),
@@ -533,6 +537,9 @@ refresh_actions(Actions, Pred) ->
 func_fail(Func) when is_atom(Func) ->
     list_to_atom(atom_to_list(Func) ++ "_failure").
 
-alarm_name_of_resource_down(ResourceID) ->
-    {ok, #resource{type = Type}} = emqx_rule_registry:find_resource(ResourceID),
-    list_to_binary(io_lib:format("resource/~s/~s/down", [Type, ResourceID])).
+find_type(ResId) ->
+    {ok, #resource{type = Type}} = emqx_rule_registry:find_resource(ResId),
+    {ok, Type}.
+
+alarm_name_of_resource_down(Type, ResId) ->
+    list_to_binary(io_lib:format("resource/~s/~s/down", [Type, ResId])).
