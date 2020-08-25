@@ -38,6 +38,8 @@
 -define(ephemeral_alias(TYPE, NAME),
     iolist_to_binary(io_lib:format("_v_~s_~p_~p", [TYPE, NAME, erlang:system_time()]))).
 
+-define(ActionMaxRetry, 1).
+
 %%------------------------------------------------------------------------------
 %% Apply rules
 %%------------------------------------------------------------------------------
@@ -222,9 +224,11 @@ number(Bin) ->
 
 %% Step3 -> Take actions
 take_actions(Actions, Selected, Envs, OnFailed) ->
-    lists:map(fun(Action) -> take_action(Action, Selected, Envs, OnFailed) end, Actions).
+    [take_action(ActInst, Selected, Envs, OnFailed, ?ActionMaxRetry)
+     || ActInst <- Actions].
 
-take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected, Envs, OnFailed) ->
+take_action(#action_instance{id = Id, fallbacks = Fallbacks} = ActInst,
+            Selected, Envs, OnFailed, RetryN) when RetryN >= 0 ->
     try
         {ok, #action_instance_params{apply = Apply}}
             = emqx_rule_registry:get_action_instance_params(Id),
@@ -232,19 +236,28 @@ take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected, Envs, On
         emqx_rule_metrics:inc(Id, 'actions.success'),
         Result
     catch
+        error:{badfun, Func}:_Stack ->
+            ?LOG(warning, "Action ~p maybe outdated, refresh it and try again."
+                          "Func: ~p", [Id, Func]),
+            _ = emqx_rule_engine:refresh_actions([ActInst]),
+            take_action(ActInst, Selected, Envs, OnFailed, RetryN-1);
         Error:Reason:Stack ->
-            emqx_rule_metrics:inc(Id, 'actions.failure'),
-            case OnFailed of
-                continue ->
-                    ?LOG(error, "Take action ~p failed, continue next action, reason: ~0p, Stack: ~0p", [Id, {Error, Reason}, Stack]),
-                    take_actions(Fallbacks, Selected, Envs, continue),
-                    failed;
-                stop ->
-                    ?LOG(error, "Take action ~p failed, skip all actions, reason: ~0p, Stack: ~0p", [Id, {Error, Reason}, Stack]),
-                    take_actions(Fallbacks, Selected, Envs, continue),
-                    error({take_action_failed, {Id, Reason, Stack}})
-            end
-    end.
+            handle_action_failure(OnFailed, Id, Fallbacks, Selected, Envs, {Error, Reason, Stack})
+    end;
+
+take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected, Envs, OnFailed, 0) ->
+    handle_action_failure(OnFailed, Id, Fallbacks, Selected, Envs, {max_try_reached, ?ActionMaxRetry}).
+
+handle_action_failure(continue, Id, Fallbacks, Selected, Envs, Reason) ->
+    emqx_rule_metrics:inc(Id, 'actions.failure'),
+    ?LOG(error, "Take action ~p failed, continue next action, reason: ~0p", [Id, Reason]),
+    take_actions(Fallbacks, Selected, Envs, continue),
+    failed;
+handle_action_failure(stop, Id, Fallbacks, Selected, Envs, Reason) ->
+    emqx_rule_metrics:inc(Id, 'actions.failure'),
+    ?LOG(error, "Take action ~p failed, skip all actions, reason: ~0p", [Id, Reason]),
+    take_actions(Fallbacks, Selected, Envs, continue),
+    error({take_action_failed, {Id, Reason}}).
 
 eval({path, [{key, <<"payload">>} | Path]}, #{payload := Payload}) ->
     nested_get({path, Path}, may_decode_payload(Payload));
