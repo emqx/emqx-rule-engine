@@ -7,7 +7,7 @@ erl_crash.dump
 ebin/*
 rel/example_project
 .concrete/DEV_MODE
-.rebar
+.rebar/
 erlang.mk
 emqx_rule_engine.d
 .erlang.mk/

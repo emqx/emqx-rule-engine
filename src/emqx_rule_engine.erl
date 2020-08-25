@@ -24,6 +24,8 @@
         , refresh_resources/0
         , refresh_rule/1
         , refresh_rules/0
+        , refresh_actions/1
+        , refresh_actions/2
         , refresh_resource_status/0
         ]).
 
@@ -519,6 +521,8 @@ refresh_actions_of_a_resource(ResId) ->
         end)
      || #rule{actions = Actions} <- emqx_rule_registry:get_rules()].
 
+refresh_actions(Actions) ->
+    refresh_actions(Actions, fun(_) -> true end).
 refresh_actions(Actions, Pred) ->
     lists:foreach(
         fun(#action_instance{args = Args,
