@@ -245,7 +245,7 @@ take_action(#action_instance{id = Id, fallbacks = Fallbacks} = ActInst,
             handle_action_failure(OnFailed, Id, Fallbacks, Selected, Envs, {Error, Reason, Stack})
     end;
 
-take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected, Envs, OnFailed, 0) ->
+take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected, Envs, OnFailed, _RetryN) ->
     handle_action_failure(OnFailed, Id, Fallbacks, Selected, Envs, {max_try_reached, ?ActionMaxRetry}).
 
 handle_action_failure(continue, Id, Fallbacks, Selected, Envs, Reason) ->
