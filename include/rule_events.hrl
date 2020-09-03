@@ -92,7 +92,7 @@
                 , {<<"clean_start">>, true}
                 , {<<"expiry_interval">>, 3600}
                 , {<<"is_bridge">>, false}
-                , {<<"connected_at">>, erlang:system_time(second)}
+                , {<<"connected_at">>, erlang:system_time(millisecond)}
                 , {<<"timestamp">>, erlang:system_time(millisecond)}
                 , {<<"node">>, node()}
                 ];
@@ -103,7 +103,7 @@
                 , {<<"username">>, <<"u_emqx">>}
                 , {<<"peername">>, <<"192.168.0.10:56431">>}
                 , {<<"sockname">>, <<"0.0.0.0:1883">>}
-                , {<<"disconnected_at">>, erlang:system_time(second)}
+                , {<<"disconnected_at">>, erlang:system_time(millisecond)}
                 , {<<"timestamp">>, erlang:system_time(millisecond)}
                 , {<<"node">>, node()}
                 ];
