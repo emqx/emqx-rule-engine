@@ -25,7 +25,7 @@
 -type(params_spec() :: #{atom() => term()}).
 -type(params() :: #{binary() => term()}).
 
--define(DATA_TYPES, [string, number, float, boolean, object, mulobject, array]).
+-define(DATA_TYPES, [string, number, float, boolean, object, array]).
 
 %%------------------------------------------------------------------------------
 %% APIs
@@ -77,7 +77,7 @@ validate_type(Val, boolean, _Spec) ->
 validate_type(Val, array, Spec) ->
     [do_validate_param(V, maps:get(items, Spec)) || V <- Val],
     ok;
-validate_type(Val, Type, Spec) when Type =:= object; Type =:= mulobject ->
+validate_type(Val, object, Spec) ->
     ok = validate_object(Val, maps:get(schema, Spec, any)).
 
 validate_enum(Val, Enum) ->
@@ -116,7 +116,7 @@ reg_exp(resource_type) -> "[a-zA-Z0-9_:-]";
 reg_exp(any) -> ".*";
 reg_exp(RegExp) -> RegExp.
 
-do_validate_spec(Name, Spec = #{type := Type}) when Type =:= object; Type =:= mulobject ->
+do_validate_spec(Name, Spec = #{type := object}) ->
     find_field(schema, Spec,
         fun (not_found) -> error({required_field_missing, {schema, {in, Name}}});
             (Schema) -> validate_spec(Schema)
