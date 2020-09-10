@@ -433,11 +433,11 @@ cluster_call(Func, Args) ->
 
 init_resource(Module, OnCreate, ResId, Config) ->
     Params = ?RAISE(Module:OnCreate(ResId, Config),
-                    {{init_resource_failure, node()}, {{Module, OnCreate}, _REASON_}}),
+                    {{init_resource_failure, node()}, {{Module, OnCreate}, {_REASON_,_ST_}}}),
     emqx_rule_registry:add_resource_params(#resource_params{id = ResId, params = Params}).
 
 init_action(Module, OnCreate, ActionInstId, Params) ->
-    case ?RAISE(Module:OnCreate(ActionInstId, Params), {{init_action_failure, node()}, {{Module,OnCreate},_REASON_}}) of
+    case ?RAISE(Module:OnCreate(ActionInstId, Params), {{init_action_failure, node()}, {{Module,OnCreate},{_REASON_,_ST_}}}) of
         {Apply, NewParams} ->
             ok = emqx_rule_registry:add_action_instance_params(
                 #action_instance_params{id = ActionInstId, params = NewParams, apply = Apply});
@@ -452,7 +452,7 @@ clear_resource(Module, Destroy, ResId) ->
     case emqx_rule_registry:find_resource_params(ResId) of
         {ok, #resource_params{params = Params}} ->
             ?RAISE(Module:Destroy(ResId, Params),
-                   {{destroy_resource_failure, node()}, {{Module, Destroy}, _REASON_}}),
+                   {{destroy_resource_failure, node()}, {{Module, Destroy}, {_REASON_,_ST_}}}),
             ok = emqx_rule_registry:remove_resource_params(ResId);
         not_found ->
             ok
@@ -479,7 +479,7 @@ clear_action(Module, Destroy, ActionInstId) ->
     case emqx_rule_registry:get_action_instance_params(ActionInstId) of
         {ok, #action_instance_params{params = Params}} ->
             ?RAISE(Module:Destroy(ActionInstId, Params),{{destroy_action_failure, node()},
-                                           {{Module, Destroy}, _REASON_}}),
+                                           {{Module, Destroy}, {_REASON_,_ST_}}}),
             ok = emqx_rule_registry:remove_action_instance_params(ActionInstId);
         not_found ->
             ok

@@ -338,7 +338,7 @@ with_opts(Action, RawParams, OptSpecList, {CmdObject, CmdName}) ->
 
 parse_actions(Actions) ->
     ?RAISE([parse_action(Action) || Action <- Actions],
-        {invalid_action_params, _REASON_}).
+        {invalid_action_params, {_REASON_,_ST_}}).
 
 parse_action(Action) ->
     ActName = maps:get(<<"name">>, Action),

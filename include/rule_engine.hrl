@@ -137,7 +137,7 @@
 -define(RAISE(_EXP_, _ERROR_),
         begin
           fun() ->
-            try (_EXP_) catch _:_REASON_ -> throw(_ERROR_) end
+            try (_EXP_) catch _:_REASON_:_ST_ -> throw(_ERROR_) end
           end()
         end).
 
