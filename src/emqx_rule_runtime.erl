@@ -83,10 +83,10 @@ do_apply_rule(#rule{id = RuleId,
                     on_action_failed = OnFailed,
                     actions = Actions}, Input) ->
     {Selected, Collection} = ?RAISE(select_and_collect(Fields, Input),
-                                        {select_and_collect_error, _REASON_}),
+                                        {select_and_collect_error, {_REASON_,_ST_}}),
     ColumnsAndSelected = maps:merge(Input, Selected),
     case ?RAISE(match_conditions(Conditions, ColumnsAndSelected),
-                {match_conditions_error, _REASON_}) of
+                {match_conditions_error, {_REASON_,_ST_}}) of
         true ->
             ok = emqx_rule_metrics:inc(RuleId, 'rules.matched'),
             Collection2 = filter_collection(Input, InCase, DoEach, Collection),
@@ -102,9 +102,9 @@ do_apply_rule(#rule{id = RuleId,
                     on_action_failed = OnFailed,
                     actions = Actions}, Input) ->
     Selected = ?RAISE(select_and_transform(Fields, Input),
-                      {select_and_transform_error, _REASON_}),
+                      {select_and_transform_error, {_REASON_,_ST_}}),
     case ?RAISE(match_conditions(Conditions, maps:merge(Input, Selected)),
-                {match_conditions_error, _REASON_}) of
+                {match_conditions_error, {_REASON_,_ST_}}) of
         true ->
             ok = emqx_rule_metrics:inc(RuleId, 'rules.matched'),
             {ok, take_actions(Actions, Selected, Input, OnFailed)};
@@ -165,11 +165,11 @@ filter_collection(Input, InCase, DoEach, {CollKey, CollVal}) ->
         fun(Item) ->
             InputAndItem = maps:merge(Input, #{CollKey => Item}),
             case ?RAISE(match_conditions(InCase, InputAndItem),
-                    {match_incase_error, _REASON_}) of
+                    {match_incase_error, {_REASON_,_ST_}}) of
                 true when DoEach == [] -> {true, InputAndItem};
                 true ->
                     {true, ?RAISE(select_and_transform(DoEach, InputAndItem),
-                                  {doeach_error, _REASON_})};
+                                  {doeach_error, {_REASON_,_ST_}})};
                 false -> false
             end
         end, CollVal).
