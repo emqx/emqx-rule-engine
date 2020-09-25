@@ -91,6 +91,9 @@ groups() ->
        t_sqlselect_02,
        t_sqlselect_1,
        t_sqlselect_2,
+       t_sqlselect_2_1,
+       t_sqlselect_2_2,
+       t_sqlselect_2_3,
        t_sqlselect_3,
        t_sqlparse_event_1,
        t_sqlparse_event_2,
@@ -1016,7 +1019,83 @@ t_sqlselect_2(_Config) ->
     Fun = fun() ->
             receive {publish, #{topic := <<"t2">>, payload := _}} ->
                 received_t2
-            after 1000 ->
+            after 500 ->
+                received_nothing
+            end
+          end,
+    received_t2 = Fun(),
+    received_t2 = Fun(),
+    received_nothing = Fun(),
+
+    emqtt:stop(Client),
+    emqx_rule_registry:remove_rule(TopicRule).
+
+t_sqlselect_2_1(_Config) ->
+    ok = emqx_rule_engine:load_providers(),
+    %% recursively republish to t2, if the msg dropped
+    TopicRule = create_simple_repub_rule(
+                    <<"t2">>,
+                    "SELECT * "
+                    "FROM \"$events/message_dropped\" "),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqtt:connect(Client),
+    emqtt:publish(Client, <<"t2">>, <<"{\"x\":1,\"y\":144}">>, 0),
+    Fun = fun() ->
+            receive {publish, #{topic := <<"t2">>, payload := _}} ->
+                received_t2
+            after 500 ->
+                received_nothing
+            end
+          end,
+    received_nothing = Fun(),
+
+    %% it should not keep republishing "t2"
+    {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
+    received_nothing = Fun(),
+
+    emqtt:stop(Client),
+    emqx_rule_registry:remove_rule(TopicRule).
+
+t_sqlselect_2_2(_Config) ->
+    ok = emqx_rule_engine:load_providers(),
+    %% recursively republish to t2, if the msg acked
+    TopicRule = create_simple_repub_rule(
+                    <<"t2">>,
+                    "SELECT * "
+                    "FROM \"$events/message_acked\" "),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqtt:connect(Client),
+    {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 1),
+    emqtt:publish(Client, <<"t2">>, <<"{\"x\":1,\"y\":144}">>, 1),
+    Fun = fun() ->
+            receive {publish, #{topic := <<"t2">>, payload := _}} ->
+                received_t2
+            after 500 ->
+                received_nothing
+            end
+          end,
+    received_t2 = Fun(),
+    received_t2 = Fun(),
+    received_nothing = Fun(),
+
+    emqtt:stop(Client),
+    emqx_rule_registry:remove_rule(TopicRule).
+
+t_sqlselect_2_3(_Config) ->
+    ok = emqx_rule_engine:load_providers(),
+    %% recursively republish to t2, if the msg delivered
+    TopicRule = create_simple_repub_rule(
+                    <<"t2">>,
+                    "SELECT * "
+                    "FROM \"$events/message_delivered\" "),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqtt:connect(Client),
+    {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
+    emqtt:publish(Client, <<"t2">>, <<"{\"x\":1,\"y\":144}">>, 0),
+    Fun = fun() ->
+            receive {publish, #{topic := <<"t2">>, payload := _}} ->
+                received_t2
+            after 500 ->
                 received_nothing
             end
           end,

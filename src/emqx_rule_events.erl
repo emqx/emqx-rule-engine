@@ -211,7 +211,7 @@ eventmsg_sub_or_unsub(Event, _ClientInfo = #{
           qos => QoS
         }).
 
-eventmsg_dropped(Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp}, Reason) ->
+eventmsg_dropped(Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, headers = Headers, payload = Payload, timestamp = Timestamp}, Reason) ->
     with_basic_columns('message.dropped',
         #{id => emqx_guid:to_hexstr(Id),
           reason => Reason,
@@ -222,6 +222,8 @@ eventmsg_dropped(Message = #message{id = Id, from = ClientId, qos = QoS, flags =
           topic => Topic,
           qos => QoS,
           flags => Flags,
+          %% the column 'headers' will be removed in the next major release
+          headers => printable_maps(Headers),
           pub_props => printable_maps(emqx_message:get_header(properties, Message, #{})),
           publish_received_at => Timestamp
         }).
@@ -230,7 +232,7 @@ eventmsg_delivered(_ClientInfo = #{
                     peerhost := PeerHost,
                     clientid := ReceiverCId,
                     username := ReceiverUsername
-                  }, Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp}) ->
+                  }, Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, headers = Headers, payload = Payload, timestamp = Timestamp}) ->
     with_basic_columns('message.delivered',
         #{id => emqx_guid:to_hexstr(Id),
           from_clientid => ClientId,
@@ -242,6 +244,8 @@ eventmsg_delivered(_ClientInfo = #{
           topic => Topic,
           qos => QoS,
           flags => Flags,
+          %% the column 'headers' will be removed in the next major release
+          headers => printable_maps(Headers),
           pub_props => printable_maps(emqx_message:get_header(properties, Message, #{})),
           publish_received_at => Timestamp
         }).
@@ -250,7 +254,7 @@ eventmsg_acked(_ClientInfo = #{
                     peerhost := PeerHost,
                     clientid := ReceiverCId,
                     username := ReceiverUsername
-                  }, Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, payload = Payload, timestamp = Timestamp}) ->
+                  }, Message = #message{id = Id, from = ClientId, qos = QoS, flags = Flags, topic = Topic, headers = Headers, payload = Payload, timestamp = Timestamp}) ->
     with_basic_columns('message.acked',
         #{id => emqx_guid:to_hexstr(Id),
           from_clientid => ClientId,
@@ -262,6 +266,8 @@ eventmsg_acked(_ClientInfo = #{
           topic => Topic,
           qos => QoS,
           flags => Flags,
+          %% the column 'headers' will be removed in the next major release
+          headers => printable_maps(Headers),
           pub_props => printable_maps(emqx_message:get_header(properties, Message, #{})),
           puback_props => printable_maps(emqx_message:get_header(puback_props, Message, #{})),
           publish_received_at => Timestamp
