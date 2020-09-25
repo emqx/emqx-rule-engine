@@ -1,4 +1,10 @@
 {"4.2.1",
- [{"4.2.0", [{load_module, emqx_rule_events}]}],
- [{"4.2.0", [{load_module, emqx_rule_events}]}]
+ [{"4.2.0", [
+     {load_module, emqx_rule_events},
+     {load_module, emqx_rule_funcs}
+ ]}],
+ [{"4.2.0", [
+     {load_module, emqx_rule_events},
+     {load_module, emqx_rule_funcs}
+ ]}]
 }.
