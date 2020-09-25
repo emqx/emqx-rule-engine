@@ -136,6 +136,7 @@
 -export([ map_get/2
         , map_get/3
         , map_put/3
+        , map_new/0
         ]).
 
 %% For backword compatibility
