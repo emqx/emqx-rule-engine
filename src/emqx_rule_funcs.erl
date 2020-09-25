@@ -133,6 +133,7 @@
 -export([ map_get/2
         , map_get/3
         , map_put/3
+        , map_new/0
         ]).
 
 %% Array Funcs
@@ -583,6 +584,9 @@ last(List) when is_list(List) ->
 
 contains(Elm, List) when is_list(List) ->
     lists:member(Elm, List).
+
+map_new() ->
+    #{}.
 
 map_get(Key, Map) ->
     map_get(Key, Map, undefined).
