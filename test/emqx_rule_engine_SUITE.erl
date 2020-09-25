@@ -116,7 +116,8 @@ groups() ->
        t_sqlparse_array_index_5,
        t_sqlparse_select_matadata_1,
        t_sqlparse_array_range_1,
-       t_sqlparse_array_range_2
+       t_sqlparse_array_range_2,
+       t_sqlparse_true_false
       ]},
      {events, [],
       [t_events
@@ -1856,6 +1857,22 @@ t_sqlparse_array_range_2(_Config) ->
                     #{<<"rawsql">> => Sql02,
                       <<"ctx">> => #{<<"payload">> => <<"{\"a\":[0,1,2,3,4,5]}">>,
                                      <<"topic">> => <<"t/a">>}})).
+
+t_sqlparse_true_false(_Config) ->
+    %% construct a range without 'as'
+    Sql00 = "select "
+            " true as a, false as b, "
+            " false as x.y, true as c[-0] "
+            "from \"t/#\" ",
+    {ok, Res00} =
+        emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql00,
+                      <<"ctx">> => #{<<"payload">> => <<"">>,
+                                     <<"topic">> => <<"t/a">>}}),
+    ?assertMatch(#{<<"a">> := true, <<"b">> := false,
+                   <<"x">> := #{<<"y">> := false},
+                   <<"c">> := [true]
+                   }, Res00).
 
 %%------------------------------------------------------------------------------
 %% Internal helpers
