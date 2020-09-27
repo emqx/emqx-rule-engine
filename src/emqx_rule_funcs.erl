@@ -159,6 +159,13 @@
         , json_encode/1
         ]).
 
+%% Date functions
+-export([ now_rfc3339/0
+        , now_rfc3339/1
+        , now_timestamp/0
+        , now_timestamp/1
+        ]).
+
 -export(['$handle_undefined_function'/2]).
 
 -compile({no_auto_import,
@@ -677,6 +684,29 @@ json_encode(Data) ->
 
 json_decode(Data) ->
     emqx_json:decode(Data, [return_maps]).
+
+%%--------------------------------------------------------------------
+%% Date functions
+%%--------------------------------------------------------------------
+
+now_rfc3339() ->
+    now_rfc3339(<<"second">>).
+
+now_rfc3339(Unit) ->
+    emqx_rule_utils:bin(
+        calendar:system_time_to_rfc3339(
+            now_timestamp(Unit), [{unit, time_unit(Unit)}])).
+
+now_timestamp() ->
+    erlang:system_time(second).
+
+now_timestamp(Unit) ->
+    erlang:system_time(time_unit(Unit)).
+
+time_unit(<<"second">>) -> second;
+time_unit(<<"millisecond">>) -> millisecond;
+time_unit(<<"microsecond">>) -> microsecond;
+time_unit(<<"nanosecond">>) -> nanosecond.
 
 %% @doc This is for sql funcs that should be handled in the specific modules.
 %% Here the emqx_rule_funcs module acts as a proxy, forwarding
