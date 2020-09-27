@@ -524,6 +524,30 @@ prop_base64_encode() ->
                 Bin == base64:decode(apply_func(base64_encode, [Bin]))
             end).
 
+%%--------------------------------------------------------------------
+%% Date functions
+%%--------------------------------------------------------------------
+
+t_now_rfc3339(_) ->
+    ?assert(is_integer(
+        calendar:rfc3339_to_system_time(
+            binary_to_list(apply_func(now_rfc3339, []))))).
+
+t_now_rfc3339_1(_) ->
+    [?assert(is_integer(
+        calendar:rfc3339_to_system_time(
+            binary_to_list(apply_func(now_rfc3339, [atom_to_binary(Unit, utf8)])),
+            [{unit, Unit}])))
+     || Unit <- [second,millisecond,microsecond,nanosecond]].
+
+t_now_timestamp(_) ->
+    ?assert(is_integer(apply_func(now_timestamp, []))).
+
+t_now_timestamp_1(_) ->
+    [?assert(is_integer(
+            apply_func(now_timestamp, [atom_to_binary(Unit, utf8)])))
+     || Unit <- [second,millisecond,microsecond,nanosecond]].
+
 %%------------------------------------------------------------------------------
 %% Utility functions
 %%------------------------------------------------------------------------------
