@@ -489,15 +489,11 @@ t_contains(_) ->
 
 t_map_get(_) ->
     ?assertEqual(1, apply_func(map_get, [<<"a">>, #{a => 1}])),
-    ?assertEqual(undefined, apply_func(map_get, [<<"a">>, #{}])),
-    ?assertEqual(1, apply_func(map_get, [<<"a.b">>, #{a => #{b => 1}}])),
-    ?assertEqual(undefined, apply_func(map_get, [<<"a.c">>, #{a => #{b => 1}}])).
+    ?assertEqual(undefined, apply_func(map_get, [<<"a">>, #{}])).
 
 t_map_put(_) ->
     ?assertEqual(#{<<"a">> => 1}, apply_func(map_put, [<<"a">>, 1, #{}])),
-    ?assertEqual(#{a => 2}, apply_func(map_put, [<<"a">>, 2, #{a => 1}])),
-    ?assertEqual(#{<<"a">> => #{<<"b">> => 1}}, apply_func(map_put, [<<"a.b">>, 1, #{}])),
-    ?assertEqual(#{a => #{b => 1, <<"c">> => 1}}, apply_func(map_put, [<<"a.c">>, 1, #{a => #{b => 1}}])).
+    ?assertEqual(#{a => 2}, apply_func(map_put, [<<"a">>, 2, #{a => 1}])).
 
 %%------------------------------------------------------------------------------
 %% Test cases for Hash funcs
@@ -527,6 +523,30 @@ prop_base64_encode() ->
                 Bin = iolist_to_binary(S),
                 Bin == base64:decode(apply_func(base64_encode, [Bin]))
             end).
+
+%%--------------------------------------------------------------------
+%% Date functions
+%%--------------------------------------------------------------------
+
+t_now_rfc3339(_) ->
+    ?assert(is_integer(
+        calendar:rfc3339_to_system_time(
+            binary_to_list(apply_func(now_rfc3339, []))))).
+
+t_now_rfc3339_1(_) ->
+    [?assert(is_integer(
+        calendar:rfc3339_to_system_time(
+            binary_to_list(apply_func(now_rfc3339, [atom_to_binary(Unit, utf8)])),
+            [{unit, Unit}])))
+     || Unit <- [second,millisecond,microsecond,nanosecond]].
+
+t_now_timestamp(_) ->
+    ?assert(is_integer(apply_func(now_timestamp, []))).
+
+t_now_timestamp_1(_) ->
+    [?assert(is_integer(
+            apply_func(now_timestamp, [atom_to_binary(Unit, utf8)])))
+     || Unit <- [second,millisecond,microsecond,nanosecond]].
 
 %%------------------------------------------------------------------------------
 %% Utility functions

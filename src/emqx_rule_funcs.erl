@@ -133,6 +133,7 @@
 -export([ map_get/2
         , map_get/3
         , map_put/3
+        , map_new/0
         ]).
 
 %% Array Funcs
@@ -156,6 +157,13 @@
         , base64_decode/1
         , json_decode/1
         , json_encode/1
+        ]).
+
+%% Date functions
+-export([ now_rfc3339/0
+        , now_rfc3339/1
+        , now_timestamp/0
+        , now_timestamp/1
         ]).
 
 -export(['$handle_undefined_function'/2]).
@@ -217,7 +225,7 @@ payload() ->
 
 payload(Path) ->
     fun(#{payload := Payload}) when erlang:is_map(Payload) ->
-            map_get(Path, Payload);
+            emqx_rule_maps:nested_get(map_path(Path), Payload);
        (_) -> undefined
     end.
 
@@ -584,14 +592,59 @@ last(List) when is_list(List) ->
 contains(Elm, List) when is_list(List) ->
     lists:member(Elm, List).
 
+map_new() ->
+    #{}.
+
 map_get(Key, Map) ->
     map_get(Key, Map, undefined).
 
 map_get(Key, Map, Default) ->
-    emqx_rule_maps:nested_get(map_path(Key), Map, Default).
+    case maps:find(Key, Map) of
+        {ok, Val} -> Val;
+        error when is_atom(Key) ->
+            %% the map may have an equivalent binary-form key
+            BinKey = emqx_rule_utils:bin(Key),
+            case maps:find(BinKey, Map) of
+                {ok, Val} -> Val;
+                error -> Default
+            end;
+        error when is_binary(Key) ->
+            try %% the map may have an equivalent atom-form key
+                AtomKey = list_to_existing_atom(binary_to_list(Key)),
+                case maps:find(AtomKey, Map) of
+                    {ok, Val} -> Val;
+                    error -> Default
+                end
+            catch error:badarg ->
+                Default
+            end;
+        error ->
+            Default
+    end.
 
 map_put(Key, Val, Map) ->
-    emqx_rule_maps:nested_put(map_path(Key), Val, Map).
+    case maps:find(Key, Map) of
+        {ok, _} -> maps:put(Key, Val, Map);
+        error when is_atom(Key) ->
+            %% the map may have an equivalent binary-form key
+            BinKey = emqx_rule_utils:bin(Key),
+            case maps:find(BinKey, Map) of
+                {ok, _} -> maps:put(BinKey, Val, Map);
+                error -> maps:put(Key, Val, Map)
+            end;
+        error when is_binary(Key) ->
+            try %% the map may have an equivalent atom-form key
+                AtomKey = list_to_existing_atom(binary_to_list(Key)),
+                case maps:find(AtomKey, Map) of
+                    {ok, _} -> maps:put(AtomKey, Val, Map);
+                    error -> maps:put(Key, Val, Map)
+                end
+            catch error:badarg ->
+                maps:put(Key, Val, Map)
+            end;
+        error ->
+            maps:put(Key, Val, Map)
+    end.
 
 %%------------------------------------------------------------------------------
 %% Hash Funcs
@@ -631,6 +684,29 @@ json_encode(Data) ->
 
 json_decode(Data) ->
     emqx_json:decode(Data, [return_maps]).
+
+%%--------------------------------------------------------------------
+%% Date functions
+%%--------------------------------------------------------------------
+
+now_rfc3339() ->
+    now_rfc3339(<<"second">>).
+
+now_rfc3339(Unit) ->
+    emqx_rule_utils:bin(
+        calendar:system_time_to_rfc3339(
+            now_timestamp(Unit), [{unit, time_unit(Unit)}])).
+
+now_timestamp() ->
+    erlang:system_time(second).
+
+now_timestamp(Unit) ->
+    erlang:system_time(time_unit(Unit)).
+
+time_unit(<<"second">>) -> second;
+time_unit(<<"millisecond">>) -> millisecond;
+time_unit(<<"microsecond">>) -> microsecond;
+time_unit(<<"nanosecond">>) -> nanosecond.
 
 %% @doc This is for sql funcs that should be handled in the specific modules.
 %% Here the emqx_rule_funcs module acts as a proxy, forwarding

@@ -91,6 +91,9 @@ groups() ->
        t_sqlselect_02,
        t_sqlselect_1,
        t_sqlselect_2,
+       t_sqlselect_2_1,
+       t_sqlselect_2_2,
+       t_sqlselect_2_3,
        t_sqlselect_3,
        t_sqlparse_event_1,
        t_sqlparse_event_2,
@@ -113,7 +116,9 @@ groups() ->
        t_sqlparse_array_index_5,
        t_sqlparse_select_matadata_1,
        t_sqlparse_array_range_1,
-       t_sqlparse_array_range_2
+       t_sqlparse_array_range_2,
+       t_sqlparse_true_false,
+       t_sqlparse_new_map
       ]},
      {events, [],
       [t_events
@@ -1016,7 +1021,83 @@ t_sqlselect_2(_Config) ->
     Fun = fun() ->
             receive {publish, #{topic := <<"t2">>, payload := _}} ->
                 received_t2
-            after 1000 ->
+            after 500 ->
+                received_nothing
+            end
+          end,
+    received_t2 = Fun(),
+    received_t2 = Fun(),
+    received_nothing = Fun(),
+
+    emqtt:stop(Client),
+    emqx_rule_registry:remove_rule(TopicRule).
+
+t_sqlselect_2_1(_Config) ->
+    ok = emqx_rule_engine:load_providers(),
+    %% recursively republish to t2, if the msg dropped
+    TopicRule = create_simple_repub_rule(
+                    <<"t2">>,
+                    "SELECT * "
+                    "FROM \"$events/message_dropped\" "),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqtt:connect(Client),
+    emqtt:publish(Client, <<"t2">>, <<"{\"x\":1,\"y\":144}">>, 0),
+    Fun = fun() ->
+            receive {publish, #{topic := <<"t2">>, payload := _}} ->
+                received_t2
+            after 500 ->
+                received_nothing
+            end
+          end,
+    received_nothing = Fun(),
+
+    %% it should not keep republishing "t2"
+    {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
+    received_nothing = Fun(),
+
+    emqtt:stop(Client),
+    emqx_rule_registry:remove_rule(TopicRule).
+
+t_sqlselect_2_2(_Config) ->
+    ok = emqx_rule_engine:load_providers(),
+    %% recursively republish to t2, if the msg acked
+    TopicRule = create_simple_repub_rule(
+                    <<"t2">>,
+                    "SELECT * "
+                    "FROM \"$events/message_acked\" "),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqtt:connect(Client),
+    {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 1),
+    emqtt:publish(Client, <<"t2">>, <<"{\"x\":1,\"y\":144}">>, 1),
+    Fun = fun() ->
+            receive {publish, #{topic := <<"t2">>, payload := _}} ->
+                received_t2
+            after 500 ->
+                received_nothing
+            end
+          end,
+    received_t2 = Fun(),
+    received_t2 = Fun(),
+    received_nothing = Fun(),
+
+    emqtt:stop(Client),
+    emqx_rule_registry:remove_rule(TopicRule).
+
+t_sqlselect_2_3(_Config) ->
+    ok = emqx_rule_engine:load_providers(),
+    %% recursively republish to t2, if the msg delivered
+    TopicRule = create_simple_repub_rule(
+                    <<"t2">>,
+                    "SELECT * "
+                    "FROM \"$events/message_delivered\" "),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqtt:connect(Client),
+    {ok, _, _} = emqtt:subscribe(Client, <<"t2">>, 0),
+    emqtt:publish(Client, <<"t2">>, <<"{\"x\":1,\"y\":144}">>, 0),
+    Fun = fun() ->
+            receive {publish, #{topic := <<"t2">>, payload := _}} ->
+                received_t2
+            after 500 ->
                 received_nothing
             end
           end,
@@ -1777,6 +1858,38 @@ t_sqlparse_array_range_2(_Config) ->
                     #{<<"rawsql">> => Sql02,
                       <<"ctx">> => #{<<"payload">> => <<"{\"a\":[0,1,2,3,4,5]}">>,
                                      <<"topic">> => <<"t/a">>}})).
+
+t_sqlparse_true_false(_Config) ->
+    %% construct a range without 'as'
+    Sql00 = "select "
+            " true as a, false as b, "
+            " false as x.y, true as c[-0] "
+            "from \"t/#\" ",
+    {ok, Res00} =
+        emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql00,
+                      <<"ctx">> => #{<<"payload">> => <<"">>,
+                                     <<"topic">> => <<"t/a">>}}),
+    ?assertMatch(#{<<"a">> := true, <<"b">> := false,
+                   <<"x">> := #{<<"y">> := false},
+                   <<"c">> := [true]
+                   }, Res00).
+
+t_sqlparse_new_map(_Config) ->
+    %% construct a range without 'as'
+    Sql00 = "select "
+            " map_new() as a, map_new() as b, "
+            " map_new() as x.y, map_new() as c[-0] "
+            "from \"t/#\" ",
+    {ok, Res00} =
+        emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql00,
+                      <<"ctx">> => #{<<"payload">> => <<"">>,
+                                     <<"topic">> => <<"t/a">>}}),
+    ?assertMatch(#{<<"a">> := #{}, <<"b">> := #{},
+                   <<"x">> := #{<<"y">> := #{}},
+                   <<"c">> := [#{}]
+                   }, Res00).
 
 %%------------------------------------------------------------------------------
 %% Internal helpers
