@@ -112,6 +112,8 @@ validate_boolean(true) -> ok;
 validate_boolean(false) -> ok;
 validate_boolean(Val) -> error({invalid_data_type, {boolean, Val}}).
 
+validate_file(Val) when is_map(Val) -> ok;
+validate_file(Val) when is_list(Val) -> ok;
 validate_file(Val) when is_binary(Val) -> ok;
 validate_file(Val) -> error({invalid_data_type, {file, Val}}).
 
