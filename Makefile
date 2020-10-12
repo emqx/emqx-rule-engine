@@ -15,6 +15,7 @@ proper: compile
 	$(REBAR) as test proper -v -n 1000
 
 ct: compile
+	cd _build/default/lib/emqx/ && make app.config
 	$(REBAR) as test ct -v
 
 eunit: compile
