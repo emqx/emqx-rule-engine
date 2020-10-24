@@ -354,7 +354,7 @@ t_republish_action(_Config) ->
 %%------------------------------------------------------------------------------
 
 t_crud_rule_api(_Config) ->
-    {ok, [{code, 0}, {data, Rule = #{id := RuleID}}]} =
+    {ok, #{code := 0, data := Rule = #{id := RuleID}}} =
         emqx_rule_engine_api:create_rule(#{},
                 [{<<"name">>, <<"debug-rule">>},
                  {<<"rawsql">>, <<"select * from \"t/a\"">>},
@@ -363,23 +363,23 @@ t_crud_rule_api(_Config) ->
                  {<<"description">>, <<"debug rule">>}]),
     %ct:pal("RCreated : ~p", [Rule]),
 
-    {ok, [{code, 0}, {data, Rules}]} = emqx_rule_engine_api:list_rules(#{},[]),
+    {ok, #{code := 0, data := Rules}} = emqx_rule_engine_api:list_rules(#{},[]),
     %ct:pal("RList : ~p", [Rules]),
     ?assert(length(Rules) > 0),
 
-    {ok, [{code, 0}, {data, Rule1}]} = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
+    {ok, #{code := 0, data := Rule1}} = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
     %ct:pal("RShow : ~p", [Rule1]),
     ?assertEqual(Rule, Rule1),
 
-    {ok, [{code, 0}, {data, Rule2}]} = emqx_rule_engine_api:update_rule(#{id => RuleID},
+    {ok, #{code := 0, data := Rule2}} = emqx_rule_engine_api:update_rule(#{id => RuleID},
                 [{<<"rawsql">>, <<"select * from \"t/b\"">>}]),
 
-    {ok, [{code, 0}, {data, Rule3 = #{rawsql := SQL}}]} = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
+    {ok, #{code := 0, data := Rule3 = #{rawsql := SQL}}} = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
     %ct:pal("RShow : ~p", [Rule1]),
     ?assertEqual(Rule3, Rule2),
     ?assertEqual(<<"select * from \"t/b\"">>, SQL),
 
-    {ok, [{code, 0}, {data, Rule4}]} = emqx_rule_engine_api:update_rule(#{id => RuleID},
+    {ok, #{code := 0, data := Rule4}} = emqx_rule_engine_api:update_rule(#{id => RuleID},
                 [{<<"actions">>,
                     [[
                         {<<"name">>,<<"republish">>},
@@ -392,57 +392,58 @@ t_crud_rule_api(_Config) ->
                     ]]
                  }]),
 
-    {ok, [{code, 0}, {data, Rule5 = #{actions := Actions}}]} = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
+    {ok, #{code := 0, data := Rule5 = #{actions := Actions}}}
+        = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
     %ct:pal("RShow : ~p", [Rule1]),
     ?assertEqual(Rule5, Rule4),
     ?assertMatch([#{name := republish }], Actions),
 
-    ?assertMatch({ok, [{code, 0}]}, emqx_rule_engine_api:delete_rule(#{id => RuleID}, [])),
+    ?assertMatch({ok, #{code := 0}}, emqx_rule_engine_api:delete_rule(#{id => RuleID}, [])),
 
     NotFound = emqx_rule_engine_api:show_rule(#{id => RuleID}, []),
     %ct:pal("Show After Deleted: ~p", [NotFound]),
-    ?assertMatch({ok, [{code, 404}, {message, _}]}, NotFound),
+    ?assertMatch({ok, #{code := 404, message := _}}, NotFound),
     ok.
 
 t_list_actions_api(_Config) ->
-    {ok, [{code, 0}, {data, Actions}]} = emqx_rule_engine_api:list_actions(#{},[]),
+    {ok, #{code := 0, data := Actions}} = emqx_rule_engine_api:list_actions(#{},[]),
     %ct:pal("RList : ~p", [Actions]),
     ?assert(length(Actions) > 0),
     ok.
 
 t_show_action_api(_Config) ->
-    ?assertMatch({ok, [{code, 0}, {data, #{name := 'inspect'}}]},
+    ?assertMatch({ok, #{code := 0, data := #{name := 'inspect'}}},
                  emqx_rule_engine_api:show_action(#{name => 'inspect'},[])),
     ok.
 
 t_crud_resources_api(_Config) ->
-    {ok, [{code, 0}, {data, #{id := ResId}}]} =
+    {ok, #{code := 0, data := #{id := ResId}}} =
         emqx_rule_engine_api:create_resource(#{},
             [{<<"name">>, <<"Simple Resource">>},
              {<<"type">>, <<"built_in">>},
              {<<"config">>, [{<<"a">>, 1}]},
              {<<"description">>, <<"Simple Resource">>}]),
-    {ok, [{code, 0}, {data, Resources}]} = emqx_rule_engine_api:list_resources(#{},[]),
+    {ok, #{code := 0, data := Resources}} = emqx_rule_engine_api:list_resources(#{},[]),
     ?assert(length(Resources) > 0),
 
-    ?assertMatch({ok, [{code, 0}, {data, #{id := ResId}}]},
+    ?assertMatch({ok, #{code := 0, data := #{id := ResId}}},
                  emqx_rule_engine_api:show_resource(#{id => ResId},[])),
 
-    ?assertMatch({ok, [{code, 0}]}, emqx_rule_engine_api:delete_resource(#{id => ResId},#{})),
+    ?assertMatch({ok, #{code := 0}}, emqx_rule_engine_api:delete_resource(#{id => ResId},#{})),
 
-    ?assertMatch({ok, [{code, 404}, _]},
+    ?assertMatch({ok, #{code := 404}},
                  emqx_rule_engine_api:show_resource(#{id => ResId},[])),
     ok.
 
 t_list_resource_types_api(_Config) ->
-    {ok, [{code, 0}, {data, ResourceTypes}]} = emqx_rule_engine_api:list_resource_types(#{},[]),
+    {ok, #{code := 0, data := ResourceTypes}} = emqx_rule_engine_api:list_resource_types(#{},[]),
     ?assert(length(ResourceTypes) > 0),
     ok.
 
 t_show_resource_type_api(_Config) ->
     RShow = emqx_rule_engine_api:show_resource_type(#{name => 'built_in'},[]),
     %ct:pal("RShow : ~p", [RShow]),
-    ?assertMatch({ok, [{code, 0}, {data, #{name := built_in}}]}, RShow),
+    ?assertMatch({ok, #{code := 0, data := #{name := built_in}} }, RShow),
     ok.
 
 %%------------------------------------------------------------------------------
