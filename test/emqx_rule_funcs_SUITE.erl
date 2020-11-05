@@ -499,6 +499,17 @@ t_map_put(_) ->
     ?assertEqual(#{<<"a">> => #{<<"b">> => 1}}, apply_func(map_put, [<<"a.b">>, 1, #{}])),
     ?assertEqual(#{a => #{b => 1, <<"c">> => 1}}, apply_func(map_put, [<<"a.c">>, 1, #{a => #{b => 1}}])).
 
+ t_mget(_) ->
+    ?assertEqual(1, apply_func(map_get, [<<"a">>, #{a => 1}])),
+    ?assertEqual(1, apply_func(map_get, [<<"a">>, #{<<"a">> => 1}])),
+    ?assertEqual(undefined, apply_func(map_get, [<<"a">>, #{}])).
+
+ t_mput(_) ->
+    ?assertEqual(#{<<"a">> => 1}, apply_func(map_put, [<<"a">>, 1, #{}])),
+    ?assertEqual(#{<<"a">> => 2}, apply_func(map_put, [<<"a">>, 2, #{<<"a">> => 1}])),
+    ?assertEqual(#{a => 2}, apply_func(map_put, [<<"a">>, 2, #{a => 1}])).
+
+
 %%------------------------------------------------------------------------------
 %% Test cases for Hash funcs
 %%------------------------------------------------------------------------------
