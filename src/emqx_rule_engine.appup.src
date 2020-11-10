@@ -9,3 +9,4 @@
       {load_module, emqx_rule_actions, brutal_purge, soft_purge, []}
     ]}
   ]
+}.
