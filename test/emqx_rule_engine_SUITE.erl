@@ -353,7 +353,7 @@ t_republish_action(_Config) ->
     end,
     emqtt:stop(Client),
     emqx_rule_registry:remove_rule(Id),
-    ?assertEqual(2, emqx_metrics:val('messages.qos0.received') - Qos0Received ),
+    ?assertEqual(2, emqx_metrics:val('messages.qos0.received') - Qos0Received),
     ?assertEqual(2, emqx_metrics:val('messages.received') - Received),
     ok.
 
