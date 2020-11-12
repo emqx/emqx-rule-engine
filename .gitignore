@@ -8,6 +8,7 @@ ebin/*
 rel/example_project
 .concrete/DEV_MODE
 .rebar/
+.rebar3/
 erlang.mk
 emqx_rule_engine.d
 .erlang.mk/
