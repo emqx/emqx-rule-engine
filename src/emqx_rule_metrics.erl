@@ -31,8 +31,10 @@
         , get_overall/1
         , get_rule_speed/1
         , get_overall_rule_speed/0
-        , create/1
-        , clear/1
+        , create_rule_metrics/1
+        , create_metrics/1
+        , clear_rule_metrics/1
+        , clear_metrics/1
         , overall_metrics/0
         ]).
 
@@ -81,16 +83,20 @@
 %%------------------------------------------------------------------------------
 %% APIs
 %%------------------------------------------------------------------------------
--spec(create(rule_id()) -> Ref :: reference()).
-create(<<"rule:", _/binary>> = Id) ->
-    gen_server:call(?MODULE, {create_rule_metrics, Id});
-create(Id) ->
+-spec(create_rule_metrics(rule_id()) -> Ref :: reference()).
+create_rule_metrics(Id) ->
+    gen_server:call(?MODULE, {create_rule_metrics, Id}).
+
+-spec(create_metrics(rule_id()) -> Ref :: reference()).
+create_metrics(Id) ->
     gen_server:call(?MODULE, {create_metrics, Id}).
 
--spec(clear(rule_id()) -> ok).
-clear(<<"rule:", _/binary>> = Id) ->
-    gen_server:call(?MODULE, {delete_rule_metrics, Id});
-clear(Id) ->
+-spec(clear_rule_metrics(rule_id()) -> ok).
+clear_rule_metrics(Id) ->
+    gen_server:call(?MODULE, {delete_rule_metrics, Id}).
+
+-spec(clear_metrics(rule_id()) -> ok).
+clear_metrics(Id) ->
     gen_server:call(?MODULE, {delete_metrics, Id}).
 
 -spec(get(rule_id(), atom()) -> number()).
@@ -131,12 +137,7 @@ get_action_metrics(Id) ->
 inc(Id, Metric) ->
     inc(Id, Metric, 1).
 inc(Id, Metric, Val) ->
-    case couters_ref(Id) of
-        not_found ->
-            counters:add(create(Id), metrics_idx(Metric), Val);
-        Ref ->
-            counters:add(Ref, metrics_idx(Metric), Val)
-    end,
+    counters:add(couters_ref(Id), metrics_idx(Metric), Val),
     inc_overall(Metric, Val).
 
 -spec(inc_overall(rule_id(), atom()) -> ok).
@@ -231,9 +232,12 @@ async_refresh_resource_status() ->
     spawn(emqx_rule_engine, refresh_resource_status, []).
 
 create_counters(Id) ->
-    CRef = counters:new(max_counters_size(), [write_concurrency]),
-    ok = persistent_term:put(?CRefID(Id), CRef),
-    CRef.
+    case couters_ref(Id) of
+        not_found ->
+            ok = persistent_term:put(?CRefID(Id),
+                    counters:new(max_counters_size(), [write_concurrency]));
+        _Ref -> ok
+    end.
 
 delete_counters(Id) ->
     persistent_term:erase(?CRefID(Id)),
