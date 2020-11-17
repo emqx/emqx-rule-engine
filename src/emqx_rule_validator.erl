@@ -25,7 +25,7 @@
 -type(params_spec() :: #{atom() => term()}).
 -type(params() :: #{binary() => term()}).
 
--define(DATA_TYPES, [string, number, float, boolean, object, array, file]).
+-define(DATA_TYPES, [string, password, number, float, boolean, object, array, file]).
 
 %%------------------------------------------------------------------------------
 %% APIs
@@ -71,6 +71,8 @@ do_validate_param(Val, Spec = #{type := Type}) ->
 validate_type(Val, file, _Spec) ->
     ok = validate_file(Val);
 validate_type(Val, string, Spec) ->
+    ok = validate_string(Val, reg_exp(maps:get(format, Spec, any)));
+validate_type(Val, password, Spec) ->
     ok = validate_string(Val, reg_exp(maps:get(format, Spec, any)));
 validate_type(Val, number, Spec) ->
     ok = validate_number(Val, maps:get(range, Spec, any));
