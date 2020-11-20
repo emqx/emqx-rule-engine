@@ -318,7 +318,8 @@ refresh_rules() ->
             <- emqx_rule_registry:get_rules()],
     ok.
 
-refresh_rule(#rule{actions = Actions}) ->
+refresh_rule(#rule{id = RuleId, actions = Actions}) ->
+    ok = emqx_rule_metrics:create_rule_metrics(RuleId),
     refresh_actions(Actions, fun(_) -> true end).
 
 -spec(refresh_resource_status() -> ok).
