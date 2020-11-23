@@ -20,6 +20,9 @@
 -export([ preproc_tmpl/1
         , proc_tmpl/2
         , proc_tmpl/3
+        , preproc_cmd/1
+        , proc_cmd/2
+        , proc_cmd/3
         , preproc_sql/1
         , preproc_sql/2
         , proc_sql/2
@@ -56,11 +59,13 @@
 
 -define(EX_PLACE_HOLDER, "(\\$\\{[a-zA-Z0-9\\._]+\\})").
 
--define(DEFAULT_DELIM, [32,"\r\n"]). %% Space and CRLF
+-define(EX_WITHE_CHARS, "\\s"). %% Space and CRLF
 
 -type(uri_string() :: iodata()).
 
--type(tmpl_token() :: list({var, fun()} | {str, binary()})).
+-type(tmpl_token() :: list({var, binary()} | {str, binary()})).
+
+-type(tmpl_cmd() :: list(tmpl_token())).
 
 -type(prepare_statement() :: binary()).
 
@@ -101,18 +106,18 @@ proc_tmpl(Tokens, Data, Opts = #{return := rawlist}) ->
                 Trans(get_phld_var(Phld, Data));
             ({var, Phld}) ->
                 get_phld_var(Phld, Data)
-        end, Tokens);
-
-proc_tmpl(Tokens, Data, Opts = #{return := cmdlist}) ->
-    Delim = maps:get(delimiter, Opts, ?DEFAULT_DELIM),
-    Trans = maps:get(var_trans, Opts, fun bin/1),
-    lists:flatmap(
-        fun ({str, Str}) -> string:lexemes(Str, Delim);
-            ({var, Phld}) when is_function(Trans) ->
-                [Trans(get_phld_var(Phld, Data))];
-            ({var, Phld}) ->
-                [get_phld_var(Phld, Data)]
         end, Tokens).
+
+
+-spec(preproc_cmd(binary()) -> tmpl_cmd()).
+preproc_cmd(Str) ->
+    SubStrList = re:split(Str, ?EX_WITHE_CHARS, [{return,binary},trim]),
+    [preproc_tmpl(SubStr) || SubStr <- SubStrList].
+
+proc_cmd(Tokens, Data) ->
+    proc_cmd(Tokens, Data, #{return => full_binary}).
+proc_cmd(Tokens, Data, Opts) ->
+    [proc_tmpl(Tks, Data, Opts) || Tks <- Tokens].
 
 %% preprocess SQL with place holders
 -spec(preproc_sql(Sql::binary()) -> {prepare_statement(), prepare_params()}).
