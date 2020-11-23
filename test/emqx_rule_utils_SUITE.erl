@@ -84,13 +84,13 @@ t_proc_tmpl1(_) ->
     ?assertEqual(<<"a:$a,b:b},c:{c},d:${d">>,
                  emqx_rule_utils:proc_tmpl(Tks, Selected)).
 
-t_proc_tmpl2(_) ->
-    Selected = #{v1 => <<"1">>, v2 => #{d1 => <<"hi">>}},
-    Tks = emqx_rule_utils:preproc_tmpl(<<"hset name a  ${v1} b ${v2} ">>),
+t_proc_cmd(_) ->
+    Selected = #{v0 => <<"x">>, v1 => <<"1">>, v2 => #{d1 => <<"hi">>}},
+    Tks = emqx_rule_utils:preproc_cmd(<<"hset name a:${v0} ${v1} b ${v2} ">>),
     ?assertEqual([<<"hset">>, <<"name">>,
-                  <<"a">>, <<"1">>,
+                  <<"a:x">>, <<"1">>,
                   <<"b">>, <<"{\"d1\":\"hi\"}">>],
-                 emqx_rule_utils:proc_tmpl(Tks, Selected, #{return => cmdlist})).
+                 emqx_rule_utils:proc_cmd(Tks, Selected)).
 
 t_preproc_sql(_) ->
     Selected = #{a => <<"1">>, b => 1, c => 1.0, d => #{d1 => <<"hi">>}},
