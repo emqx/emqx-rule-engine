@@ -94,9 +94,10 @@ put_head(Type, Term, List) ->
 proc_tmpl(Tokens, Data) ->
     proc_tmpl(Tokens, Data, #{return => full_binary}).
 
-proc_tmpl(Tokens, Data, _Opts = #{return := full_binary}) ->
+proc_tmpl(Tokens, Data, Opts = #{return := full_binary}) ->
+    Trans = maps:get(var_trans, Opts, fun bin/1),
     list_to_binary(
-        proc_tmpl(Tokens, Data, #{return => rawlist, var_trans => fun bin/1}));
+        proc_tmpl(Tokens, Data, #{return => rawlist, var_trans => Trans}));
 
 proc_tmpl(Tokens, Data, Opts = #{return := rawlist}) ->
     Trans = maps:get(var_trans, Opts, undefined),
@@ -129,7 +130,7 @@ preproc_sql(Sql, ReplaceWith) ->
     case re:run(Sql, ?EX_PLACE_HOLDER, [{capture, all_but_first, binary}, global]) of
         {match, PlaceHolders} ->
             PhKs = [parse_nested(unwrap(Phld)) || [Phld | _] <- PlaceHolders],
-            {repalce_with(Sql, ReplaceWith), [{var, Phld} || Phld <- PhKs]};
+            {replace_with(Sql, ReplaceWith), [{var, Phld} || Phld <- PhKs]};
         nomatch ->
             {Sql, []}
     end.
@@ -141,9 +142,9 @@ proc_sql(Tokens, Data) ->
 get_phld_var(Phld, Data) ->
     emqx_rule_maps:nested_get(Phld, Data).
 
-repalce_with(Tmpl, '?') ->
+replace_with(Tmpl, '?') ->
     re:replace(Tmpl, ?EX_PLACE_HOLDER, "?", [{return, binary}, global]);
-repalce_with(Tmpl, '$n') ->
+replace_with(Tmpl, '$n') ->
     Parts = re:split(Tmpl, ?EX_PLACE_HOLDER, [{return, binary}, trim, group]),
     {Res, _} =
         lists:foldl(
