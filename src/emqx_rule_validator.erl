@@ -25,7 +25,7 @@
 -type(params_spec() :: #{atom() => term()}).
 -type(params() :: #{binary() => term()}).
 
--define(DATA_TYPES, [string, password, number, float, boolean, object, array, file]).
+-define(DATA_TYPES, [string, password, number, float, boolean, object, array, file, cfgselect]).
 
 %%------------------------------------------------------------------------------
 %% APIs
@@ -78,7 +78,7 @@ validate_type(Val, number, Spec) ->
     ok = validate_number(Val, maps:get(range, Spec, any));
 validate_type(Val, boolean, _Spec) ->
     ok = validate_boolean(Val);
-validate_type(Val, array, Spec) ->
+validate_type(Val, Type, Spec) when Type =:= array; Type =:= cfgselect ->
     [do_validate_param(V, maps:get(items, Spec)) || V <- Val],
     ok;
 validate_type(Val, object, Spec) ->
