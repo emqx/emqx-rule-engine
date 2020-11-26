@@ -139,6 +139,9 @@ preproc_sql(Sql, ReplaceWith) ->
 proc_sql(Tokens, Data) ->
     proc_tmpl(Tokens, Data, #{return => rawlist, var_trans => fun sql_data/1}).
 
+%% backward compatibility for hot upgrading from =< e4.2.1
+get_phld_var(Fun, Data) when is_function(Fun) ->
+    Fun(Data);
 get_phld_var(Phld, Data) ->
     emqx_rule_maps:nested_get(Phld, Data).
 
