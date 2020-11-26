@@ -78,8 +78,10 @@ validate_type(Val, number, Spec) ->
     ok = validate_number(Val, maps:get(range, Spec, any));
 validate_type(Val, boolean, _Spec) ->
     ok = validate_boolean(Val);
-validate_type(Val, Type, Spec) when Type =:= array; Type =:= cfgselect ->
+validate_type(Val, array, Spec) ->
     [do_validate_param(V, maps:get(items, Spec)) || V <- Val],
+    ok;
+validate_type(_Val, cfgselect, _Spec) ->
     ok;
 validate_type(Val, object, Spec) ->
     ok = validate_object(Val, maps:get(schema, Spec, any)).
