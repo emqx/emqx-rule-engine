@@ -1,18 +1,21 @@
-{"4.2.2",
+{VSN,
   [
     {"4.2.0", [
       {load_module, emqx_rule_utils, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_actions, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_sqltester, brutal_purge, soft_purge, [emqx_rule_metrics]},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, [emqx_rule_metrics]},
-      {load_module, emqx_rule_metrics, brutal_purge, soft_purge, []}
+      {load_module, emqx_rule_metrics, brutal_purge, soft_purge, []},
+      {load_module, emqx_rule_validator, brutal_purge, soft_purge, []}
     ]},
     {"4.2.1", [
       {load_module, emqx_rule_utils, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_sqltester, brutal_purge, soft_purge, [emqx_rule_metrics]},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, [emqx_rule_metrics]},
-      {load_module, emqx_rule_metrics, brutal_purge, soft_purge, []}
-    ]}
+      {load_module, emqx_rule_metrics, brutal_purge, soft_purge, []},
+      {load_module, emqx_rule_validator, brutal_purge, soft_purge, []}
+    ]},
+    {<<".*">>, []}
   ],
   [
     {"4.2.0", [
@@ -20,13 +23,16 @@
       {load_module, emqx_rule_actions, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_sqltester, brutal_purge, soft_purge, [emqx_rule_metrics]},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, [emqx_rule_metrics]},
-      {load_module, emqx_rule_metrics, brutal_purge, soft_purge, []}
+      {load_module, emqx_rule_metrics, brutal_purge, soft_purge, []},
+      {load_module, emqx_rule_validator, brutal_purge, soft_purge, []}
     ]},
     {"4.2.1", [
       {load_module, emqx_rule_utils, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_sqltester, brutal_purge, soft_purge, [emqx_rule_metrics]},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, [emqx_rule_metrics]},
-      {load_module, emqx_rule_metrics, brutal_purge, soft_purge, []}
-    ]}
+      {load_module, emqx_rule_metrics, brutal_purge, soft_purge, []},
+      {load_module, emqx_rule_validator, brutal_purge, soft_purge, []}
+    ]},
+    {<<".*">>, []}
   ]
 }.
