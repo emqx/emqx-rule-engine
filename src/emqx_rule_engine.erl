@@ -436,7 +436,7 @@ cluster_call(Func, Args) ->
 init_resource(Module, OnCreate, ResId, Config) ->
     Params = ?RAISE(Module:OnCreate(ResId, Config),
                     {{init_resource_failure, node()}, {{Module, OnCreate}, {_REASON_,_ST_}}}),
-    emqx_rule_registry:add_resource_params(#resource_params{id = ResId, params = Params}).
+    emqx_rule_registry:add_resource_params(#resource_params{id = ResId, params = Params, status = #{is_alive => true}}).
 
 init_action(Module, OnCreate, ActionInstId, Params) ->
     ok = emqx_rule_metrics:create_metrics(ActionInstId),
