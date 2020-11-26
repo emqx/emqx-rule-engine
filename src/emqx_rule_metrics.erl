@@ -25,6 +25,20 @@
         , stop/0
         ]).
 
+-export([ get_actions_taken/1
+        , get_actions_success/1
+        , get_actions_error/1
+        , get_actions_exception/1
+        , get_actions_retry/1
+        ]).
+
+-export([ inc_actions_taken/1
+        , inc_actions_success/1
+        , inc_actions_error/1
+        , inc_actions_exception/1
+        , inc_actions_retry/1
+        ]).
+
 -export([ inc/2
         , inc/3
         , get/2
@@ -129,8 +143,9 @@ get_rule_metrics(Id) ->
 
 -spec(get_action_metrics(action_instance_id()) -> map()).
 get_action_metrics(Id) ->
-    #{success => get(Id, 'actions.success'),
-      failed => get(Id, 'actions.failure')
+    #{success => get_actions_success(Id),
+      failed => get_actions_error(Id) + get_actions_exception(Id),
+      taken => get_actions_taken(Id)
      }.
 
 -spec(inc(rule_id(), atom()) -> ok).
@@ -143,6 +158,36 @@ inc(Id, Metric, Val) ->
 -spec(inc_overall(rule_id(), atom()) -> ok).
 inc_overall(Metric, Val) ->
     emqx_metrics:inc(Metric, Val).
+
+inc_actions_taken(Id) ->
+    inc(Id, 'actions.taken').
+
+inc_actions_success(Id) ->
+    inc(Id, 'actions.success').
+
+inc_actions_error(Id) ->
+    inc(Id, 'actions.error').
+
+inc_actions_exception(Id) ->
+    inc(Id, 'actions.exception').
+
+inc_actions_retry(Id) ->
+    inc(Id, 'actions.retry').
+
+get_actions_taken(Id) ->
+    get(Id, 'actions.taken').
+
+get_actions_success(Id) ->
+    get(Id, 'actions.success').
+
+get_actions_error(Id) ->
+    get(Id, 'actions.error').
+
+get_actions_exception(Id) ->
+    get(Id, 'actions.exception').
+
+get_actions_retry(Id) ->
+    get(Id, 'actions.retry').
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -291,12 +336,21 @@ precision(Float, N) ->
 %% Metrics Definitions
 %%------------------------------------------------------------------------------
 
-max_counters_size() -> 4.
+max_counters_size() -> 7.
 
-metrics_idx('rules.matched') ->      1;
-metrics_idx('actions.success') ->   2;
-metrics_idx('actions.failure') ->   3;
-metrics_idx(_) ->                   4.
+metrics_idx('rules.matched') ->       1;
+metrics_idx('actions.success') ->     2;
+metrics_idx('actions.error') ->       3;
+metrics_idx('actions.taken') ->       4;
+metrics_idx('actions.exception') ->   5;
+metrics_idx('actions.retry') ->       6;
+metrics_idx(_) ->                     7.
 
 overall_metrics() ->
-    ['rules.matched', 'actions.success', 'actions.failure'].
+    [ 'rules.matched'
+    , 'actions.success'
+    , 'actions.error'
+    , 'actions.taken'
+    , 'actions.exception'
+    , 'actions.retry'
+    ].

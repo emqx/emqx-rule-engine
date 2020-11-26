@@ -232,14 +232,14 @@ take_action(#action_instance{id = Id, fallbacks = Fallbacks} = ActInst,
     try
         {ok, #action_instance_params{apply = Apply}}
             = emqx_rule_registry:get_action_instance_params(Id),
-        Result = Apply(Selected, Envs),
-        emqx_rule_metrics:inc(Id, 'actions.success'),
-        Result
+        emqx_rule_metrics:inc_actions_taken(Id),
+        Apply(Selected, Envs)
     catch
-        error:{badfun, Func}:_Stack ->
+        error:{badfun, Func}:ST ->
             ?LOG(warning, "Action ~p maybe outdated, refresh it and try again."
-                          "Func: ~p", [Id, Func]),
+                          "Func: ~p~nST:~0p", [Id, Func, ST]),
             _ = emqx_rule_engine:refresh_actions([ActInst]),
+            emqx_rule_metrics:inc_actions_retry(Id),
             take_action(ActInst, Selected, Envs, OnFailed, RetryN-1);
         Error:Reason:Stack ->
             handle_action_failure(OnFailed, Id, Fallbacks, Selected, Envs, {Error, Reason, Stack})
@@ -249,12 +249,12 @@ take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected, Envs, On
     handle_action_failure(OnFailed, Id, Fallbacks, Selected, Envs, {max_try_reached, ?ActionMaxRetry}).
 
 handle_action_failure(continue, Id, Fallbacks, Selected, Envs, Reason) ->
-    emqx_rule_metrics:inc(Id, 'actions.failure'),
+    emqx_rule_metrics:inc_actions_exception(Id),
     ?LOG(error, "Take action ~p failed, continue next action, reason: ~0p", [Id, Reason]),
     take_actions(Fallbacks, Selected, Envs, continue),
     failed;
 handle_action_failure(stop, Id, Fallbacks, Selected, Envs, Reason) ->
-    emqx_rule_metrics:inc(Id, 'actions.failure'),
+    emqx_rule_metrics:inc_actions_exception(Id),
     ?LOG(error, "Take action ~p failed, skip all actions, reason: ~0p", [Id, Reason]),
     take_actions(Fallbacks, Selected, Envs, continue),
     error({take_action_failed, {Id, Reason}}).

@@ -47,7 +47,7 @@
                 order => 3,
                 type => string,
                 input => textarea,
-                required => true,
+                required => false,
                 default => <<"${payload}">>,
                 title => #{en => <<"Payload Template">>,
                            zh => <<"消息内容模板"/utf8>>},
@@ -112,12 +112,13 @@ on_resource_create(_Name, Conf) ->
     Conf.
 
 -spec(on_action_create_inspect(action_instance_id(), Params :: map()) -> action_fun()).
-on_action_create_inspect(_Id, Params) ->
+on_action_create_inspect(Id, Params) ->
     fun(Selected, Envs) ->
         io:format("[inspect]~n"
                   "\tSelected Data: ~p~n"
                   "\tEnvs: ~p~n"
-                  "\tAction Init Params: ~p~n", [Selected, Envs, Params])
+                  "\tAction Init Params: ~p~n", [Selected, Envs, Params]),
+        emqx_rule_metrics:inc_actions_success(Id)
     end.
 
 %% A Demo Action.
@@ -126,16 +127,16 @@ on_action_create_inspect(_Id, Params) ->
 on_action_create_republish(Id, #{<<"target_topic">> := TargetTopic, <<"target_qos">> := TargetQoS, <<"payload_tmpl">> := PayloadTmpl}) ->
     TopicTks = emqx_rule_utils:preproc_tmpl(TargetTopic),
     PayloadTks = emqx_rule_utils:preproc_tmpl(PayloadTmpl),
-    fun (_Selected, Envs = #{headers := #{republish_by := ActId},
-                             topic := Topic}) when ActId =:= Id ->
+    fun (_Selected, _Envs = #{headers := #{republish_by := ActId},
+                              topic := Topic}) when ActId =:= Id ->
             ?LOG(error, "[republish] recursively republish detected, msg topic: ~p, target topic: ~p",
                  [Topic, TargetTopic]),
-            error({recursive_republish, Envs});
+            emqx_rule_metrics:inc_actions_error(Id);
         (Selected, _Envs = #{qos := QoS, flags := Flags, timestamp := Timestamp}) ->
             ?LOG(debug, "[republish] republish to: ~p, Payload: ~p",
                 [TargetTopic, Selected]),
             increase_and_publish(
-              #message{
+              Id, #message{
                 id = emqx_guid:gen(),
                 qos = if TargetQoS =:= -1 -> QoS; true -> TargetQoS end,
                 from = Id,
@@ -150,7 +151,7 @@ on_action_create_republish(Id, #{<<"target_topic">> := TargetTopic, <<"target_qo
             ?LOG(debug, "[republish] republish to: ~p, Payload: ~p",
                 [TargetTopic, Selected]),
             increase_and_publish(
-              #message{
+              Id, #message{
                  id = emqx_guid:gen(),
                  qos = if TargetQoS =:= -1 -> 0; true -> TargetQoS end,
                  from = Id,
@@ -162,9 +163,12 @@ on_action_create_republish(Id, #{<<"target_topic">> := TargetTopic, <<"target_qo
               })
     end.
 
-increase_and_publish(Msg) ->
-    emqx_metrics:inc_msg(Msg),
-    emqx_broker:safe_publish(Msg).
+increase_and_publish(ActId, Msg) ->
+    emqx_broker:safe_publish(Msg),
+    emqx_rule_metrics:inc_actions_success(ActId),
+    emqx_metrics:inc_msg(Msg).
 
-on_action_do_nothing(_, _) ->
+-spec(on_action_do_nothing(action_instance_id(), map()) -> action_fun()).
+on_action_do_nothing(ActId, _Params) ->
+    emqx_rule_metrics:inc_actions_success(ActId),
     fun(_, _) -> ok end.
