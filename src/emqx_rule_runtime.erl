@@ -235,9 +235,9 @@ take_action(#action_instance{id = Id, fallbacks = Fallbacks} = ActInst,
         emqx_rule_metrics:inc_actions_taken(Id),
         Apply(Selected, Envs)
     catch
-        error:{badfun, Func}:ST ->
-            ?LOG(warning, "Action ~p maybe outdated, refresh it and try again."
-                          "Func: ~p~nST:~0p", [Id, Func, ST]),
+        error:{badfun, _Func}:_ST ->
+            %?LOG(warning, "Action ~p maybe outdated, refresh it and try again."
+            %              "Func: ~p~nST:~0p", [Id, Func, ST]),
             trans_action_on(Id, fun() ->
                     emqx_rule_engine:refresh_actions([ActInst])
             end, 5000),
