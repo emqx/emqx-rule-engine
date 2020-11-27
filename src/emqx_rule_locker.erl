@@ -16,9 +16,6 @@
 
 -module(emqx_rule_locker).
 
--include_lib("emqx/include/emqx.hrl").
--include_lib("emqx/include/logger.hrl").
-
 -export([start_link/0]).
 
 -export([ lock/1

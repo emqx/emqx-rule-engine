@@ -240,7 +240,7 @@ take_action(#action_instance{id = Id, fallbacks = Fallbacks} = ActInst,
                           "Func: ~p~nST:~0p", [Id, Func, ST]),
             trans_action_on(Id, fun() ->
                     emqx_rule_engine:refresh_actions([ActInst])
-            end, 2000),
+            end, 5000),
             emqx_rule_metrics:inc_actions_retry(Id),
             take_action(ActInst, Selected, Envs, OnFailed, RetryN-1);
         Error:Reason:Stack ->
