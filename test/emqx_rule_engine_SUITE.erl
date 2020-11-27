@@ -84,7 +84,8 @@ groups() ->
        t_resource_types
       ]},
      {runtime, [],
-      [t_match_atom_and_binary,
+      [t_mfa_action,
+       t_match_atom_and_binary,
        t_sqlselect_0,
        t_sqlselect_00,
        t_sqlselect_01,
@@ -799,6 +800,29 @@ message_dropped(Client) ->
     ok.
 message_acked(_Client) ->
     verify_event('message.acked'),
+    ok.
+
+t_mfa_action(_Config) ->
+    ok = emqx_rule_registry:add_action(
+            #action{name = 'mfa-action', app = ?APP,
+                    module = ?MODULE, on_create = mfa_action,
+                    types=[], params_spec = #{},
+                    title = #{en => <<"MFA callback action">>},
+                    description = #{en => <<"MFA callback action">>}}),
+    SQL = "SELECT * FROM \"t1\"",
+    {ok, #rule{id = Id}} = emqx_rule_engine:create_rule(
+                    #{id => <<"rule:t_mfa_action">>,
+                      rawsql => SQL,
+                      actions => [#{id => <<"action:mfa-test">>, name => 'mfa-action', args => #{}}],
+                      description => <<"Debug rule">>}),
+    {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
+    {ok, _} = emqtt:connect(Client),
+    emqtt:publish(Client, <<"t1">>, <<"{\"id\": 1, \"name\": \"ha\"}">>, 0),
+    emqtt:stop(Client),
+    ct:sleep(500),
+    ?assertEqual(1, persistent_term:get(<<"action:mfa-test">>, 0)),
+    emqx_rule_registry:remove_rule(Id),
+    emqx_rule_registry:remove_action('mfa-action'),
     ok.
 
 t_match_atom_and_binary(_Config) ->
@@ -1973,6 +1997,14 @@ hook_metrics_action(_Id, _Params) ->
         ct:pal("applying hook_metrics_action: ~p", [Data]),
         ets:insert(events_record_tab, {EventName, Data})
     end.
+
+mfa_action(Id, _Params) ->
+    persistent_term:put(Id, 0),
+    {?MODULE, mfa_action_do, [Id]}.
+
+mfa_action_do(_Data, _Envs, K) ->
+    persistent_term:put(K, 1).
+
 crash_action(_Id, _Params) ->
     fun(Data, _Envs) ->
         ct:pal("applying crash action, Data: ~p", [Data]),

@@ -233,7 +233,7 @@ take_action(#action_instance{id = Id, fallbacks = Fallbacks} = ActInst,
         {ok, #action_instance_params{apply = Apply}}
             = emqx_rule_registry:get_action_instance_params(Id),
         emqx_rule_metrics:inc_actions_taken(Id),
-        Apply(Selected, Envs)
+        apply_action_func(Selected, Envs, Apply)
     catch
         error:{badfun, _Func}:_ST ->
             %?LOG(warning, "Action ~p maybe outdated, refresh it and try again."
@@ -249,6 +249,12 @@ take_action(#action_instance{id = Id, fallbacks = Fallbacks} = ActInst,
 
 take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected, Envs, OnFailed, _RetryN) ->
     handle_action_failure(OnFailed, Id, Fallbacks, Selected, Envs, {max_try_reached, ?ActionMaxRetry}).
+
+%% @private
+apply_action_func(Data, Envs, {M, F, A}) ->
+    erlang:apply(M, F, [Data, Envs] ++ A);
+apply_action_func(Data, Envs, Func) ->
+    erlang:apply(Func, [Data, Envs]).
 
 trans_action_on(Id, Callback, Timeout) ->
     case emqx_rule_locker:lock(Id) of
