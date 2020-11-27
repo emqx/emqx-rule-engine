@@ -238,7 +238,9 @@ take_action(#action_instance{id = Id, fallbacks = Fallbacks} = ActInst,
         error:{badfun, Func}:ST ->
             ?LOG(warning, "Action ~p maybe outdated, refresh it and try again."
                           "Func: ~p~nST:~0p", [Id, Func, ST]),
-            _ = emqx_rule_engine:refresh_actions([ActInst]),
+            trans_action_on(Id, fun() ->
+                    emqx_rule_engine:refresh_actions([ActInst])
+            end, 5000),
             emqx_rule_metrics:inc_actions_retry(Id),
             take_action(ActInst, Selected, Envs, OnFailed, RetryN-1);
         Error:Reason:Stack ->
@@ -247,6 +249,29 @@ take_action(#action_instance{id = Id, fallbacks = Fallbacks} = ActInst,
 
 take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected, Envs, OnFailed, _RetryN) ->
     handle_action_failure(OnFailed, Id, Fallbacks, Selected, Envs, {max_try_reached, ?ActionMaxRetry}).
+
+trans_action_on(Id, Callback, Timeout) ->
+    case emqx_rule_locker:lock(Id) of
+        true -> try Callback() after emqx_rule_locker:unlock(Id) end;
+        _ ->
+            wait_action_on(Id, Timeout div 10)
+    end.
+
+wait_action_on(_, 0) ->
+    {error, timeout};
+wait_action_on(Id, RetryN) ->
+    timer:sleep(10),
+    case emqx_rule_registry:get_action_instance_params(Id) of
+        not_found ->
+            {error, not_found};
+        {ok, #action_instance_params{apply = Apply}} ->
+            case catch Apply(tryit) of
+                {'EXIT', {{badfun, _}, _}} ->
+                    wait_action_on(Id, RetryN-1);
+                _ ->
+                    ok
+            end
+    end.
 
 handle_action_failure(continue, Id, Fallbacks, Selected, Envs, Reason) ->
     emqx_rule_metrics:inc_actions_exception(Id),
