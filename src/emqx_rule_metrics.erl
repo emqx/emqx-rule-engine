@@ -25,18 +25,26 @@
         , stop/0
         ]).
 
--export([ get_actions_taken/1
+-export([ get_rules_matched/1
+        , get_actions_taken/1
         , get_actions_success/1
         , get_actions_error/1
         , get_actions_exception/1
         , get_actions_retry/1
         ]).
 
--export([ inc_actions_taken/1
+-export([ inc_rules_matched/1
+        , inc_rules_matched/2
+        , inc_actions_taken/1
+        , inc_actions_taken/2
         , inc_actions_success/1
+        , inc_actions_success/2
         , inc_actions_error/1
+        , inc_actions_error/2
         , inc_actions_exception/1
+        , inc_actions_exception/2
         , inc_actions_retry/1
+        , inc_actions_retry/2
         ]).
 
 -export([ inc/2
@@ -61,6 +69,7 @@
         , handle_call/3
         , handle_info/2
         , handle_cast/2
+        , code_change/3
         , terminate/2
         ]).
 
@@ -135,7 +144,7 @@ get_overall_rule_speed() ->
 -spec(get_rule_metrics(rule_id()) -> map()).
 get_rule_metrics(Id) ->
     #{max := Max, current := Current, last5m := Last5M} = get_rule_speed(Id),
-    #{matched => get(Id, 'rules.matched'),
+    #{matched => get_rules_matched(Id),
       speed => Current,
       speed_max => Max,
       speed_last5m => Last5M
@@ -159,20 +168,38 @@ inc(Id, Metric, Val) ->
 inc_overall(Metric, Val) ->
     emqx_metrics:inc(Metric, Val).
 
+inc_rules_matched(Id) ->
+    inc_rules_matched(Id, 1).
+inc_rules_matched(Id, Val) ->
+    inc(Id, 'rules.matched', Val).
+
 inc_actions_taken(Id) ->
-    inc(Id, 'actions.taken').
+    inc_actions_taken(Id, 1).
+inc_actions_taken(Id, Val) ->
+    inc(Id, 'actions.taken', Val).
 
 inc_actions_success(Id) ->
-    inc(Id, 'actions.success').
+    inc_actions_success(Id, 1).
+inc_actions_success(Id, Val) ->
+    inc(Id, 'actions.success', Val).
 
 inc_actions_error(Id) ->
-    inc(Id, 'actions.error').
+    inc_actions_error(Id, 1).
+inc_actions_error(Id, Val) ->
+    inc(Id, 'actions.error', Val).
 
 inc_actions_exception(Id) ->
-    inc(Id, 'actions.exception').
+    inc_actions_exception(Id, 1).
+inc_actions_exception(Id, Val) ->
+    inc(Id, 'actions.exception', Val).
 
 inc_actions_retry(Id) ->
-    inc(Id, 'actions.retry').
+    inc_actions_retry(Id, 1).
+inc_actions_retry(Id, Val) ->
+    inc(Id, 'actions.retry', Val).
+
+get_rules_matched(Id) ->
+    get(Id, 'rules.matched').
 
 get_actions_taken(Id) ->
     get(Id, 'actions.taken').
@@ -251,7 +278,7 @@ handle_info(ticking, State = #state{rule_speeds = RuleSpeeds0,
                                        overall_rule_speed = OverallRuleSpeed0}) ->
     RuleSpeeds = maps:map(
                     fun(Id, RuleSpeed) ->
-                        calculate_speed(get(Id, 'rules.matched'), RuleSpeed)
+                        calculate_speed(get_rules_matched(Id), RuleSpeed)
                     end, RuleSpeeds0),
     OverallRuleSpeed = calculate_speed(get_overall('rules.matched'), OverallRuleSpeed0),
     async_refresh_resource_status(),
@@ -261,6 +288,42 @@ handle_info(ticking, State = #state{rule_speeds = RuleSpeeds0,
 
 handle_info(_Info, State) ->
     {noreply, State}.
+
+code_change({down, Vsn}, State = #state{metric_ids = MIDs}, _Extra)
+        when Vsn =:= "4.2.0";
+             Vsn =:= "4.2.1" ->
+    io:format("downgrade ~p to ~p~n", [?MODULE, Vsn]),
+    [begin
+        Matched = get_rules_matched(Id),
+        Succ = get_actions_success(Id),
+        Error = get_actions_error(Id),
+        Except = get_actions_exception(Id),
+        ok = delete_counters(Id),
+        ok = create_counters(Id),
+        inc_rules_matched(Id, Matched),
+        inc_actions_success(Id, Succ),
+        inc_actions_error(Id, Error + Except)
+    end || Id <- sets:to_list(MIDs)],
+    {ok, State};
+
+code_change(Vsn, State = #state{metric_ids = MIDs}, _Extra)
+        when Vsn =:= "4.2.0";
+             Vsn =:= "4.2.1" ->
+    io:format("upgrade ~p from ~p~n", [?MODULE, Vsn]),
+    [begin
+        Matched = get_rules_matched(Id),
+        Succ = get_actions_success(Id),
+        Error = get_actions_error(Id),
+        ok = delete_counters(Id),
+        ok = create_counters(Id),
+        inc_rules_matched(Id, Matched),
+        inc_actions_success(Id, Succ),
+        inc_actions_error(Id, Error)
+    end || Id <- sets:to_list(MIDs)],
+    {ok, State};
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
 
 terminate(_Reason, #state{metric_ids = MIDs}) ->
     [delete_counters(Id) || Id <- sets:to_list(MIDs)],
