@@ -6,6 +6,7 @@
       {load_module, emqx_rule_utils, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_actions, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_sqltester, brutal_purge, soft_purge, []},
+      {load_module, emqx_rule_runtime, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_validator, brutal_purge, soft_purge, []}
     ]},
@@ -14,6 +15,7 @@
       {update, emqx_rule_metrics, [{advanced, []}]},
       {load_module, emqx_rule_utils, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_sqltester, brutal_purge, soft_purge, []},
+      {load_module, emqx_rule_runtime, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_validator, brutal_purge, soft_purge, []}
     ]},
@@ -25,6 +27,7 @@
       {load_module, emqx_rule_utils, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_actions, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_sqltester, brutal_purge, soft_purge, []},
+      {load_module, emqx_rule_runtime, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_validator, brutal_purge, soft_purge, []},
       {apply, {supervisor, terminate_child, [emqx_rule_engine_sup, emqx_rule_locker]}},
@@ -34,6 +37,7 @@
       {update, emqx_rule_metrics, [{advanced, []}]},
       {load_module, emqx_rule_utils, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_sqltester, brutal_purge, soft_purge, []},
+      {load_module, emqx_rule_runtime, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_validator, brutal_purge, soft_purge, []},
       {apply, {supervisor, terminate_child, [emqx_rule_engine_sup, emqx_rule_locker]}},
