@@ -27,7 +27,7 @@ start_link() ->
 
 -spec(lock(binary()) -> ekka_locker:lock_result()).
 lock(Id) ->
-    ekka_locker:acquire(?MODULE, Id, lock).
+    ekka_locker:acquire(?MODULE, Id, local).
 
 -spec(unlock(binary()) -> {boolean(), [node()]}).
 unlock(Id) ->
