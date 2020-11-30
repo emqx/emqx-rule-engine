@@ -22,6 +22,7 @@
 -export([ load_providers/0
         , unload_providers/0
         , refresh_resources/0
+        , refresh_resource/1
         , refresh_rule/1
         , refresh_rules/0
         , refresh_actions/1
@@ -298,6 +299,12 @@ refresh_resources() ->
      end || Res = #resource{id = ResId}
             <- emqx_rule_registry:get_resources()],
     ok.
+
+refresh_resource(Type) when is_atom(Type) ->
+    Resources = emqx_rule_registry:get_resources_by_type(Type),
+    lists:foreach(fun(Resource) ->
+        refresh_resource(Resource)
+    end, Resources).
 
 refresh_resource(#resource{id = ResId, config = Config, type = Type}) ->
     {ok, #resource_type{on_create = {M, F}}} = emqx_rule_registry:find_resource_type(Type),
