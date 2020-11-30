@@ -293,6 +293,8 @@ code_change({down, Vsn}, State = #state{metric_ids = MIDs}, _Extra)
         when Vsn =:= "4.2.0";
              Vsn =:= "4.2.1" ->
     io:format("downgrade ~p to ~p~n", [?MODULE, Vsn]),
+    _ = emqx_metrics:ensure('actions.failure'),
+    emqx_metrics:set('actions.failure', emqx_metrics:val('actions.error')),
     [begin
         Matched = get_rules_matched(Id),
         Succ = get_actions_success(Id),
@@ -310,6 +312,12 @@ code_change(Vsn, State = #state{metric_ids = MIDs}, _Extra)
         when Vsn =:= "4.2.0";
              Vsn =:= "4.2.1" ->
     io:format("upgrade ~p from ~p~n", [?MODULE, Vsn]),
+    _ = [emqx_metrics:ensure(Name)
+         || Name <-
+            ['actions.error', 'actions.taken',
+             'actions.exception', 'actions.retry'
+            ]],
+    emqx_metrics:set('actions.error', emqx_metrics:val('actions.failure')),
     [begin
         Matched = get_rules_matched(Id),
         Succ = get_actions_success(Id),
