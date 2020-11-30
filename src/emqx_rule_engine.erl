@@ -304,8 +304,7 @@ refresh_resource(Type) when is_atom(Type) ->
     Resources = emqx_rule_registry:get_resources_by_type(Type),
     lists:foreach(fun(Resource) ->
         refresh_resource(Resource)
-    end, Resources).
-
+    end, Resources);
 refresh_resource(#resource{id = ResId, config = Config, type = Type}) ->
     {ok, #resource_type{on_create = {M, F}}} = emqx_rule_registry:find_resource_type(Type),
     cluster_call(init_resource, [M, F, ResId, Config]).
