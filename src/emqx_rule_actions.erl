@@ -85,7 +85,7 @@
                category => debug,
                for => '$any',
                types => [],
-               create => on_action_do_nothing,
+               create => on_action_create_do_nothing,
                params => #{},
                title => #{en => <<"Do Nothing (debug)">>,
                           zh => <<"空动作 (调试)"/utf8>>},
@@ -98,6 +98,7 @@
 %% callbacks for rule engine
 -export([ on_action_create_inspect/2
         , on_action_create_republish/2
+        , on_action_create_do_nothing/2
         ]).
 
 -export([ on_action_inspect/2
@@ -202,12 +203,10 @@ increase_and_publish(ActId, Msg) ->
     emqx_rule_metrics:inc_actions_success(ActId),
     emqx_metrics:inc_msg(Msg).
 
-%% BACKW: <= e4.2.2
-%% Change the func name to on_action_create_do_nothing
--spec on_action_do_nothing(action_instance_id(), Params :: map())
+-spec on_action_create_do_nothing(action_instance_id(), Params :: map())
       -> NewParams :: map().
-on_action_do_nothing(ActId, Params) when is_binary(ActId) ->
-    Params;
-%% BACKW: <= e4.2.2
+on_action_create_do_nothing(ActId, Params) when is_binary(ActId) ->
+    Params.
+
 on_action_do_nothing(Selected, Envs) when is_map(Selected) ->
     emqx_rule_metrics:inc_actions_success(?bound_v('ActId', Envs)).
