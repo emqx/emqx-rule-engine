@@ -38,7 +38,7 @@
 -define(ephemeral_alias(TYPE, NAME),
     iolist_to_binary(io_lib:format("_v_~s_~p_~p", [TYPE, NAME, erlang:system_time()]))).
 
--define(ActionMaxRetry, 1).
+-define(ActionMaxRetry, 3).
 
 %%------------------------------------------------------------------------------
 %% Apply rules
@@ -227,13 +227,13 @@ take_actions(Actions, Selected, Envs, OnFailed) ->
     [take_action(ActInst, Selected, Envs, OnFailed, ?ActionMaxRetry)
      || ActInst <- Actions].
 
-take_action(#action_instance{id = Id, fallbacks = Fallbacks} = ActInst,
+take_action(#action_instance{id = Id, name = ActName, fallbacks = Fallbacks} = ActInst,
             Selected, Envs, OnFailed, RetryN) when RetryN >= 0 ->
     try
         {ok, #action_instance_params{apply = Apply}}
             = emqx_rule_registry:get_action_instance_params(Id),
         emqx_rule_metrics:inc_actions_taken(Id),
-        apply_action_func(Selected, Envs, Apply)
+        apply_action_func(Selected, Envs, Apply, ActName)
     catch
         error:{badfun, _Func}:_ST ->
             %?LOG(warning, "Action ~p maybe outdated, refresh it and try again."
@@ -250,11 +250,15 @@ take_action(#action_instance{id = Id, fallbacks = Fallbacks} = ActInst,
 take_action(#action_instance{id = Id, fallbacks = Fallbacks}, Selected, Envs, OnFailed, _RetryN) ->
     handle_action_failure(OnFailed, Id, Fallbacks, Selected, Envs, {max_try_reached, ?ActionMaxRetry}).
 
-%% @private
-apply_action_func(Data, Envs, {M, F, A}) ->
-    erlang:apply(M, F, [Data, Envs] ++ A);
-apply_action_func(Data, Envs, Func) ->
+apply_action_func(Data, Envs, #{mod := Mod, bindings := Bindings}, Name) ->
+    %% TODO: Build the Func Name when creating the action
+    Func = cbk_on_action_triggered(Name),
+    Mod:Func(Data, Envs#{'__bindings__' => Bindings});
+apply_action_func(Data, Envs, Func, _Name) when is_function(Func) ->
     erlang:apply(Func, [Data, Envs]).
+
+cbk_on_action_triggered(Name) ->
+    list_to_atom("on_action_" ++ atom_to_list(Name)).
 
 trans_action_on(Id, Callback, Timeout) ->
     case emqx_rule_locker:lock(Id) of
