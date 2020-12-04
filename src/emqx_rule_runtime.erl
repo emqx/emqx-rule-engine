@@ -275,7 +275,7 @@ wait_action_on(Id, RetryN) ->
         not_found ->
             {error, not_found};
         {ok, #action_instance_params{apply = Apply}} ->
-            case catch Apply(tryit) of
+            case catch apply_action_func(baddata, #{}, Apply, tryit) of
                 {'EXIT', {{badfun, _}, _}} ->
                     wait_action_on(Id, RetryN-1);
                 _ ->
