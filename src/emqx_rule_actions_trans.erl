@@ -11,20 +11,25 @@ trans([], ResAST) ->
   lists:reverse(ResAST);
 trans([{eof, L} | AST], ResAST) ->
   lists:reverse([{eof, L} | ResAST]) ++ AST;
-trans([{function, Line, FuncName, Arity, Clauses} | AST], ResAST) ->
-  trans(AST, [{function, Line, FuncName, Arity,
-               trans_func_clauses(atom_to_list(FuncName),
-               Clauses)} | ResAST]);
+trans([{function, LineNo, FuncName, Arity, Clauses} | AST], ResAST) ->
+  NewClauses = trans_func_clauses(atom_to_list(FuncName), Clauses),
+  trans(AST, [{function, LineNo, FuncName, Arity, NewClauses} | ResAST]);
 trans([Form | AST], ResAST) ->
   trans(AST, [Form | ResAST]).
 
-trans_func_clauses("on_action_create" ++ _, Clauses) ->
-  [begin
-     Bindings = lists:flatten(get_vars(Args) ++ get_vars(Body, lefth)),
-     Body2 = append_to_result(Bindings, Body),
-     {clause, Line, Args, Guards, Body2}
-   end || {clause, Line, Args, Guards, Body} <- Clauses];
+trans_func_clauses("on_action_create_" ++ _ = _FuncName , Clauses) ->
+  %io:format("~n[[transing function: ~p]]~n", [_FuncName]),
+  %io:format("~n-----old clauses:~n", []), merl:print(Clauses),
+  NewClauses = [
+    begin
+      Bindings = lists:flatten(get_vars(Args) ++ get_vars(Body, lefth)),
+      Body2 = append_to_result(Bindings, Body),
+      {clause, LineNo, Args, Guards, Body2}
+    end || {clause, LineNo, Args, Guards, Body} <- Clauses],
+  %io:format("~n-----new clauses: ~n"), merl:print(NewClauses),
+  NewClauses;
 trans_func_clauses(_FuncName, Clauses) ->
+  %io:format("~n[[discarding function: ~p]]~n", [_FuncName]),
   Clauses.
 
 get_vars(Exprs) ->
@@ -51,11 +56,12 @@ append_to_result(Bindings, Exprs) ->
   erl_syntax:revert_forms(do_append_to_result(to_keyword(Bindings), Exprs, [])).
 
 do_append_to_result(KeyWordVars, [Line], Res) ->
-  Expr = case Line of
-    ?Q("_@LeftV = _@RightV") -> RightV;
-    _ -> Line
-  end,
-  lists:reverse([?Q("{[_@KeyWordVars], _@Expr}") | Res]);
+  case Line of
+    ?Q("_@LeftV = _@RightV") ->
+      lists:reverse([?Q("{[_@KeyWordVars], _@LeftV}"), Line | Res]);
+    _ ->
+      lists:reverse([?Q("{[_@KeyWordVars], _@Line}") | Res])
+  end;
 do_append_to_result(KeyWordVars, [Line | Exprs], Res) ->
   do_append_to_result(KeyWordVars, Exprs, [Line | Res]).
 
