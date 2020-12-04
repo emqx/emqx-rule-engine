@@ -84,8 +84,7 @@ groups() ->
        t_resource_types
       ]},
      {runtime, [],
-      [t_mfa_action,
-       t_match_atom_and_binary,
+      [t_match_atom_and_binary,
        t_sqlselect_0,
        t_sqlselect_00,
        t_sqlselect_01,
