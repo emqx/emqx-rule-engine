@@ -301,10 +301,8 @@ refresh_resources() ->
     ok.
 
 refresh_resource(Type) when is_atom(Type) ->
-    Resources = emqx_rule_registry:get_resources_by_type(Type),
-    lists:foreach(fun(Resource) ->
-        refresh_resource(Resource)
-    end, Resources);
+    [refresh_resource(Resource)
+     || Resource <- emqx_rule_registry:get_resources_by_type(Type)];
 refresh_resource(#resource{id = ResId, config = Config, type = Type}) ->
     {ok, #resource_type{on_create = {M, F}}} = emqx_rule_registry:find_resource_type(Type),
     cluster_call(init_resource, [M, F, ResId, Config]).
@@ -447,10 +445,15 @@ init_resource(Module, OnCreate, ResId, Config) ->
 init_action(Module, OnCreate, ActionInstId, Params) ->
     ok = emqx_rule_metrics:create_metrics(ActionInstId),
     case ?RAISE(Module:OnCreate(ActionInstId, Params), {{init_action_failure, node()}, {{Module,OnCreate},{_REASON_,_ST_}}}) of
-        {Apply, NewParams} ->
+        {Apply, NewParams} when is_function(Apply) -> %% BACKW: =< e4.2.2
             ok = emqx_rule_registry:add_action_instance_params(
                 #action_instance_params{id = ActionInstId, params = NewParams, apply = Apply});
-        Apply ->
+        {Bindings, NewParams} when is_list(Bindings) ->
+            ok = emqx_rule_registry:add_action_instance_params(
+            #action_instance_params{
+                id = ActionInstId, params = NewParams,
+                apply = #{mod => Module, bindings => maps:from_list(Bindings)}});
+        Apply when is_function(Apply) -> %% BACKW: =< e4.2.2
             ok = emqx_rule_registry:add_action_instance_params(
                 #action_instance_params{id = ActionInstId, params = Params, apply = Apply})
     end.
@@ -484,14 +487,18 @@ clear_action(_Module, undefined, ActionInstId) ->
     emqx_rule_metrics:clear_metrics(ActionInstId),
     ok = emqx_rule_registry:remove_action_instance_params(ActionInstId);
 clear_action(Module, Destroy, ActionInstId) ->
-    emqx_rule_metrics:clear_metrics(ActionInstId),
-    case emqx_rule_registry:get_action_instance_params(ActionInstId) of
-        {ok, #action_instance_params{params = Params}} ->
-            ?RAISE(Module:Destroy(ActionInstId, Params),{{destroy_action_failure, node()},
-                                           {{Module, Destroy}, {_REASON_,_ST_}}}),
-            ok = emqx_rule_registry:remove_action_instance_params(ActionInstId);
-        not_found ->
-            ok
+    case erlang:function_exported(Module, Destroy, 2) of
+        true ->
+            emqx_rule_metrics:clear_metrics(ActionInstId),
+            case emqx_rule_registry:get_action_instance_params(ActionInstId) of
+                {ok, #action_instance_params{params = Params}} ->
+                    ?RAISE(Module:Destroy(ActionInstId, Params),{{destroy_action_failure, node()},
+                                                {{Module, Destroy}, {_REASON_,_ST_}}}),
+                    ok = emqx_rule_registry:remove_action_instance_params(ActionInstId);
+                not_found ->
+                    ok
+            end;
+        false -> ok
     end.
 
 fetch_resource_status(Module, OnStatus, ResId) ->
