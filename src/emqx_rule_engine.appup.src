@@ -1,6 +1,7 @@
 {VSN,
   [
     {"4.2.0", [
+      {load_module, emqx_rule_actions_trans, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_locker, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_sup, brutal_purge, soft_purge, []},
       {apply, {emqx_rule_engine_sup, start_locker, []}},
@@ -13,6 +14,7 @@
       {load_module, emqx_rule_validator, brutal_purge, soft_purge, []}
     ]},
     {"4.2.1", [
+      {load_module, emqx_rule_actions_trans, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_locker, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_sup, brutal_purge, soft_purge, []},
       {apply, {emqx_rule_engine_sup, start_locker, []}},
