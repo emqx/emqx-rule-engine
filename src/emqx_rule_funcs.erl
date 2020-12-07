@@ -145,6 +145,12 @@
         , mput/3
         ]).
 
+%% For backword compatibility
+-export([ mget/2
+        , mget/3
+        , mput/3
+        ]).
+
 %% Array Funcs
 -export([ nth/2
         , length/1
@@ -632,6 +638,57 @@ map_get(Key, Map, Default) ->
     end.
 
 map_put(Key, Val, Map) ->
+    case maps:find(Key, Map) of
+        {ok, _} -> maps:put(Key, Val, Map);
+        error when is_atom(Key) ->
+            %% the map may have an equivalent binary-form key
+            BinKey = emqx_rule_utils:bin(Key),
+            case maps:find(BinKey, Map) of
+                {ok, _} -> maps:put(BinKey, Val, Map);
+                error -> maps:put(Key, Val, Map)
+            end;
+        error when is_binary(Key) ->
+            try %% the map may have an equivalent atom-form key
+                AtomKey = list_to_existing_atom(binary_to_list(Key)),
+                case maps:find(AtomKey, Map) of
+                    {ok, _} -> maps:put(AtomKey, Val, Map);
+                    error -> maps:put(Key, Val, Map)
+                end
+            catch error:badarg ->
+                maps:put(Key, Val, Map)
+            end;
+        error ->
+            maps:put(Key, Val, Map)
+    end.
+
+mget(Key, Map) ->
+    mget(Key, Map, undefined).
+
+mget(Key, Map, Default) ->
+    case maps:find(Key, Map) of
+        {ok, Val} -> Val;
+        error when is_atom(Key) ->
+            %% the map may have an equivalent binary-form key
+            BinKey = emqx_rule_utils:bin(Key),
+            case maps:find(BinKey, Map) of
+                {ok, Val} -> Val;
+                error -> Default
+            end;
+        error when is_binary(Key) ->
+            try %% the map may have an equivalent atom-form key
+                AtomKey = list_to_existing_atom(binary_to_list(Key)),
+                case maps:find(AtomKey, Map) of
+                    {ok, Val} -> Val;
+                    error -> Default
+                end
+            catch error:badarg ->
+                Default
+            end;
+        error ->
+            Default
+    end.
+
+mput(Key, Val, Map) ->
     case maps:find(Key, Map) of
         {ok, _} -> maps:put(Key, Val, Map);
         error when is_atom(Key) ->

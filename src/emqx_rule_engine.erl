@@ -20,7 +20,9 @@
 -include_lib("emqx/include/logger.hrl").
 
 -export([ load_providers/0
+        , load_provider/1
         , unload_providers/0
+        , unload_provider/1
         , refresh_resources/0
         , refresh_resource/1
         , refresh_rule/1
