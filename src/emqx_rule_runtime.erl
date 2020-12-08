@@ -374,11 +374,13 @@ add_metadata(Input, Metadata) when is_map(Input), is_map(Metadata) ->
 %%------------------------------------------------------------------------------
 %% Internal Functions
 %%------------------------------------------------------------------------------
-may_decode_payload(Payload) ->
+may_decode_payload(Payload) when is_binary(Payload) ->
     case get_cached_payload() of
-        undefined -> ensure_decoded(Payload);
+        undefined -> safe_decode_and_cache(Payload);
         DecodedP -> DecodedP
-    end.
+    end;
+may_decode_payload(Payload) ->
+    Payload.
 
 get_cached_payload() ->
     erlang:get(rule_payload).
@@ -387,9 +389,7 @@ cache_payload(DecodedP) ->
     erlang:put(rule_payload, DecodedP),
     DecodedP.
 
-ensure_decoded(Json) when is_map(Json); is_list(Json) ->
-    Json;
-ensure_decoded(MaybeJson) ->
+safe_decode_and_cache(MaybeJson) ->
     try cache_payload(emqx_json:decode(MaybeJson, [return_maps]))
     catch _:_ -> #{}
     end.
