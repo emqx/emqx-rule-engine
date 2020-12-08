@@ -37,6 +37,7 @@ all() ->
     , {group, runtime}
     , {group, events}
     , {group, multi_actions}
+    , {group, bugs}
     ].
 
 suite() ->
@@ -122,6 +123,9 @@ groups() ->
       ]},
      {events, [],
       [t_events
+      ]},
+     {bugs, [],
+      [t_sqlparse_payload_as
       ]},
      {multi_actions, [],
       [t_sqlselect_multi_actoins_1,
@@ -1919,6 +1923,44 @@ t_sqlparse_new_map(_Config) ->
                    <<"x">> := #{<<"y">> := #{}},
                    <<"c">> := [#{}]
                    }, Res00).
+
+t_sqlparse_payload_as(_Config) ->
+    %% https://github.com/emqx/emqx/issues/3866
+    Sql00 = "SELECT "
+            " payload, map_get('engineWorkTime', payload.params, -1) as payload.params.engineWorkTime, "
+            " map_get('hydOilTem', payload.params, -1) as payload.params.hydOilTem "
+            "FROM \"t/#\" ",
+    Payload1 = <<"{ \"msgId\": 1002, \"params\": { \"convertTemp\": 20, \"engineSpeed\": 42, \"hydOilTem\": 30 } }">>,
+    {ok, Res01} = emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql00,
+                      <<"ctx">> => #{<<"payload">> => Payload1,
+                                     <<"topic">> => <<"t/a">>}}),
+    ?assertMatch(#{
+        <<"payload">> := #{
+            <<"params">> := #{
+                <<"convertTemp">> := 20,
+                <<"engineSpeed">> := 42,
+                <<"engineWorkTime">> := -1,
+                <<"hydOilTem">> := 30
+            }
+        }
+    }, Res01),
+
+    Payload2 = <<"{ \"msgId\": 1002, \"params\": { \"convertTemp\": 20, \"engineSpeed\": 42 } }">>,
+    {ok, Res02} = emqx_rule_sqltester:test(
+                    #{<<"rawsql">> => Sql00,
+                      <<"ctx">> => #{<<"payload">> => Payload2,
+                                     <<"topic">> => <<"t/a">>}}),
+    ?assertMatch(#{
+        <<"payload">> := #{
+            <<"params">> := #{
+                <<"convertTemp">> := 20,
+                <<"engineSpeed">> := 42,
+                <<"engineWorkTime">> := -1,
+                <<"hydOilTem">> := -1
+            }
+        }
+    }, Res02).
 
 %%------------------------------------------------------------------------------
 %% Internal helpers
