@@ -239,7 +239,7 @@ take_action(#action_instance{id = Id, name = ActName, fallbacks = Fallbacks} = A
             ?LOG(warning, "Action ~p maybe outdated, refresh it and try again."
                           "Func: ~p~nST:~0p", [Id, Func, ST]),
             trans_action_on(Id, fun() ->
-                    emqx_rule_engine:refresh_actions([ActInst])
+                emqx_rule_engine:refresh_actions([ActInst])
             end, 5000),
             emqx_rule_metrics:inc_actions_retry(Id),
             take_action(ActInst, Selected, Envs, OnFailed, RetryN-1);
