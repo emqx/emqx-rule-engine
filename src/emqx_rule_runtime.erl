@@ -239,7 +239,7 @@ take_action(#action_instance{id = Id, name = ActName, fallbacks = Fallbacks} = A
             %?LOG(warning, "Action ~p maybe outdated, refresh it and try again."
             %              "Func: ~p~nST:~0p", [Id, Func, ST]),
             trans_action_on(Id, fun() ->
-                    emqx_rule_engine:refresh_actions([ActInst])
+                emqx_rule_engine:refresh_actions([ActInst])
             end, 5000),
             emqx_rule_metrics:inc_actions_retry(Id),
             take_action(ActInst, Selected, Envs, OnFailed, RetryN-1);
@@ -409,11 +409,13 @@ add_metadata(Input, Metadata) when is_map(Input), is_map(Metadata) ->
 %%------------------------------------------------------------------------------
 %% Internal Functions
 %%------------------------------------------------------------------------------
-may_decode_payload(Payload) ->
+may_decode_payload(Payload) when is_binary(Payload) ->
     case get_cached_payload() of
-        undefined -> ensure_decoded(Payload);
+        undefined -> safe_decode_and_cache(Payload);
         DecodedP -> DecodedP
-    end.
+    end;
+may_decode_payload(Payload) ->
+    Payload.
 
 get_cached_payload() ->
     erlang:get(rule_payload).
@@ -422,9 +424,7 @@ cache_payload(DecodedP) ->
     erlang:put(rule_payload, DecodedP),
     DecodedP.
 
-ensure_decoded(Json) when is_map(Json); is_list(Json) ->
-    Json;
-ensure_decoded(MaybeJson) ->
+safe_decode_and_cache(MaybeJson) ->
     try cache_payload(emqx_json:decode(MaybeJson, [return_maps]))
     catch _:_ -> #{}
     end.
