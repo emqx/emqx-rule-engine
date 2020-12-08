@@ -132,6 +132,7 @@ groups() ->
        t_sqlselect_multi_actoins_1_1,
        t_sqlselect_multi_actoins_2,
        t_sqlselect_multi_actoins_3,
+       t_sqlselect_multi_actoins_3_1,
        t_sqlselect_multi_actoins_4
       ]}
     ].
@@ -204,12 +205,19 @@ init_per_testcase(Test, Config)
             ;Test =:= t_sqlselect_multi_actoins_1_1
             ;Test =:= t_sqlselect_multi_actoins_2
             ;Test =:= t_sqlselect_multi_actoins_3
+            ;Test =:= t_sqlselect_multi_actoins_3_1
             ;Test =:= t_sqlselect_multi_actoins_4
         ->
     ok = emqx_rule_engine:load_providers(),
     ok = emqx_rule_registry:add_action(
             #action{name = 'crash_action', app = ?APP,
                     module = ?MODULE, on_create = crash_action,
+                    types=[], params_spec = #{},
+                    title = #{en => <<"Crash Action">>},
+                    description = #{en => <<"This action will always fail!">>}}),
+    ok = emqx_rule_registry:add_action(
+            #action{name = 'failure_action', app = ?APP,
+                    module = ?MODULE, on_create = failure_action,
                     types=[], params_spec = #{},
                     title = #{en => <<"Crash Action">>},
                     description = #{en => <<"This action will always fail!">>}}),
@@ -1269,6 +1277,44 @@ t_sqlselect_multi_actoins_3(Config) ->
 
     emqx_rule_registry:remove_rule(Rule).
 
+t_sqlselect_multi_actoins_3_1(Config) ->
+    %% We create 2 actions in the same rule (on_action_failed = continue):
+    %% The first will fail (with a 'badact' return) and we need to make sure the
+    %% fallback actions can be executed, and the next actoins
+    %% will be run without influence
+    {ok, Rule} = emqx_rule_engine:create_rule(
+                    #{rawsql => ?config(connsql, Config),
+                      on_action_failed => continue,
+                      actions => [
+                          #{name => 'failure_action', args => #{}, fallbacks =>[
+                              #{name => 'plus_by_one', args => #{}, fallbacks =>[]},
+                              #{name => 'plus_by_one', args => #{}, fallbacks =>[]}
+                          ]},
+                          #{name => 'republish',
+                            args => #{<<"target_topic">> => <<"t2">>,
+                                      <<"target_qos">> => -1,
+                                      <<"payload_tmpl">> => <<"clientid=${clientid}">>
+                                    },
+                            fallbacks => []}
+                      ]
+                     }),
+
+    (?config(conn_event, Config))(),
+    timer:sleep(100),
+
+    %% verfiy the fallback actions has been run
+    ?assertEqual(2, ets:lookup_element(plus_by_one_action, num, 2)),
+
+    %% verfiy the next actions can be run
+    receive {publish, #{topic := T, payload := Payload}} ->
+        ?assertEqual(<<"t2">>, T),
+        ?assertEqual(<<"clientid=c_emqx1">>, Payload)
+    after 1000 ->
+        ct:fail(wait_for_t2)
+    end,
+
+    emqx_rule_registry:remove_rule(Rule).
+
 t_sqlselect_multi_actoins_4(Config) ->
     %% We create 2 actions in the same rule (on_action_failed = continue):
     %% The first will fail and we need to make sure the
@@ -2017,6 +2063,20 @@ hook_metrics_action(_Id, _Params) ->
         ct:pal("applying hook_metrics_action: ~p", [Data]),
         ets:insert(events_record_tab, {EventName, Data})
     end.
+
+mfa_action(Id, _Params) ->
+    persistent_term:put(Id, 0),
+    {?MODULE, mfa_action_do, [Id]}.
+
+mfa_action_do(_Data, _Envs, K) ->
+    persistent_term:put(K, 1).
+
+failure_action(_Id, _Params) ->
+    fun(Data, _Envs) ->
+        ct:pal("applying crash action, Data: ~p", [Data]),
+        {badact, intentional_failure}
+    end.
+
 crash_action(_Id, _Params) ->
     fun(Data, _Envs) ->
         ct:pal("applying crash action, Data: ~p", [Data]),
