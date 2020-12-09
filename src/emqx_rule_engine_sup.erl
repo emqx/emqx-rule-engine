@@ -49,5 +49,5 @@ init([]) ->
                shutdown => 5000,
                type => worker,
                modules => [emqx_rule_locker]},
-    {ok, {{one_for_all, 10, 100}, [Registry, Metrics, Locker]}}.
+    {ok, {{one_for_one, 10, 100}, [Registry, Metrics, Locker]}}.
 
