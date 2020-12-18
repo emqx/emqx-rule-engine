@@ -161,7 +161,18 @@ get_action_metrics(Id) ->
 inc(Id, Metric) ->
     inc(Id, Metric, 1).
 inc(Id, Metric, Val) ->
-    counters:add(couters_ref(Id), metrics_idx(Metric), Val),
+    case couters_ref(Id) of
+        not_found ->
+            %% this may occur when increasing a counter for
+            %% a rule that was created from a remove node.
+            case atom_to_list(Metric) of
+                "rules." ++ _ -> create_rule_metrics(Id);
+                _ -> create_metrics(Id)
+            end,
+            counters:add(couters_ref(Id), metrics_idx(Metric), Val);
+        Ref ->
+            counters:add(Ref, metrics_idx(Metric), Val)
+    end,
     inc_overall(Metric, Val).
 
 -spec(inc_overall(rule_id(), atom()) -> ok).
@@ -239,6 +250,7 @@ handle_call(get_overall_rule_speed, _From, State = #state{overall_rule_speed = R
     {reply, format_rule_speed(RuleSpeed), State};
 
 handle_call({create_metrics, Id}, _From, State = #state{metric_ids = MIDs}) ->
+
     {reply, create_counters(Id), State#state{metric_ids = sets:add_element(Id, MIDs)}};
 
 handle_call({create_rule_metrics, Id}, _From,
