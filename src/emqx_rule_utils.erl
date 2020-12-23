@@ -26,6 +26,7 @@
         , preproc_sql/1
         , preproc_sql/2
         , proc_sql/2
+        , proc_sql_param_str/2
         ]).
 
 %% type converting
@@ -109,7 +110,6 @@ proc_tmpl(Tokens, Data, Opts = #{return := rawlist}) ->
                 get_phld_var(Phld, Data)
         end, Tokens).
 
-
 -spec(preproc_cmd(binary()) -> tmpl_cmd()).
 preproc_cmd(Str) ->
     SubStrList = re:split(Str, ?EX_WITHE_CHARS, [{return,binary},trim]),
@@ -138,6 +138,11 @@ preproc_sql(Sql, ReplaceWith) ->
 -spec(proc_sql(tmpl_token(), map()) -> list()).
 proc_sql(Tokens, Data) ->
     proc_tmpl(Tokens, Data, #{return => rawlist, var_trans => fun sql_data/1}).
+
+-spec(proc_sql_param_str(tmpl_token(), map()) -> binary()).
+proc_sql_param_str(Tokens, Data) ->
+    iolist_to_binary(
+      proc_tmpl(Tokens, Data, #{return => rawlist, var_trans => fun quote/1})).
 
 %% backward compatibility for hot upgrading from =< e4.2.1
 get_phld_var(Fun, Data) when is_function(Fun) ->
@@ -228,6 +233,13 @@ sql_data(Num) when is_number(Num) -> Num;
 sql_data(Bool) when is_boolean(Bool) -> Bool;
 sql_data(Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8);
 sql_data(Map) when is_map(Map) -> emqx_json:encode(Map).
+
+quote(List) when is_list(List) -> [$', List, $'];
+quote(Bin) when is_binary(Bin) -> [$', Bin, $'];
+quote(Num) when is_number(Num) -> bin(Num);
+quote(Bool) when is_boolean(Bool) -> bin(Bool);
+quote(Atom) when is_atom(Atom) -> [$', atom_to_binary(Atom, utf8), $'];
+quote(Map) when is_map(Map) -> [$', emqx_json:encode(Map), $'].
 
 str(Bin) when is_binary(Bin) -> binary_to_list(Bin);
 str(Num) when is_number(Num) -> number_to_list(Num);
