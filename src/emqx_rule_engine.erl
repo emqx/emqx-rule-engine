@@ -55,6 +55,8 @@
              , action_instance_params/0
              ]).
 
+-export([cluster_call/2]).
+
 -define(ALARM_ID_RES_DOWN(RES_ID), <<"resource_down/", RES_ID/binary>>).
 
 %%------------------------------------------------------------------------------
@@ -444,7 +446,11 @@ refresh_actions_of_a_resource(ResId) ->
                              id = Id, name = ActName}) when ResId0 =:= ResId ->
                 {ok, #action{module = Mod, on_create = Create}}
                     = emqx_rule_registry:find_action(ActName),
-                init_action(Mod, Create, Id, with_resource_params(Args));
+                try
+                    init_action(Mod, Create, Id, with_resource_params(Args))
+                catch _Error:Reason:STrace ->
+                    ?LOG(critical, "Initiate action for ~p failed: ~0p", [Id, {Reason, STrace}])
+                end;
             (#action_instance{}) ->
                 ok
         end, Actions)

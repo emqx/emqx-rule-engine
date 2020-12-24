@@ -301,17 +301,15 @@ get_resource_status(#{id := Id}, _Params) ->
     end.
 
 start_resource(#{id := Id}, _Params) ->
-    try emqx_rule_engine:start_resource(Id) of
+    try emqx_rule_engine:cluster_call(start_resource, [Id]) of
         ok ->
             return(ok);
         {error, {resource_not_found, ResId}} ->
             return({error, 400, ?ERR_NO_RESOURCE(ResId)})
     catch
-        throw:{{init_resource_failure, _}, Reason} ->
-            ?LOG(error, "[RuleEngineAPI] init_resource_failure: ~p", [Reason]),
-            return({error, 400, ?ERR_START_RESOURCE(Id)});
         throw:Reason ->
-            return({error, 400, ?ERR_BADARGS(Reason)});
+            ?LOG(error, "[RuleEngineAPI] start_resource_failure: ~p", [Reason]),
+            return({error, 400, ?ERR_START_RESOURCE(Id)});
         _Error:Reason:StackT ->
             ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
             return({error, 400, ?ERR_BADARGS(Reason)})
