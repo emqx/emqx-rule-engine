@@ -172,8 +172,8 @@
 -define(ERR_NO_RESOURCE(RESID), list_to_binary(io_lib:format("Resource ~s Not Found", [(RESID)]))).
 -define(ERR_NO_HOOK(HOOK), list_to_binary(io_lib:format("Event ~s Not Found", [(HOOK)]))).
 -define(ERR_NO_RESOURCE_TYPE(TYPE), list_to_binary(io_lib:format("Resource Type ~s Not Found", [(TYPE)]))).
--define(ERR_UNKNOWN_COLUMN(COLUMN), list_to_binary(io_lib:format("Unknown Column: ~s", [(COLUMN)]))).
--define(ERR_START_RESOURCE(RESID), list_to_binary(io_lib:format("Start Resource ~s Failed", [(RESID)]))).
+-define(ERR_DEPENDCY_EXISTS(RULE), list_to_binary(io_lib:format("This resource is depended by rule:~s", [(RULE)]))).
+-define(ERR_SERVER_INTERNAL, list_to_binary("Server internal error")).
 -define(ERR_BADARGS(REASON),
         begin
             R0 = list_to_binary(io_lib:format("~0p", [REASON])),
@@ -338,17 +338,42 @@ start_resource(#{id := Id}, _Params) ->
         ok ->
             return(ok);
         {error, {resource_not_found, ResId}} ->
-            return({error, 400, ?ERR_NO_RESOURCE(ResId)})
-    catch
-        throw:{{init_resource_failure, _}, Reason} ->
-            ?LOG(error, "[RuleEngineAPI] init_resource_failure: ~p", [Reason]),
-            return({error, 400, ?ERR_START_RESOURCE(Id)});
-        throw:Reason ->
-            return({error, 400, ?ERR_BADARGS(Reason)});
-        _Error:Reason:StackT ->
-            ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
+            return({error, 400, ?ERR_NO_RESOURCE(ResId)});
+        {error, Reason} ->
+            ?LOG(error, "~p failed: ~0p", [?FUNCTION_NAME, Reason]),
             return({error, 400, ?ERR_BADARGS(Reason)})
     end.
+
+update_resource(#{id := Id}, NewParams) ->
+    try
+        Maps = maps:from_list(NewParams),
+        Config = case maps:get(<<"config">>, Maps) of
+                    <<"{}">> -> #{};
+                    Map -> Map
+                 end,
+        Description =  maps:get(<<"description">>, Maps, ""),
+        R = emqx_rule_engine:update_resource(Id, #{<<"config">> => maps:from_list(Config),
+                                                   <<"description">> => Description}),
+        case R of
+            ok ->
+                return(ok);
+            {error, R} ->
+                throw(R)
+        end
+    catch _ : Reason ->
+        ?LOG(error, "update_resource failed: ~0p", [Reason]),
+        case Reason of
+            {throw,{dependency_exists,{rule, Rule}}} ->
+                return({error, 500, ?ERR_DEPENDCY_EXISTS(Rule)});
+            {error, {resource_type_not_found, Type}} ->
+                return({error, 500, ?ERR_NO_RESOURCE_TYPE(Type)});
+            {error, not_found} ->
+                return({error, 500, ?ERR_NO_RESOURCE(Id)});
+            _Other ->
+                return({error, 500, ?ERR_SERVER_INTERNAL})
+        end
+    end.
+
 
 delete_resource(#{id := Id}, _Params) ->
     try
@@ -532,7 +557,14 @@ parse_resource_params([_ | Params], Res) ->
     parse_resource_params(Params, Res).
 
 json_term_to_map(List) ->
-    emqx_json:decode(emqx_json:encode(List), [return_maps]).
+    Data = lists:map(fun({K, V}) ->
+                    case V of
+                        {} ->{K, [{}]};
+                        _ -> {K, V}
+                    end
+                 end,
+            List),
+    emqx_json:decode(emqx_json:encode(Data), [return_maps]).
 
 sort_by_title(action, Actions) ->
     sort_by(#action.title, Actions);

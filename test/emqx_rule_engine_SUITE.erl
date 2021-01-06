@@ -259,6 +259,7 @@ init_per_testcase(_TestCase, Config) ->
     %ct:pal("============ ~p", [ets:tab2list(emqx_resource_type)]),
     Config.
 
+
 end_per_testcase(t_events, Config) ->
     ets:delete(events_record_tab),
     ok = emqx_rule_registry:remove_rule(?config(hook_points_rules, Config)),
@@ -376,7 +377,7 @@ t_crud_rule_api(_Config) ->
                  {<<"rawsql">>, <<"select * from \"t/a\"">>},
                  {<<"actions">>, [[{<<"name">>,<<"inspect">>},
                                    {<<"params">>,[{<<"arg1">>,1}]}]]},
-                 {<<"description">>, <<"debug rule">>}]),
+                 {description, <<"debug rule">>}]),
     RuleID = maps:get(id, Rule),
     %ct:pal("RCreated : ~p", [Rule]),
 
@@ -442,14 +443,35 @@ t_crud_resources_api(_Config) ->
     ResId = maps:get(id, Resources1),
     {ok, #{code := 0, data := Resources}} = emqx_rule_engine_api:list_resources(#{},[]),
     ?assert(length(Resources) > 0),
-
     {ok, #{code := 0, data := Resources2}} = emqx_rule_engine_api:show_resource(#{id => ResId},[]),
     ?assertEqual(ResId, maps:get(id, Resources2)),
-
+    %
+    {ok, #{code := 0}} = emqx_rule_engine_api:update_resource(#{id => ResId},
+                                                              [{<<"id">>, ResId},
+                                                               {<<"type">>, <<"built_in">>},
+                                                               {<<"config">>, [{<<"a">>, 2}]},
+                                                               {<<"description">>, <<"2">>}]),
+    {ok, #{code := 0, data := Resources3}} = emqx_rule_engine_api:show_resource(#{id => ResId},[]),
+    ?assertEqual(ResId, maps:get(id, Resources3)),
+    ?assertEqual(#{<<"a">> => 2}, maps:get(config, Resources3)),
+    ?assertEqual(<<"2">>, maps:get(description, Resources3)),
+    {ok, #{code := 0, data := Resources3}} = emqx_rule_engine_api:show_resource(#{id => ResId},[]),
+    ?assertEqual(ResId, maps:get(id, Resources3)),
+    %
+    {ok, #{code := 0}} = emqx_rule_engine_api:update_resource(#{id => ResId},
+                                                              [{<<"id">>, ResId},
+                                                               {<<"type">>, <<"built_in">>},
+                                                               {<<"config">>, [{<<"a">>, 3}]}]),
+    {ok, #{code := 0, data := Resources4}} = emqx_rule_engine_api:show_resource(#{id => ResId},[]),
+    ?assertEqual(ResId, maps:get(id, Resources4)),
+    ?assertEqual(#{<<"a">> => 3}, maps:get(config, Resources4)),
+    ?assertEqual(<<"2">>, maps:get(description, Resources4)),
+    %
     ?assertMatch({ok, #{code := 0}}, emqx_rule_engine_api:delete_resource(#{id => ResId},#{})),
 
     ?assertMatch({ok, #{code := 404}}, emqx_rule_engine_api:show_resource(#{id => ResId},[])),
     ok.
+
 
 t_list_resource_types_api(_Config) ->
     {ok, #{code := 0, data := ResourceTypes}} = emqx_rule_engine_api:list_resource_types(#{},[]),

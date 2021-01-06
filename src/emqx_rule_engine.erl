@@ -39,9 +39,11 @@
         , get_resource_status/1
         , get_resource_params/1
         , delete_resource/1
+        , update_resource/2
         ]).
 
 -export([ init_resource/4
+        , init_resource/5
         , init_action/4
         , clear_resource/3
         , clear_rule/1
@@ -222,6 +224,52 @@ create_resource(#{type := Type, config := Config} = Params) ->
             {ok, Resource};
         not_found ->
             {error, {resource_type_not_found, Type}}
+    end.
+
+-spec(update_resource(map()) -> ok | {error, term()}).
+update_resource(#{id := Id, type := Type, config := NewConfig,
+                  description := Description}) ->
+    case emqx_rule_registry:find_resource_type(Type) of
+        {ok, #resource_type{on_create = {Module, Create},
+                            params_spec = ParamSpec}} ->
+            Config = emqx_rule_validator:validate_params(NewConfig, ParamSpec),
+            case delete_resource(Id) of
+                {error, not_found} -> {error, not_found};
+                _ -> %% deletion might fail because of an associted rule.
+                   ok = emqx_rule_registry:add_resource(
+                        #resource{id = Id,
+                                  config = Config,
+                                  type = Type,
+                                  description = Description,
+                                  created_at = erlang:system_time(millisecond)}),
+                    catch cluster_call(init_resource, [Module, Create, Id, Config, true]),
+                    ok
+            end;
+        not_found ->
+            {error, {resource_type_not_found, Type}}
+    end.
+
+-spec(update_resource(resource_id(), map()) -> ok
+                                            | {error, not_found}
+                                            | {error, Reason :: term()}).
+update_resource(Id, NewParams) ->
+    case emqx_rule_registry:find_resource(Id) of
+        {ok, #resource{id = Id,
+                       type = Type,
+                       config = OldConfig,
+                       description = OldDescription} = _OldResource} ->
+                NewConfig = maps:merge(OldConfig, maps:get(<<"config">>, NewParams, #{})),
+                NewDescription = maps:get(<<"description">>, NewParams, ""),
+                update_resource(#{id => Id,
+                                  config => NewConfig,
+                                  type => Type,
+                                  description => case string:length(NewDescription) of
+                                                      0 -> OldDescription;
+                                                      _ -> NewDescription
+                                                 end,
+                                  created_at => erlang:system_time(millisecond)});
+        _Other ->
+            {error, not_found}
     end.
 
 -spec(start_resource(resource_id()) -> ok | {error, Reason :: term()}).
@@ -438,9 +486,19 @@ cluster_call(Func, Args) ->
    end.
 
 init_resource(Module, OnCreate, ResId, Config) ->
-    Params = ?RAISE(Module:OnCreate(ResId, Config),
-                    {{init_resource_failure, node()}, {{Module, OnCreate}, {_REASON_,_ST_}}}),
-    emqx_rule_registry:add_resource_params(#resource_params{id = ResId, params = Params, status = #{is_alive => true}}).
+    init_resource(Module, OnCreate, ResId, Config, false).
+
+init_resource(Module, OnCreate, ResId, Config, Restart) ->
+    Params = ?RAISE(
+        Module:OnCreate(ResId, Config),
+        Restart andalso
+            timer:apply_after(timer:seconds(60), ?MODULE, init_resource,
+                              [Module, OnCreate, ResId, Config, Restart]),
+        {{Module, OnCreate}, {_EXCLASS_, _EXCPTION_, _ST_}}),
+    ResParams = #resource_params{id = ResId,
+                                 params = Params,
+                                 status = #{is_alive => true}},
+    emqx_rule_registry:add_resource_params(ResParams).
 
 init_action(Module, OnCreate, ActionInstId, Params) ->
     ok = emqx_rule_metrics:create_metrics(ActionInstId),

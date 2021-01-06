@@ -44,6 +44,13 @@
         , {descr, $d, "descr", {binary, <<"">>}, "Description"}
         ]).
 
+-define(OPTSPEC_RESOURCES_UPDATE,
+        [ {type, $t, "type", {atom, undefined}, "Resource Type"}
+        , {id, $i, "id", {binary, <<"">>}, "The resource id. A random resource id will be used if not provided"}
+        , {config, $c, "config", {binary, <<"{}">>}, "Config"}
+        , {description, $d, "description", {binary, <<"">>}, "Description"}
+        ]).
+
 -define(OPTSPEC_RULES_CREATE,
         [ {sql, undefined, undefined, binary, "Filter Condition SQL"}
         , {actions, undefined, undefined, binary, "Action List in JSON format: [{\"name\": <action_name>, \"params\": {<key>: <value>}}]"}
@@ -62,6 +69,12 @@
         , {descr, $d, "descr", {binary, undefined}, "Description"}
         ]).
 
+-define(ERR_NO_RULE(ID), list_to_binary(io_lib:format("Rule ~s Not Found~n", [(ID)]))).
+-define(ERR_NO_ACTION(NAME), list_to_binary(io_lib:format("Action ~s Not Found~n", [(NAME)]))).
+-define(ERR_NO_RESOURCE(RESID), list_to_binary(io_lib:format("Resource ~s Not Found~n", [(RESID)]))).
+-define(ERR_NO_RESOURCE_TYPE(TYPE), list_to_binary(io_lib:format("Resource Type ~s Not Found~n", [(TYPE)]))).
+-define(ERR_DEPENDCY_EXISTS(RULE), list_to_binary(io_lib:format("This resource is depended by rule:~s~n", [(RULE)]))).
+-define(ERR_SERVER_INTERNAL, list_to_binary("Server internal error")).
 %%-----------------------------------------------------------------------------
 %% Load/Unload Commands
 %%-----------------------------------------------------------------------------
@@ -153,6 +166,7 @@ actions(_usage) ->
 %%------------------------------------------------------------------------------
 %% 'resources' command
 %%------------------------------------------------------------------------------
+
 resources(["create" | Params]) ->
     with_opts(fun({Opts, _}) ->
                 try emqx_rule_engine:create_resource(make_resource(Opts)) of
@@ -165,6 +179,35 @@ resources(["create" | Params]) ->
                         emqx_ctl:print("Invalid options: ~0p~n", [Reason])
                 end
               end, Params, ?OPTSPEC_RESOURCES_CREATE, {?FUNCTION_NAME, create});
+
+
+resources(["update" | Params]) ->
+    with_opts(fun({Opts, _}) ->
+        Id = maps:get(id, maps:from_list(Opts)),
+        Maps = make_updated_resource(Opts),
+        try
+            R = emqx_rule_engine:update_resource(Id, Maps),
+            case R of
+                ok ->
+                    emqx_ctl:print("Resource update successfully~n");
+                {error, R} ->
+                    throw(R)
+            end
+        catch _ : Reason ->
+            case Reason of
+                {throw,{dependency_exists,{rule, Rule}}} ->
+                    emqx_ctl:print(?ERR_DEPENDCY_EXISTS(Rule));
+                {error, {resource_type_not_found, Type}} ->
+                    emqx_ctl:print(?ERR_NO_RESOURCE_TYPE(Type));
+                {error, not_found} ->
+                    emqx_ctl:print(?ERR_NO_RESOURCE(Id));
+                {case_clause, {error, not_found}} ->
+                    emqx_ctl:print(?ERR_NO_RESOURCE(Id));
+                _ ->
+                    emqx_ctl:print(?ERR_SERVER_INTERNAL)
+            end
+        end
+        end, Params, ?OPTSPEC_RESOURCES_UPDATE, {?FUNCTION_NAME, update});
 
 resources(["test" | Params]) ->
     with_opts(fun({Opts, _}) ->
@@ -204,7 +247,8 @@ resources(_usage) ->
     emqx_ctl:usage([{"resources create", "Create a resource"},
                     {"resources list [-t <ResourceType>]", "List resources"},
                     {"resources show <ResourceId>", "Show a resource"},
-                    {"resources delete <ResourceId>", "Delete a resource"}
+                    {"resources delete <ResourceId>", "Delete a resource"},
+                    {"resources update <ResourceId> [-t [<type>]] [-c [<config>]] [-d [<description>]]", "Update a resource"}
                    ]).
 
 %%------------------------------------------------------------------------------
@@ -313,6 +357,15 @@ make_resource(Opts) ->
         #{type => get_value(type, Opts),
           config => ?RAISE(emqx_json:decode(Config, [return_maps]), {invalid_config, Config}),
           description => get_value(descr, Opts)}, id, <<"">>, Opts).
+
+make_updated_resource(Opts) ->
+    Config = case get_value(config, Opts) of
+                <<"{}">> -> <<"[]">>;
+                Map -> Map
+             end,
+    may_with_opt(
+        #{<<"config">> => ?RAISE(maps:from_list(emqx_json:decode(Config)), {invalid_config, Config}),
+          <<"description">> => get_value(description, Opts)}, id, <<"">>, Opts).
 
 printable_actions(Actions) when is_list(Actions) ->
     emqx_json:encode([#{id => Id, name => Name, params => Args,
