@@ -171,6 +171,11 @@
         , json_encode/1
         ]).
 
+%% Proc Dict Func
+-export([ proc_dict_get/1
+        , proc_dict_put/2
+        ]).
+
 %% Date functions
 -export([ now_rfc3339/0
         , now_rfc3339/1
@@ -773,6 +778,16 @@ json_encode(Data) ->
 
 json_decode(Data) ->
     emqx_json:decode(Data, [return_maps]).
+
+%%------------------------------------------------------------------------------
+%% Dict Funcs
+%%------------------------------------------------------------------------------
+-define(DICT_KEY(KEY), {'@rule_engine', KEY}).
+proc_dict_get(Key) ->
+    erlang:get(?DICT_KEY(Key)).
+
+proc_dict_put(Key, Val) ->
+    erlang:put(?DICT_KEY(Key), Val).
 
 %%--------------------------------------------------------------------
 %% Date functions
