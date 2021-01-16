@@ -91,6 +91,8 @@
         , int/1
         , float/1
         , map/1
+        , bin2hexstr/1
+        , hexstr2bin/1
         ]).
 
 %% Data Type Validation Funcs
@@ -499,6 +501,13 @@ float(Data) ->
 
 map(Data) ->
     emqx_rule_utils:map(Data).
+
+bin2hexstr(Bin) when is_binary(Bin) ->
+    IntL = binary_to_list(Bin),
+    list_to_binary([io_lib:format("~2.16.0B", [Int]) || Int <- IntL]).
+
+hexstr2bin(Str) when is_binary(Str) ->
+    list_to_binary([binary_to_integer(W, 16) || <<W:2/binary>> <= Str]).
 
 %%------------------------------------------------------------------------------
 %% NULL Funcs

@@ -143,6 +143,14 @@ t_bool(_) ->
     ?assertEqual(false, emqx_rule_funcs:bool(<<"false">>)),
     ?assertError({invalid_boolean, _}, emqx_rule_funcs:bool(3)).
 
+t_hexstr2bin(_) ->
+    ?assertEqual(<<1,2>>, emqx_rule_funcs:hexstr2bin(<<"0102">>)),
+    ?assertEqual(<<17,33>>, emqx_rule_funcs:hexstr2bin(<<"1121">>)).
+
+t_bin2hexstr(_) ->
+    ?assertEqual(<<"0102">>, emqx_rule_funcs:bin2hexstr(<<1,2>>)),
+    ?assertEqual(<<"1121">>, emqx_rule_funcs:bin2hexstr(<<17,33>>)).
+
 t_is_null(_) ->
     ?assertEqual(true, emqx_rule_funcs:is_null(undefined)),
     ?assertEqual(false, emqx_rule_funcs:is_null(a)),
@@ -278,6 +286,18 @@ prop_bits_op() ->
                 (X bxor Y) == apply_func(bitxor, [X, Y]) andalso
                 (X bsl Y) == apply_func(bitsl, [X, Y]) andalso
                 (X bsr Y) == apply_func(bitsr, [X, Y])
+            end).
+
+t_hex_convert(_) ->
+    ?PROPTEST(hex_convert).
+
+hex_convert() ->
+    ?FORALL(L, list(range(0, 255)),
+            begin
+                AbitraryBin = list_to_binary(L),
+                io:format("----~p~n", [AbitraryBin]),
+                AbitraryBin == emqx_rule_funcs:hexstr2bin(
+                    emqx_rule_funcs:bin2hexstr(AbitraryBin))
             end).
 
 %%------------------------------------------------------------------------------
