@@ -171,6 +171,8 @@
         , base64_decode/1
         , json_decode/1
         , json_encode/1
+        , term_decode/1
+        , term_encode/1
         ]).
 
 %% Proc Dict Func
@@ -787,6 +789,12 @@ json_encode(Data) ->
 
 json_decode(Data) ->
     emqx_json:decode(Data, [return_maps]).
+
+term_encode(Term) ->
+    erlang:term_to_binary(Term).
+
+term_decode(Data) ->
+    erlang:binary_to_term(Data).
 
 %%------------------------------------------------------------------------------
 %% Dict Funcs
