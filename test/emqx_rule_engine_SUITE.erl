@@ -338,6 +338,7 @@ t_republish_action(_Config) ->
                       actions => [#{name => 'republish',
                                     args => #{<<"target_topic">> => <<"t2">>,
                                               <<"target_qos">> => -1,
+                                              <<"target_retain">> => 0,
                                               <<"payload_tmpl">> => <<"${payload}">>}}],
                       description => <<"builtin-republish-rule">>}),
     {ok, Client} = emqtt:start_link([{username, <<"emqx">>}]),
@@ -395,6 +396,7 @@ t_crud_rule_api(_Config) ->
                             {<<"arg1">>,1},
                             {<<"target_topic">>, <<"t2">>},
                             {<<"target_qos">>, -1},
+                            {<<"target_retain">>, 0},
                             {<<"payload_tmpl">>, <<"${payload}">>}
                         ]}
                     ]]
@@ -1161,6 +1163,7 @@ t_sqlselect_multi_actoins_1(Config) ->
                           #{name => 'republish',
                             args => #{<<"target_topic">> => <<"t2">>,
                                       <<"target_qos">> => -1,
+                                      <<"target_retain">> => 0,
                                       <<"payload_tmpl">> => <<"clientid=${clientid}">>
                                      },
                             fallbacks => []}
@@ -1187,6 +1190,7 @@ t_sqlselect_multi_actoins_1_1(Config) ->
                           #{name => 'republish',
                             args => #{<<"target_topic">> => <<"t2">>,
                                       <<"target_qos">> => -1,
+                                      <<"target_retain">> => 0,
                                       <<"payload_tmpl">> => <<"clientid=${clientid}">>
                                     },
                             fallbacks => []}
@@ -1215,6 +1219,7 @@ t_sqlselect_multi_actoins_2(Config) ->
                           #{name => 'republish',
                             args => #{<<"target_topic">> => <<"t2">>,
                                       <<"target_qos">> => -1,
+                                      <<"target_retain">> => 0,
                                       <<"payload_tmpl">> => <<"clientid=${clientid}">>
                                     },
                             fallbacks => []}
@@ -1246,6 +1251,7 @@ t_sqlselect_multi_actoins_3(Config) ->
                           #{name => 'republish',
                             args => #{<<"target_topic">> => <<"t2">>,
                                       <<"target_qos">> => -1,
+                                      <<"target_retain">> => 0,
                                       <<"payload_tmpl">> => <<"clientid=${clientid}">>
                                     },
                             fallbacks => []}
@@ -1285,6 +1291,7 @@ t_sqlselect_multi_actoins_4(Config) ->
                           #{name => 'republish',
                             args => #{<<"target_topic">> => <<"t2">>,
                                       <<"target_qos">> => -1,
+                                      <<"target_retain">> => 0,
                                       <<"payload_tmpl">> => <<"clientid=${clientid}">>
                                     },
                             fallbacks => []}
@@ -1971,6 +1978,7 @@ create_simple_repub_rule(TargetTopic, SQL, Template) ->
                       actions => [#{name => 'republish',
                                     args => #{<<"target_topic">> => TargetTopic,
                                               <<"target_qos">> => -1,
+                                              <<"target_retain">> => 0,
                                               <<"payload_tmpl">> => Template}
                                     }],
                       description => <<"simple repub rule">>}),
