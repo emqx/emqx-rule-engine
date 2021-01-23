@@ -51,8 +51,8 @@
                 default => 0,
                 title => #{en => <<"Target Retain">>,
                            zh => <<"目的 Retain"/utf8>>},
-                description => #{en => <<"1 to retain message">>,
-                                 zh => <<"重新发布消息时用的 QoS 级别, 设置为 -1 以使用原消息中的 QoS"/utf8>>}
+                description => #{en => <<"Set 1 to retain message, default 0 (retain false)">>,
+                                 zh => <<"Set 1 to retain message, default 0 (retain false)"/utf8>>}
             },
             payload_tmpl => #{
                 order => 4,
