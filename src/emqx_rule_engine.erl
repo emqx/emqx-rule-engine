@@ -242,13 +242,13 @@ start_resource(ResId) ->
 update_resource(ResId, NewParams) ->
     try
         lists:foreach(fun(#rule{id = RuleId, enabled = Enabled, actions = Actions}) ->
-                    lists:foreach(
-                        fun (#action_instance{args = #{<<"$resource">> := ResId1}})
-                            when ResId =:= ResId1, Enabled == true ->
-                                throw({dependency_exists, RuleId});
-                            (_) -> ok
-                        end, Actions)
-                    end, ets:tab2list(?RULE_TAB)),
+            lists:foreach(
+                fun (#action_instance{args = #{<<"$resource">> := ResId1}})
+                    when ResId =:= ResId1, Enabled == true ->
+                        throw({dependency_exists, RuleId});
+                    (_) -> ok
+                end, Actions)
+            end, ets:tab2list(?RULE_TAB)),
         do_update_resource_check(ResId, NewParams)
     catch _ : Reason ->
         {error, Reason}
@@ -262,15 +262,15 @@ do_update_resource_check(Id, NewParams) ->
                        description = OldDescription} = _OldResource} ->
                 try
                     do_update_resource(#{id => Id,
-                                        config => case maps:find(<<"config">>, NewParams) of
-                                                       {ok, NewConfig} -> NewConfig;
-                                                       error -> OldConfig
-                                                  end,
-                                        type => Type,
-                                        description => case maps:find(<<"description">>, NewParams) of
-                                                            {ok, NewDescription} -> NewDescription;
-                                                            error -> OldDescription
-                                                       end}),
+                                         config => case maps:find(<<"config">>, NewParams) of
+                                                        {ok, NewConfig} -> NewConfig;
+                                                        error -> OldConfig
+                                                   end,
+                                         type => Type,
+                                         description => case maps:find(<<"description">>, NewParams) of
+                                                             {ok, NewDescription} -> NewDescription;
+                                                             error -> OldDescription
+                                                        end}),
                     ok
                 catch _ : Reason ->
                     {error, Reason}
@@ -279,11 +279,14 @@ do_update_resource_check(Id, NewParams) ->
             {error, not_found}
     end.
 
-do_update_resource(#{id := Id, type := Type, description:= NewDescription, config:= NewConfig}) ->
+do_update_resource(#{id := Id, type := Type, description := NewDescription, config := NewConfig}) ->
     case emqx_rule_registry:find_resource_type(Type) of
-        {ok, #resource_type{on_create = {Module, Create},
-                            params_spec = ParamSpec}} ->
+       {ok, #resource_type{on_create = {Module, Create},
+                           on_destroy = {Module, Destroy},
+                           params_spec = ParamSpec}} ->
             ok = emqx_rule_validator:validate_params(NewConfig, ParamSpec),
+            test_resource(#{type => Type, config => NewConfig}),
+            catch cluster_call(clear_resource, [Module, Destroy, Id]),
             cluster_call(init_resource, [Module, Create, Id, NewConfig]),
             emqx_rule_registry:add_resource(#resource{id = Id,
                                                       type = Type,
@@ -344,23 +347,25 @@ delete_resource(ResId) ->
 
 -spec(refresh_resources() -> ok).
 refresh_resources() ->
-    [try refresh_resource(Res)
-     catch _:Error:ST ->
-        logger:critical(
-            "Can not re-stablish resource ~p: ~0p. The resource is disconnected."
-            "Fix the issue and establish it manually.\n"
-            "Stacktrace: ~0p",
-            [ResId, Error, ST])
-     end || Res = #resource{id = ResId}
-            <- emqx_rule_registry:get_resources()],
-    ok.
+    lists:foreach(fun(Resource) ->
+        refresh_resource(Resource)
+    end, emqx_rule_registry:get_resources()).
 
 refresh_resource(Type) when is_atom(Type) ->
-    [refresh_resource(Resource)
-     || Resource <- emqx_rule_registry:get_resources_by_type(Type)];
+    lists:foreach(fun(Resource) ->
+        refresh_resource(Resource)
+    end, emqx_rule_registry:get_resources_by_type(Type));
+
 refresh_resource(#resource{id = ResId, config = Config, type = Type}) ->
     {ok, #resource_type{on_create = {M, F}}} = emqx_rule_registry:find_resource_type(Type),
-    cluster_call(init_resource, [M, F, ResId, Config]).
+        try cluster_call(init_resource, [M, F, ResId, Config])
+        catch Error:Reason:ST ->
+            logger:critical(
+                "Can not re-stablish resource ~p: ~0p. The resource is disconnected."
+                "Fix the issue and establish it manually.\n"
+                "Stacktrace: ~0p",
+                [ResId, {Error, Reason}, ST])
+        end.
 
 -spec(refresh_rules() -> ok).
 refresh_rules() ->

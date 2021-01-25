@@ -165,6 +165,7 @@
         , get_resource_status/2
         , start_resource/2
         , delete_resource/2
+        , update_resource/2
         ]).
 
 -export([ list_resource_types/2
@@ -334,26 +335,26 @@ show_resource(#{id := Id}, _Params) ->
 
 update_resource(#{id := Id}, NewParams) ->
     P1 = case proplists:get_value(<<"description">>, NewParams) of
-            undefined -> #{};
-            Value -> #{<<"description">> => Value}
+        undefined -> #{};
+        Value -> #{<<"description">> => Value}
     end,
     P2 = case proplists:get_value(<<"config">>, NewParams) of
-            undefined -> #{};
-            <<"{}">> -> #{};
-            Map -> #{<<"config">> => ?RAISE(maps:from_list(Map), {invalid_config, Map})}
+        undefined -> #{};
+        [{}] -> #{};
+        Map -> #{<<"config">> => ?RAISE(maps:from_list(Map), {invalid_config, Map})}
     end,
     case emqx_rule_engine:update_resource(Id, maps:merge(P1, P2)) of
         ok ->
             return(ok);
         {error, not_found} ->
             ?LOG(error, "resource not found: ~0p", [Id]),
-            return({error, 400, list_to_binary("resource not found:" ++ binary_to_list(Id))});
+            return({error, 400, <<"resource not found:", Id/binary>>});
         {error, {init_resource_failure, _}} ->
             ?LOG(error, "init resource failure: ~0p", [Id]),
-            return({error, 500, list_to_binary("init resource failure:" ++ binary_to_list(Id))});
+            return({error, 500, <<"init resource failure:", Id/binary>>});
         {error, {dependency_exists, RuleId}} ->
             ?LOG(error, "dependency exists: ~0p", [RuleId]),
-            return({error, 500, list_to_binary("resource dependency by rule:" ++ binary_to_list(RuleId))});
+            return({error, 500, <<"resource dependency by rule:", RuleId/binary>>});
         {error, Reason} ->
             ?LOG(error, "update resource failed: ~0p", [Reason]),
             return({error, 500, <<"update resource failed,error info have been written to logfile!">>})
@@ -566,14 +567,7 @@ parse_resource_params([_ | Params], Res) ->
     parse_resource_params(Params, Res).
 
 json_term_to_map(List) ->
-    Data = lists:map(fun({K, V}) ->
-                    case V of
-                        {} ->{K, [{}]};
-                        _ -> {K, V}
-                    end
-                 end,
-            List),
-    emqx_json:decode(emqx_json:encode(Data), [return_maps]).
+    emqx_json:decode(emqx_json:encode(List), [return_maps]).
 
 sort_by_title(action, Actions) ->
     sort_by(#action.title, Actions);

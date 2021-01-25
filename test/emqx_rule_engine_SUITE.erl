@@ -443,12 +443,47 @@ t_crud_resources_api(_Config) ->
     ResId = maps:get(id, Resources1),
     {ok, #{code := 0, data := Resources}} = emqx_rule_engine_api:list_resources(#{},[]),
     ?assert(length(Resources) > 0),
-
     {ok, #{code := 0, data := Resources2}} = emqx_rule_engine_api:show_resource(#{id => ResId},[]),
     ?assertEqual(ResId, maps:get(id, Resources2)),
-
+    %
+    {ok, #{code := 0}} = emqx_rule_engine_api:update_resource(#{id => ResId},
+                                                              [{<<"config">>, [{<<"a">>, 2}]},
+                                                               {<<"description">>, <<"2">>}]),
+    {ok, #{code := 0, data := Resources3}} = emqx_rule_engine_api:show_resource(#{id => ResId},[]),
+    ?assertEqual(ResId, maps:get(id, Resources3)),
+    ?assertEqual(#{<<"a">> => 2}, maps:get(config, Resources3)),
+    ?assertEqual(<<"2">>, maps:get(description, Resources3)),
+    %
+    {ok, #{code := 0}} = emqx_rule_engine_api:update_resource(#{id => ResId},
+                                                              [{<<"config">>, [{<<"a">>, 3}]}]),
+    {ok, #{code := 0, data := Resources4}} = emqx_rule_engine_api:show_resource(#{id => ResId},[]),
+    ?assertEqual(ResId, maps:get(id, Resources4)),
+    ?assertEqual(#{<<"a">> => 3}, maps:get(config, Resources4)),
+    ?assertEqual(<<"2">>, maps:get(description, Resources4)),
+    % Only config
+    {ok, #{code := 0}} = emqx_rule_engine_api:update_resource(#{id => ResId},
+                                                              [{<<"config">>, [{<<"a">>, 1},
+                                                                               {<<"b">>, 2},
+                                                                               {<<"c">>, 3}]}]),
+    {ok, #{code := 0, data := Resources5}} = emqx_rule_engine_api:show_resource(#{id => ResId},[]),
+    ?assertEqual(ResId, maps:get(id, Resources5)),
+    ?assertEqual(#{<<"a">> => 1, <<"b">> => 2, <<"c">> => 3}, maps:get(config, Resources5)),
+    ?assertEqual(<<"2">>, maps:get(description, Resources5)),
+    % Only description
+    {ok, #{code := 0}} = emqx_rule_engine_api:update_resource(#{id => ResId},
+                                                              [{<<"description">>, <<"new5">>}]),
+    {ok, #{code := 0, data := Resources6}} = emqx_rule_engine_api:show_resource(#{id => ResId},[]),
+    ?assertEqual(ResId, maps:get(id, Resources6)),
+    ?assertEqual(#{<<"a">> => 1, <<"b">> => 2, <<"c">> => 3}, maps:get(config, Resources6)),
+    ?assertEqual(<<"new5">>, maps:get(description, Resources6)),
+    % None
+    {ok, #{code := 0}} = emqx_rule_engine_api:update_resource(#{id => ResId},[]),
+    {ok, #{code := 0, data := Resources7}} = emqx_rule_engine_api:show_resource(#{id => ResId},[]),
+    ?assertEqual(ResId, maps:get(id, Resources7)),
+    ?assertEqual(#{<<"a">> => 1, <<"b">> => 2, <<"c">> => 3}, maps:get(config, Resources7)),
+    ?assertEqual(<<"new5">>, maps:get(description, Resources7)),
+    %
     ?assertMatch({ok, #{code := 0}}, emqx_rule_engine_api:delete_resource(#{id => ResId},#{})),
-
     ?assertMatch({ok, #{code := 404}}, emqx_rule_engine_api:show_resource(#{id => ResId},[])),
     ok.
 
