@@ -39,6 +39,7 @@
         , get_resource_status/1
         , get_resource_params/1
         , delete_resource/1
+        , update_resource/2
         ]).
 
 -export([ init_resource/4
@@ -235,6 +236,60 @@ start_resource(ResId) ->
             ok;
         not_found ->
             {error, {resource_not_found, ResId}}
+    end.
+
+-spec(update_resource(resource_id(), map()) -> ok | {error, Reason :: term()}).
+update_resource(ResId, NewParams) ->
+    try
+        lists:foreach(fun(#rule{id = RuleId, enabled = Enabled, actions = Actions}) ->
+                    lists:foreach(
+                        fun (#action_instance{args = #{<<"$resource">> := ResId1}})
+                            when ResId =:= ResId1, Enabled == true ->
+                                throw({dependency_exists, RuleId});
+                            (_) -> ok
+                        end, Actions)
+                    end, ets:tab2list(?RULE_TAB)),
+        do_update_resource_check(ResId, NewParams)
+    catch _ : Reason ->
+        {error, Reason}
+    end.
+
+do_update_resource_check(Id, NewParams) ->
+    case emqx_rule_registry:find_resource(Id) of
+        {ok, #resource{id = Id,
+                       type = Type,
+                       config = OldConfig,
+                       description = OldDescription} = _OldResource} ->
+                try
+                    do_update_resource(#{id => Id,
+                                        config => case maps:find(<<"config">>, NewParams) of
+                                                       {ok, NewConfig} -> NewConfig;
+                                                       error -> OldConfig
+                                                  end,
+                                        type => Type,
+                                        description => case maps:find(<<"description">>, NewParams) of
+                                                            {ok, NewDescription} -> NewDescription;
+                                                            error -> OldDescription
+                                                       end}),
+                    ok
+                catch _ : Reason ->
+                    {error, Reason}
+                end;
+        _Other ->
+            {error, not_found}
+    end.
+
+do_update_resource(#{id := Id, type := Type, description:= NewDescription, config:= NewConfig}) ->
+    case emqx_rule_registry:find_resource_type(Type) of
+        {ok, #resource_type{on_create = {Module, Create},
+                            params_spec = ParamSpec}} ->
+            ok = emqx_rule_validator:validate_params(NewConfig, ParamSpec),
+            cluster_call(init_resource, [Module, Create, Id, NewConfig]),
+            emqx_rule_registry:add_resource(#resource{id = Id,
+                                                      type = Type,
+                                                      config = NewConfig,
+                                                      description = NewDescription,
+                                                      created_at = erlang:system_time(millisecond)})
     end.
 
 -spec(test_resource(#{}) -> ok | {error, Reason :: term()}).
