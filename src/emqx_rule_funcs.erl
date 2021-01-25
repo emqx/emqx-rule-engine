@@ -16,6 +16,8 @@
 
 -module(emqx_rule_funcs).
 
+-include("rule_engine.hrl").
+
 %% IoT Funcs
 -export([ msgid/0
         , qos/0
@@ -178,6 +180,9 @@
 %% Proc Dict Func
 -export([ proc_dict_get/1
         , proc_dict_put/2
+        , kv_store_get/1
+        , kv_store_get/2
+        , kv_store_put/2
         ]).
 
 %% Date functions
@@ -805,6 +810,17 @@ proc_dict_get(Key) ->
 
 proc_dict_put(Key, Val) ->
     erlang:put(?DICT_KEY(Key), Val).
+
+kv_store_put(Key, Val) ->
+    ets:insert(?KV_TAB, {Key, Val}).
+
+kv_store_get(Key) ->
+    kv_store_get(Key, undefined).
+kv_store_get(Key, Default) ->
+    case ets:lookup(?KV_TAB, Key) of
+        [{_, Val}] -> Val;
+        _ -> Default
+    end.
 
 %%--------------------------------------------------------------------
 %% Date functions

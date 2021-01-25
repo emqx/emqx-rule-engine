@@ -16,6 +16,8 @@
 
 -module(emqx_rule_engine_app).
 
+-include("rule_engine.hrl").
+
 -behaviour(application).
 
 -emqx_plugin(?MODULE).
@@ -24,9 +26,9 @@
 
 -export([stop/1]).
 
--define(APP, emqx_rule_engine).
-
 start(_Type, _Args) ->
+    ets:new(?KV_TAB, [named_table, set, public,
+        {write_concurrency, true}, {read_concurrency, true}]),
     {ok, Sup} = emqx_rule_engine_sup:start_link(),
     _ = emqx_rule_engine_sup:start_locker(),
     ok = emqx_rule_engine:load_providers(),
