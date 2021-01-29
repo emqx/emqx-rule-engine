@@ -75,6 +75,7 @@ groups() ->
        t_add_get_remove_rules,
        t_create_existing_rule,
        t_update_rule,
+       t_disable_rule,
        t_get_rules_for,
        t_get_rules_for_2,
        t_add_get_remove_action,
@@ -381,7 +382,7 @@ t_crud_rule_api(_Config) ->
     RuleID = maps:get(id, Rule),
     %ct:pal("RCreated : ~p", [Rule]),
 
-    {ok, #{code := 0, data := Rules}} = emqx_rule_engine_api:list_rules(#{},[]),
+    {ok, #{code := 0, data := Rules}} = emqx_rule_engine_api:list_rules(#{}, []),
     %ct:pal("RList : ~p", [Rules]),
     ?assert(length(Rules) > 0),
 
@@ -423,13 +424,13 @@ t_crud_rule_api(_Config) ->
     ok.
 
 t_list_actions_api(_Config) ->
-    {ok, #{code := 0, data := Actions}} = emqx_rule_engine_api:list_actions(#{},[]),
+    {ok, #{code := 0, data := Actions}} = emqx_rule_engine_api:list_actions(#{}, []),
     %ct:pal("RList : ~p", [Actions]),
     ?assert(length(Actions) > 0),
     ok.
 
 t_show_action_api(_Config) ->
-    {ok, #{code := 0, data := Actions}} = emqx_rule_engine_api:show_action(#{name => 'inspect'},[]),
+    {ok, #{code := 0, data := Actions}} = emqx_rule_engine_api:show_action(#{name => 'inspect'}, []),
     ?assertEqual('inspect', maps:get(name, Actions)),
     ok.
 
@@ -441,24 +442,59 @@ t_crud_resources_api(_Config) ->
              {<<"config">>, [{<<"a">>, 1}]},
              {<<"description">>, <<"Simple Resource">>}]),
     ResId = maps:get(id, Resources1),
-    {ok, #{code := 0, data := Resources}} = emqx_rule_engine_api:list_resources(#{},[]),
+    {ok, #{code := 0, data := Resources}} = emqx_rule_engine_api:list_resources(#{}, []),
     ?assert(length(Resources) > 0),
-
-    {ok, #{code := 0, data := Resources2}} = emqx_rule_engine_api:show_resource(#{id => ResId},[]),
+    {ok, #{code := 0, data := Resources2}} = emqx_rule_engine_api:show_resource(#{id => ResId}, []),
     ?assertEqual(ResId, maps:get(id, Resources2)),
-
+    %
+    {ok, #{code := 0}} = emqx_rule_engine_api:update_resource(#{id => ResId},
+                                                              [{<<"config">>, [{<<"a">>, 2}]},
+                                                               {<<"description">>, <<"2">>}]),
+    {ok, #{code := 0, data := Resources3}} = emqx_rule_engine_api:show_resource(#{id => ResId}, []),
+    ?assertEqual(ResId, maps:get(id, Resources3)),
+    ?assertEqual(#{<<"a">> => 2}, maps:get(config, Resources3)),
+    ?assertEqual(<<"2">>, maps:get(description, Resources3)),
+    %
+    {ok, #{code := 0}} = emqx_rule_engine_api:update_resource(#{id => ResId},
+                                                              [{<<"config">>, [{<<"a">>, 3}]}]),
+    {ok, #{code := 0, data := Resources4}} = emqx_rule_engine_api:show_resource(#{id => ResId}, []),
+    ?assertEqual(ResId, maps:get(id, Resources4)),
+    ?assertEqual(#{<<"a">> => 3}, maps:get(config, Resources4)),
+    ?assertEqual(<<"2">>, maps:get(description, Resources4)),
+    % Only config
+    {ok, #{code := 0}} = emqx_rule_engine_api:update_resource(#{id => ResId},
+                                                              [{<<"config">>, [{<<"a">>, 1},
+                                                                               {<<"b">>, 2},
+                                                                               {<<"c">>, 3}]}]),
+    {ok, #{code := 0, data := Resources5}} = emqx_rule_engine_api:show_resource(#{id => ResId}, []),
+    ?assertEqual(ResId, maps:get(id, Resources5)),
+    ?assertEqual(#{<<"a">> => 1, <<"b">> => 2, <<"c">> => 3}, maps:get(config, Resources5)),
+    ?assertEqual(<<"2">>, maps:get(description, Resources5)),
+    % Only description
+    {ok, #{code := 0}} = emqx_rule_engine_api:update_resource(#{id => ResId},
+                                                              [{<<"description">>, <<"new5">>}]),
+    {ok, #{code := 0, data := Resources6}} = emqx_rule_engine_api:show_resource(#{id => ResId}, []),
+    ?assertEqual(ResId, maps:get(id, Resources6)),
+    ?assertEqual(#{<<"a">> => 1, <<"b">> => 2, <<"c">> => 3}, maps:get(config, Resources6)),
+    ?assertEqual(<<"new5">>, maps:get(description, Resources6)),
+    % None
+    {ok, #{code := 0}} = emqx_rule_engine_api:update_resource(#{id => ResId}, []),
+    {ok, #{code := 0, data := Resources7}} = emqx_rule_engine_api:show_resource(#{id => ResId}, []),
+    ?assertEqual(ResId, maps:get(id, Resources7)),
+    ?assertEqual(#{<<"a">> => 1, <<"b">> => 2, <<"c">> => 3}, maps:get(config, Resources7)),
+    ?assertEqual(<<"new5">>, maps:get(description, Resources7)),
+    %
     ?assertMatch({ok, #{code := 0}}, emqx_rule_engine_api:delete_resource(#{id => ResId},#{})),
-
-    ?assertMatch({ok, #{code := 404}}, emqx_rule_engine_api:show_resource(#{id => ResId},[])),
+    ?assertMatch({ok, #{code := 404}}, emqx_rule_engine_api:show_resource(#{id => ResId}, [])),
     ok.
 
 t_list_resource_types_api(_Config) ->
-    {ok, #{code := 0, data := ResourceTypes}} = emqx_rule_engine_api:list_resource_types(#{},[]),
+    {ok, #{code := 0, data := ResourceTypes}} = emqx_rule_engine_api:list_resource_types(#{}, []),
     ?assert(length(ResourceTypes) > 0),
     ok.
 
 t_show_resource_type_api(_Config) ->
-    {ok, #{code := 0, data := RShow}} = emqx_rule_engine_api:show_resource_type(#{name => 'built_in'},[]),
+    {ok, #{code := 0, data := RShow}} = emqx_rule_engine_api:show_resource_type(#{name => 'built_in'}, []),
     %ct:pal("RShow : ~p", [RShow]),
     ?assertEqual(built_in, maps:get(name, RShow)),
     ok.
@@ -639,6 +675,48 @@ t_update_rule(_Config) ->
     ok = emqx_rule_engine:delete_rule(<<"an_existing_rule">>),
     ?assertEqual(not_found, emqx_rule_registry:get_rule(<<"an_existing_rule">>)),
     ok.
+
+t_disable_rule(_Config) ->
+    ets:new(simpile_action_2, [named_table, set, public]),
+    ets:insert(simpile_action_2, {created, 0}),
+    ets:insert(simpile_action_2, {destroyed, 0}),
+    Now = erlang:timestamp(),
+    emqx_rule_registry:add_action(
+        #action{name = 'simpile_action_2', app = ?APP,
+                module = ?MODULE,
+                on_create = simpile_action_2_create,
+                on_destroy = simpile_action_2_destroy,
+                types=[], params_spec = #{},
+                title = #{en => <<"Simple Action">>},
+                description = #{en => <<"Simple Action">>}}),
+    {ok, #rule{actions = [#action_instance{id = ActInsId0}]}} = emqx_rule_engine:create_rule(
+        #{id => <<"simple_rule_2">>,
+          rawsql => <<"select * from \"t/#\"">>,
+          actions => [#{name => 'simpile_action_2', args => #{}}]
+        }),
+    [{_, CAt}] = ets:lookup(simpile_action_2, created),
+    ?assert(CAt > Now),
+    [{_, DAt}] = ets:lookup(simpile_action_2, destroyed),
+    ?assert(DAt < Now),
+
+    %% disable the rule and verify the old action instances has been cleared
+    Now2 = erlang:timestamp(),
+    emqx_rule_engine:update_rule(#{ id => <<"simple_rule_2">>,
+                                    enabled => false}),
+    [{_, CAt2}] = ets:lookup(simpile_action_2, created),
+    ?assert(CAt2 < Now2),
+    [{_, DAt2}] = ets:lookup(simpile_action_2, destroyed),
+    ?assert(DAt2 > Now2),
+
+    %% enable the rule again and verify the action instances has been created
+    Now3 = erlang:timestamp(),
+    emqx_rule_engine:update_rule(#{ id => <<"simple_rule_2">>,
+                                    enabled => true}),
+    [{_, CAt3}] = ets:lookup(simpile_action_2, created),
+    ?assert(CAt3 > Now3),
+    [{_, DAt3}] = ets:lookup(simpile_action_2, destroyed),
+    ?assert(DAt3 < Now3),
+    ok = emqx_rule_engine:delete_rule(<<"simple_rule_2">>).
 
 t_get_rules_for(_Config) ->
     Len0 = length(emqx_rule_registry:get_rules_for(<<"simple/topic">>)),
@@ -2117,6 +2195,14 @@ crash_action(_Id, _Params) ->
         ct:pal("applying crash action, Data: ~p", [Data]),
         1/0
     end.
+
+simpile_action_2_create(_Id, _Params) ->
+    ets:insert(simpile_action_2, {created, erlang:timestamp()}),
+    fun(_Data, _Envs) -> ok end.
+
+simpile_action_2_destroy(_Id, _Params) ->
+    ets:insert(simpile_action_2, {destroyed, erlang:timestamp()}),
+    fun(_Data, _Envs) -> ok end.
 
 init_plus_by_one_action() ->
     ets:new(plus_by_one_action, [named_table, set, public]),
