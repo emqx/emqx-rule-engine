@@ -39,6 +39,7 @@
         , get_resource_status/1
         , get_resource_params/1
         , delete_resource/1
+        , update_resource/2
         ]).
 
 -export([ init_resource/4
@@ -237,6 +238,63 @@ start_resource(ResId) ->
             {error, {resource_not_found, ResId}}
     end.
 
+-spec(update_resource(resource_id(), map()) -> ok | {error, Reason :: term()}).
+update_resource(ResId, NewParams) ->
+    try
+        lists:foreach(fun(#rule{id = RuleId, enabled = Enabled, actions = Actions}) ->
+            lists:foreach(
+                fun (#action_instance{args = #{<<"$resource">> := ResId1}})
+                    when ResId =:= ResId1, Enabled == true ->
+                        throw({dependency_exists, RuleId});
+                    (_) -> ok
+                end, Actions)
+            end, ets:tab2list(?RULE_TAB)),
+        do_update_resource_check(ResId, NewParams)
+    catch _ : Reason ->
+        {error, Reason}
+    end.
+
+do_update_resource_check(Id, NewParams) ->
+    case emqx_rule_registry:find_resource(Id) of
+        {ok, #resource{id = Id,
+                       type = Type,
+                       config = OldConfig,
+                       description = OldDescription} = _OldResource} ->
+                try
+                    do_update_resource(#{id => Id,
+                                         config => case maps:find(<<"config">>, NewParams) of
+                                                        {ok, NewConfig} -> NewConfig;
+                                                        error -> OldConfig
+                                                   end,
+                                         type => Type,
+                                         description => case maps:find(<<"description">>, NewParams) of
+                                                             {ok, NewDescription} -> NewDescription;
+                                                             error -> OldDescription
+                                                        end}),
+                    ok
+                catch _ : Reason ->
+                    {error, Reason}
+                end;
+        _Other ->
+            {error, not_found}
+    end.
+
+do_update_resource(#{id := Id, type := Type, description := NewDescription, config := NewConfig}) ->
+    case emqx_rule_registry:find_resource_type(Type) of
+       {ok, #resource_type{on_create = {Module, Create},
+                           on_destroy = {Module, Destroy},
+                           params_spec = ParamSpec}} ->
+            ok = emqx_rule_validator:validate_params(NewConfig, ParamSpec),
+            test_resource(#{type => Type, config => NewConfig}),
+            catch cluster_call(clear_resource, [Module, Destroy, Id]),
+            cluster_call(init_resource, [Module, Create, Id, NewConfig]),
+            emqx_rule_registry:add_resource(#resource{id = Id,
+                                                      type = Type,
+                                                      config = NewConfig,
+                                                      description = NewDescription,
+                                                      created_at = erlang:system_time(millisecond)})
+    end.
+
 -spec(test_resource(#{}) -> ok | {error, Reason :: term()}).
 test_resource(#{type := Type, config := Config}) ->
     case emqx_rule_registry:find_resource_type(Type) of
@@ -289,23 +347,23 @@ delete_resource(ResId) ->
 
 -spec(refresh_resources() -> ok).
 refresh_resources() ->
-    [try refresh_resource(Res)
-     catch _:Error:ST ->
-        logger:critical(
-            "Can not re-stablish resource ~p: ~0p. The resource is disconnected."
-            "Fix the issue and establish it manually.\n"
-            "Stacktrace: ~0p",
-            [ResId, Error, ST])
-     end || Res = #resource{id = ResId}
-            <- emqx_rule_registry:get_resources()],
-    ok.
+    lists:foreach(fun refresh_resource/1,
+                  emqx_rule_registry:get_resources()).
 
 refresh_resource(Type) when is_atom(Type) ->
-    [refresh_resource(Resource)
-     || Resource <- emqx_rule_registry:get_resources_by_type(Type)];
+    lists:foreach(fun refresh_resource/1,
+                  emqx_rule_registry:get_resources_by_type(Type));
+
 refresh_resource(#resource{id = ResId, config = Config, type = Type}) ->
     {ok, #resource_type{on_create = {M, F}}} = emqx_rule_registry:find_resource_type(Type),
-    cluster_call(init_resource, [M, F, ResId, Config]).
+        try cluster_call(init_resource, [M, F, ResId, Config])
+        catch Error:Reason:ST ->
+            logger:critical(
+                "Can not re-stablish resource ~p: ~0p. The resource is disconnected."
+                "Fix the issue and establish it manually.\n"
+                "Stacktrace: ~0p",
+                [ResId, {Error, Reason}, ST])
+        end.
 
 -spec(refresh_rules() -> ok).
 refresh_rules() ->

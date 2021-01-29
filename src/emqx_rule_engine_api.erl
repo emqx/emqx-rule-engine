@@ -92,6 +92,13 @@
             descr  => "Show a resource"
            }).
 
+-rest_api(#{name   => update_resource,
+            method => 'PUT',
+            path   => "/resources/:bin:id",
+            func   => update_resource,
+            descr  => "Update a resource"
+           }).
+
 -rest_api(#{name   => get_resource_status,
             method => 'GET',
             path   => "/resource_status/:bin:id",
@@ -158,6 +165,7 @@
         , get_resource_status/2
         , start_resource/2
         , delete_resource/2
+        , update_resource/2
         ]).
 
 -export([ list_resource_types/2
@@ -323,6 +331,33 @@ show_resource(#{id := Id}, _Params) ->
             return({ok, maps:put(status, Status, record_to_map(R))});
         not_found ->
             return({error, 404, <<"Not Found">>})
+    end.
+
+update_resource(#{id := Id}, NewParams) ->
+    P1 = case proplists:get_value(<<"description">>, NewParams) of
+        undefined -> #{};
+        Value -> #{<<"description">> => Value}
+    end,
+    P2 = case proplists:get_value(<<"config">>, NewParams) of
+        undefined -> #{};
+        [{}] -> #{};
+        Map -> #{<<"config">> => ?RAISE(maps:from_list(Map), {invalid_config, Map})}
+    end,
+    case emqx_rule_engine:update_resource(Id, maps:merge(P1, P2)) of
+        ok ->
+            return(ok);
+        {error, not_found} ->
+            ?LOG(error, "Resource not found: ~0p", [Id]),
+            return({error, 400, <<"Resource not found:", Id/binary>>});
+        {error, {init_resource_failure, _}} ->
+            ?LOG(error, "Init resource failure: ~0p", [Id]),
+            return({error, 500, <<"Init resource failure:", Id/binary>>});
+        {error, {dependency_exists, RuleId}} ->
+            ?LOG(error, "Dependency exists: ~0p", [RuleId]),
+            return({error, 500, <<"Dependency exists:", RuleId/binary>>});
+        {error, Reason} ->
+            ?LOG(error, "Resource update failed: ~0p", [Reason]),
+            return({error, 500, <<"Resource update failed!">>})
     end.
 
 get_resource_status(#{id := Id}, _Params) ->
