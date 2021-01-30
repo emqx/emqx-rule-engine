@@ -62,7 +62,7 @@
       {load_module, emqx_rule_validator, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_sup, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_api, brutal_purge, soft_purge, []},
-      {load_module, emqx_rule_engine_cli, brutal_purge, soft_purge, []}
+      {load_module, emqx_rule_engine_cli, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_funcs, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_maps, brutal_purge, soft_purge, []},
       {apply, {supervisor, terminate_child, [emqx_rule_engine_sup, emqx_rule_locker]}},
@@ -77,7 +77,7 @@
       {load_module, emqx_rule_validator, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_sup, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_api, brutal_purge, soft_purge, []},
-      {load_module, emqx_rule_engine_cli, brutal_purge, soft_purge, []}
+      {load_module, emqx_rule_engine_cli, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_funcs, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_maps, brutal_purge, soft_purge, []},
       {apply, {supervisor, terminate_child, [emqx_rule_engine_sup, emqx_rule_locker]}},
@@ -87,7 +87,7 @@
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_utils, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_api, brutal_purge, soft_purge, []},
-      {load_module, emqx_rule_engine_cli, brutal_purge, soft_purge, []}
+      {load_module, emqx_rule_engine_cli, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_funcs, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_maps, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_sup, brutal_purge, soft_purge, []},
