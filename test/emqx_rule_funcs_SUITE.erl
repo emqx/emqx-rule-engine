@@ -295,7 +295,6 @@ hex_convert() ->
     ?FORALL(L, list(range(0, 255)),
             begin
                 AbitraryBin = list_to_binary(L),
-                io:format("----~p~n", [AbitraryBin]),
                 AbitraryBin == emqx_rule_funcs:hexstr2bin(
                     emqx_rule_funcs:bin2hexstr(AbitraryBin))
             end).
