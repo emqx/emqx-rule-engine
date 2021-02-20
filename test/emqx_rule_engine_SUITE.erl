@@ -69,13 +69,14 @@ groups() ->
        t_resource_types_cli
       ]},
      {funcs, [],
-      [t_topic_func]},
+      [t_topic_func,
+       t_kv_store
+      ]},
      {registry, [sequence],
       [t_add_get_remove_rule,
        t_add_get_remove_rules,
        t_create_existing_rule,
        t_update_rule,
-       t_disable_rule,
        t_get_rules_for,
        t_get_rules_for_2,
        t_add_get_remove_action,
@@ -260,6 +261,7 @@ init_per_testcase(_TestCase, Config) ->
                 description = #{en => <<"The built in resource type for debug purpose">>}}]),
     %ct:pal("============ ~p", [ets:tab2list(emqx_resource_type)]),
     Config.
+
 
 end_per_testcase(t_events, Config) ->
     ets:delete(events_record_tab),
@@ -504,7 +506,7 @@ t_show_resource_type_api(_Config) ->
 %%------------------------------------------------------------------------------
 
 t_rules_cli(_Config) ->
-    print_mock(),
+    mock_print(),
     RCreate = emqx_rule_engine_cli:rules(["create",
                                           "select * from \"t1\" where topic='t1'",
                                           "[{\"name\":\"inspect\", \"params\": {\"arg1\": 1}}]",
@@ -536,10 +538,11 @@ t_rules_cli(_Config) ->
     RShow2 = emqx_rule_engine_cli:rules(["show", RuleId]),
     ?assertMatch({match, _}, re:run(RShow2, "Cannot found")),
     %ct:pal("RShow2 : ~p", [RShow2]),
+    unmock_print(),
     ok.
 
 t_actions_cli(_Config) ->
-    print_mock(),
+    mock_print(),
     RList = emqx_rule_engine_cli:actions(["list"]),
     ?assertMatch({match, _}, re:run(RList, "inspect")),
     %ct:pal("RList : ~p", [RList]),
@@ -547,10 +550,11 @@ t_actions_cli(_Config) ->
     RShow = emqx_rule_engine_cli:actions(["show", "inspect"]),
     ?assertMatch({match, _}, re:run(RShow, "inspect")),
     %ct:pal("RShow : ~p", [RShow]),
+    unmock_print(),
     ok.
 
 t_resources_cli(_Config) ->
-    print_mock(),
+    mock_print(),
     RCreate = emqx_rule_engine_cli:resources(["create", "built_in", "{\"a\" : 1}", "-d", "test resource"]),
     ResId = re:replace(re:replace(RCreate, "Resource\s", "", [{return, list}]), "\screated\n", "", [{return, list}]),
 
@@ -572,10 +576,11 @@ t_resources_cli(_Config) ->
     RShow2 = emqx_rule_engine_cli:resources(["show", ResId]),
     ?assertMatch({match, _}, re:run(RShow2, "Cannot found")),
     %ct:pal("RShow2 : ~p", [RShow2]),
+    unmock_print(),
     ok.
 
 t_resource_types_cli(_Config) ->
-    print_mock(),
+    mock_print(),
     RList = emqx_rule_engine_cli:resource_types(["list"]),
     ?assertMatch({match, _}, re:run(RList, "built_in")),
     %ct:pal("RList : ~p", [RList]),
@@ -583,6 +588,7 @@ t_resource_types_cli(_Config) ->
     RShow = emqx_rule_engine_cli:resource_types(["show", "inspect"]),
     ?assertMatch({match, _}, re:run(RShow, "inspect")),
     %ct:pal("RShow : ~p", [RShow]),
+    unmock_print(),
     ok.
 
 %%------------------------------------------------------------------------------
@@ -593,12 +599,20 @@ t_topic_func(_Config) ->
     %%TODO:
     ok.
 
+t_kv_store(_) ->
+    undefined = emqx_rule_funcs:kv_store_get(<<"abc">>),
+    <<"not_found">> = emqx_rule_funcs:kv_store_get(<<"abc">>, <<"not_found">>),
+    emqx_rule_funcs:kv_store_put(<<"abc">>, 1),
+    1 = emqx_rule_funcs:kv_store_get(<<"abc">>),
+    emqx_rule_funcs:kv_store_del(<<"abc">>),
+    undefined = emqx_rule_funcs:kv_store_get(<<"abc">>).
+
 %%------------------------------------------------------------------------------
 %% Test cases for rule registry
 %%------------------------------------------------------------------------------
 
 t_add_get_remove_rule(_Config) ->
-    print_mock(),
+    mock_print(),
     RuleId0 = <<"rule-debug-0">>,
     ok = emqx_rule_registry:add_rule(make_simple_rule(RuleId0)),
     ?assertMatch({ok, #rule{id = RuleId0}}, emqx_rule_registry:get_rule(RuleId0)),
@@ -611,6 +625,7 @@ t_add_get_remove_rule(_Config) ->
     ?assertMatch({ok, #rule{id = RuleId1}}, emqx_rule_registry:get_rule(RuleId1)),
     ok = emqx_rule_registry:remove_rule(Rule1),
     ?assertEqual(not_found, emqx_rule_registry:get_rule(RuleId1)),
+    unmock_print(),
     ok.
 
 t_add_get_remove_rules(_Config) ->
@@ -675,48 +690,6 @@ t_update_rule(_Config) ->
     ok = emqx_rule_engine:delete_rule(<<"an_existing_rule">>),
     ?assertEqual(not_found, emqx_rule_registry:get_rule(<<"an_existing_rule">>)),
     ok.
-
-t_disable_rule(_Config) ->
-    ets:new(simpile_action_2, [named_table, set, public]),
-    ets:insert(simpile_action_2, {created, 0}),
-    ets:insert(simpile_action_2, {destroyed, 0}),
-    Now = erlang:timestamp(),
-    emqx_rule_registry:add_action(
-        #action{name = 'simpile_action_2', app = ?APP,
-                module = ?MODULE,
-                on_create = simpile_action_2_create,
-                on_destroy = simpile_action_2_destroy,
-                types=[], params_spec = #{},
-                title = #{en => <<"Simple Action">>},
-                description = #{en => <<"Simple Action">>}}),
-    {ok, #rule{actions = [#action_instance{id = ActInsId0}]}} = emqx_rule_engine:create_rule(
-        #{id => <<"simple_rule_2">>,
-          rawsql => <<"select * from \"t/#\"">>,
-          actions => [#{name => 'simpile_action_2', args => #{}}]
-        }),
-    [{_, CAt}] = ets:lookup(simpile_action_2, created),
-    ?assert(CAt > Now),
-    [{_, DAt}] = ets:lookup(simpile_action_2, destroyed),
-    ?assert(DAt < Now),
-
-    %% disable the rule and verify the old action instances has been cleared
-    Now2 = erlang:timestamp(),
-    emqx_rule_engine:update_rule(#{ id => <<"simple_rule_2">>,
-                                    enabled => false}),
-    [{_, CAt2}] = ets:lookup(simpile_action_2, created),
-    ?assert(CAt2 < Now2),
-    [{_, DAt2}] = ets:lookup(simpile_action_2, destroyed),
-    ?assert(DAt2 > Now2),
-
-    %% enable the rule again and verify the action instances has been created
-    Now3 = erlang:timestamp(),
-    emqx_rule_engine:update_rule(#{ id => <<"simple_rule_2">>,
-                                    enabled => true}),
-    [{_, CAt3}] = ets:lookup(simpile_action_2, created),
-    ?assert(CAt3 > Now3),
-    [{_, DAt3}] = ets:lookup(simpile_action_2, destroyed),
-    ?assert(DAt3 < Now3),
-    ok = emqx_rule_engine:delete_rule(<<"simple_rule_2">>).
 
 t_get_rules_for(_Config) ->
     Len0 = length(emqx_rule_registry:get_rules_for(<<"simple/topic">>)),
@@ -817,11 +790,15 @@ get_resource_type() ->
     ?assertMatch({ok, #resource_type{name = <<"resource-type-debug-1">>}}, emqx_rule_registry:find_resource_type(<<"resource-type-debug-1">>)),
     ok.
 get_resource_types() ->
-    ?assert(length(emqx_rule_registry:get_resource_types()) > 0),
+    ResTypes = emqx_rule_registry:get_resource_types(),
+    ct:pal("resource types now: ~p", [ResTypes]),
+    ?assert(length(ResTypes) > 0),
     ok.
 unregister_resource_types_of() ->
+    NumOld = length(emqx_rule_registry:get_resource_types()),
     ok = emqx_rule_registry:unregister_resource_types_of(?APP),
-    ?assertEqual(0, length(emqx_rule_registry:get_resource_types())),
+    NumNow = length(emqx_rule_registry:get_resource_types()),
+    ?assert((NumOld - NumNow) >= 2),
     ok.
 
 %%------------------------------------------------------------------------------
@@ -1968,7 +1945,7 @@ t_sqlparse_array_range_1(_Config) ->
     Sql02 = "select "
            "  payload.a[1..4] as c "
            "from \"t/#\" ",
-    ?assertThrow({select_and_transform_error,{{range_get,non_list_data},_}},
+    ?assertThrow({select_and_transform_error, {error,{range_get,non_list_data},_}},
         emqx_rule_sqltester:test(
             #{<<"rawsql">> => Sql02,
                 <<"ctx">> =>
@@ -2193,16 +2170,8 @@ failure_action(_Id, _Params) ->
 crash_action(_Id, _Params) ->
     fun(Data, _Envs) ->
         ct:pal("applying crash action, Data: ~p", [Data]),
-        1/0
+        error(crash)
     end.
-
-simpile_action_2_create(_Id, _Params) ->
-    ets:insert(simpile_action_2, {created, erlang:timestamp()}),
-    fun(_Data, _Envs) -> ok end.
-
-simpile_action_2_destroy(_Id, _Params) ->
-    ets:insert(simpile_action_2, {destroyed, erlang:timestamp()}),
-    fun(_Data, _Envs) -> ok end.
 
 init_plus_by_one_action() ->
     ets:new(plus_by_one_action, [named_table, set, public]),
@@ -2476,7 +2445,7 @@ start_apps() ->
     [start_apps(App, SchemaFile, ConfigFile) ||
         {App, SchemaFile, ConfigFile}
             <- [{emqx, deps_path(emqx, "priv/emqx.schema"),
-                       deps_path(emqx, "etc/gen.emqx.conf")},
+                       deps_path(emqx, "etc/emqx.conf")},
                 {emqx_rule_engine, local_path("priv/emqx_rule_engine.schema"),
                                    local_path("etc/emqx_rule_engine.conf")}]].
 
@@ -2521,12 +2490,16 @@ set_special_configs(emqx_rule_engine) ->
 set_special_configs(_App) ->
     ok.
 
-print_mock() ->
+mock_print() ->
+    catch meck:unload(emqx_ctl),
     meck:new(emqx_ctl, [non_strict, passthrough]),
     meck:expect(emqx_ctl, print, fun(Arg) -> emqx_ctl:format(Arg) end),
     meck:expect(emqx_ctl, print, fun(Msg, Arg) -> emqx_ctl:format(Msg, Arg) end),
     meck:expect(emqx_ctl, usage, fun(Usages) -> emqx_ctl:format_usage(Usages) end),
     meck:expect(emqx_ctl, usage, fun(Cmd, Descr) -> emqx_ctl:format_usage(Cmd, Descr) end).
+
+unmock_print() ->
+    meck:unload(emqx_ctl).
 
 t_load_providers(_) ->
     error('TODO').

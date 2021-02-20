@@ -17,8 +17,9 @@
 -module(emqx_rule_engine_api).
 
 -include("rule_engine.hrl").
--include("rule_events.hrl").
 -include_lib("emqx/include/logger.hrl").
+
+-logger_header("[RuleEngineAPI]").
 
 -import(minirest,  [return/1]).
 
@@ -85,18 +86,18 @@
             descr  => "Create a resource"
            }).
 
--rest_api(#{name   => show_resource,
-            method => 'GET',
-            path   => "/resources/:bin:id",
-            func   => show_resource,
-            descr  => "Show a resource"
-           }).
-
 -rest_api(#{name   => update_resource,
             method => 'PUT',
             path   => "/resources/:bin:id",
             func   => update_resource,
             descr  => "Update a resource"
+           }).
+
+-rest_api(#{name   => show_resource,
+            method => 'GET',
+            path   => "/resources/:bin:id",
+            func   => show_resource,
+            descr  => "Show a resource"
            }).
 
 -rest_api(#{name   => get_resource_status,
@@ -178,15 +179,18 @@
 -define(ERR_NO_RULE(ID), list_to_binary(io_lib:format("Rule ~s Not Found", [(ID)]))).
 -define(ERR_NO_ACTION(NAME), list_to_binary(io_lib:format("Action ~s Not Found", [(NAME)]))).
 -define(ERR_NO_RESOURCE(RESID), list_to_binary(io_lib:format("Resource ~s Not Found", [(RESID)]))).
--define(ERR_NO_HOOK(HOOK), list_to_binary(io_lib:format("Event ~s Not Found", [(HOOK)]))).
 -define(ERR_NO_RESOURCE_TYPE(TYPE), list_to_binary(io_lib:format("Resource Type ~s Not Found", [(TYPE)]))).
--define(ERR_UNKNOWN_COLUMN(COLUMN), list_to_binary(io_lib:format("Unknown Column: ~s", [(COLUMN)]))).
--define(ERR_START_RESOURCE(RESID), list_to_binary(io_lib:format("Start Resource ~s Failed", [(RESID)]))).
 -define(ERR_BADARGS(REASON),
         begin
             R0 = list_to_binary(io_lib:format("~0p", [REASON])),
             <<"Bad Arguments: ", R0/binary>>
         end).
+
+-dialyzer({nowarn_function, [create_rule/2,
+                             test_rule_sql/1,
+                             do_create_rule/1,
+                             update_rule/2
+                             ]}).
 
 %%------------------------------------------------------------------------------
 %% Rules API
@@ -197,60 +201,31 @@ create_rule(_Bindings, Params) ->
             Params).
 
 test_rule_sql(Params) ->
-    try emqx_rule_sqltester:test(emqx_json:decode(emqx_json:encode(Params), [return_maps])) of
+    case emqx_rule_sqltester:test(emqx_json:decode(emqx_json:encode(Params), [return_maps])) of
         {ok, Result} -> return({ok, Result});
-        {error, nomatch} -> return({error, 404, <<"SQL Not Match">>})
-    catch
-        throw:{invalid_hook, Hook} ->
-            return({error, 400, ?ERR_NO_HOOK(Hook)});
-        throw:Reason ->
-            return({error, 400, ?ERR_BADARGS(Reason)});
-        _:{parse_error,{unknown_column, Column}, _} ->
-            return({error, 400, ?ERR_UNKNOWN_COLUMN(Column)});
-        _Error:Reason:StackT ->
-            ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
+        {error, nomatch} -> return({error, 404, <<"SQL Not Match">>});
+        {error, Reason} ->
+            ?LOG(error, "~p failed: ~0p", [?FUNCTION_NAME, Reason]),
             return({error, 400, ?ERR_BADARGS(Reason)})
     end.
 
 do_create_rule(Params) ->
-    try emqx_rule_engine:create_rule(parse_rule_params(Params)) of
-        {ok, Rule} ->
-            return({ok, record_to_map(Rule)});
+    case emqx_rule_engine:create_rule(parse_rule_params(Params)) of
+        {ok, Rule} -> return({ok, record_to_map(Rule)});
         {error, {action_not_found, ActionName}} ->
-            return({error, 400, ?ERR_NO_ACTION(ActionName)})
-    catch
-        throw:{resource_not_found, ResId} ->
-            return({error, 400, ?ERR_NO_RESOURCE(ResId)});
-        throw:{invalid_hook, Hook} ->
-            return({error, 400, ?ERR_NO_HOOK(Hook)});
-        throw:Reason ->
-            return({error, 400, ?ERR_BADARGS(Reason)});
-        _:{parse_error,{unknown_column, Column}} ->
-            return({error, 400, ?ERR_UNKNOWN_COLUMN(Column)});
-        _Error:Reason:StackT ->
-            ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
+            return({error, 400, ?ERR_NO_ACTION(ActionName)});
+        {error, Reason} ->
+            ?LOG(error, "~p failed: ~0p", [?FUNCTION_NAME, Reason]),
             return({error, 400, ?ERR_BADARGS(Reason)})
     end.
 
 update_rule(#{id := Id}, Params) ->
-    try emqx_rule_engine:update_rule(parse_rule_params(Params, #{id => Id})) of
-        {ok, Rule} ->
-            return({ok, record_to_map(Rule)});
+    case emqx_rule_engine:update_rule(parse_rule_params(Params, #{id => Id})) of
+        {ok, Rule} -> return({ok, record_to_map(Rule)});
         {error, {not_found, RuleId}} ->
             return({error, 400, ?ERR_NO_RULE(RuleId)});
-        {error, {action_not_found, ActionName}} ->
-            return({error, 400, ?ERR_NO_ACTION(ActionName)})
-    catch
-        throw:{resource_not_found, ResId} ->
-            return({error, 400, ?ERR_NO_RESOURCE(ResId)});
-        throw:{invalid_hook, Hook} ->
-            return({error, 400, ?ERR_NO_HOOK(Hook)});
-        throw:Reason ->
-            return({error, 400, ?ERR_BADARGS(Reason)});
-        _:{parse_error,{unknown_column, Column}} ->
-            return({error, 400, ?ERR_UNKNOWN_COLUMN(Column)});
-        _Error:Reason:StackT ->
-            ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
+        {error, Reason} ->
+            ?LOG(error, "~p failed: ~0p", [?FUNCTION_NAME, Reason]),
             return({error, 400, ?ERR_BADARGS(Reason)})
     end.
 
@@ -269,7 +244,9 @@ delete_rule(#{id := Id}, _Params) ->
 %%------------------------------------------------------------------------------
 
 list_actions(#{}, _Params) ->
-    return_all(emqx_rule_registry:get_actions()).
+    return_all(
+        sort_by_title(action,
+            emqx_rule_registry:get_actions())).
 
 show_action(#{name := Name}, _Params) ->
     reply_with(fun emqx_rule_registry:find_action/1, Name).
@@ -278,31 +255,31 @@ show_action(#{name := Name}, _Params) ->
 %% Resources API
 %%------------------------------------------------------------------------------
 create_resource(#{}, Params) ->
-    if_test(fun() -> do_create_resource(test_resource, Params) end,
-            fun() -> do_create_resource(create_resource, Params) end,
-            Params).
+    case parse_resource_params(Params) of
+        {ok, ParsedParams} ->
+            if_test(fun() -> do_create_resource(test_resource, ParsedParams) end,
+                    fun() -> do_create_resource(create_resource, ParsedParams) end,
+                    Params);
+        {error, Reason} ->
+            ?LOG(error, "~p failed: ~0p", [?FUNCTION_NAME, Reason]),
+            return({error, 400, ?ERR_BADARGS(Reason)})
+    end.
 
-do_create_resource(Create, Params) ->
-    try emqx_rule_engine:Create(parse_resource_params(Params)) of
+do_create_resource(Create, ParsedParams) ->
+    case emqx_rule_engine:Create(ParsedParams) of
         ok ->
             return(ok);
         {ok, Resource} ->
             return({ok, record_to_map(Resource)});
         {error, {resource_type_not_found, Type}} ->
-            return({error, 400, ?ERR_NO_RESOURCE_TYPE(Type)})
-    catch
-        throw:{resource_type_not_found, Type} ->
             return({error, 400, ?ERR_NO_RESOURCE_TYPE(Type)});
-        throw:{init_resource_failure, Reason} ->
-            %% only test_resource would throw exceptions, create_resource won't
-            ?LOG(error, "[RuleEngineAPI] test_resource_failure: ~p", [Reason]),
-            return({error, 500, <<"Test Creating Resource Failed">>});
-        throw:Reason ->
-            return({error, 400, ?ERR_BADARGS(Reason)});
-        _Error:Reason:StackT ->
-            ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
+        {error, {init_resource_failure, _}} ->
+            return({error, 500, <<"Init resource failure!">>});
+        {error, Reason} ->
+            ?LOG(error, "~p failed: ~0p", [?FUNCTION_NAME, Reason]),
             return({error, 400, ?ERR_BADARGS(Reason)})
     end.
+
 
 list_resources(#{}, _Params) ->
     Data0 = lists:foldr(fun maybe_record_to_map/2, [], emqx_rule_registry:get_resources()),
@@ -333,6 +310,25 @@ show_resource(#{id := Id}, _Params) ->
             return({error, 404, <<"Not Found">>})
     end.
 
+get_resource_status(#{id := Id}, _Params) ->
+    case emqx_rule_engine:get_resource_status(Id) of
+        {ok, Status} ->
+            return({ok, Status});
+        {error, {resource_not_found, ResId}} ->
+            return({error, 400, ?ERR_NO_RESOURCE(ResId)})
+    end.
+
+start_resource(#{id := Id}, _Params) ->
+    case emqx_rule_engine:start_resource(Id) of
+        ok ->
+            return(ok);
+        {error, {resource_not_found, ResId}} ->
+            return({error, 400, ?ERR_NO_RESOURCE(ResId)});
+        {error, Reason} ->
+            ?LOG(error, "~p failed: ~0p", [?FUNCTION_NAME, Reason]),
+            return({error, 400, ?ERR_BADARGS(Reason)})
+    end.
+
 update_resource(#{id := Id}, NewParams) ->
     P1 = case proplists:get_value(<<"description">>, NewParams) of
         undefined -> #{};
@@ -360,42 +356,11 @@ update_resource(#{id := Id}, NewParams) ->
             return({error, 500, <<"Resource update failed!">>})
     end.
 
-get_resource_status(#{id := Id}, _Params) ->
-    case emqx_rule_engine:get_resource_status(Id) of
-        {ok, Status} ->
-            return({ok, Status});
-        {error, {resource_not_found, ResId}} ->
-            return({error, 400, ?ERR_NO_RESOURCE(ResId)})
-    end.
-
-start_resource(#{id := Id}, _Params) ->
-    try emqx_rule_engine:start_resource(Id) of
-        ok ->
-            return(ok);
-        {error, {resource_not_found, ResId}} ->
-            return({error, 400, ?ERR_NO_RESOURCE(ResId)})
-    catch
-        throw:{{init_resource_failure, _}, Reason} ->
-            ?LOG(error, "[RuleEngineAPI] init_resource_failure: ~p", [Reason]),
-            return({error, 400, ?ERR_START_RESOURCE(Id)});
-        throw:Reason ->
-            return({error, 400, ?ERR_BADARGS(Reason)});
-        _Error:Reason:StackT ->
-            ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
-            return({error, 400, ?ERR_BADARGS(Reason)})
-    end.
-
 delete_resource(#{id := Id}, _Params) ->
-    try
-        emqx_rule_engine:delete_resource(Id),
-        return(ok)
-    catch
-        _Error:{throw,Reason} ->
-            return({error, 400, ?ERR_BADARGS(Reason)});
-        throw:Reason ->
-            return({error, 400, ?ERR_BADARGS(Reason)});
-        _Error:Reason:StackT ->
-            ?LOG(error, "[RuleEngineAPI] ~p failed: ~0p", [?FUNCTION_NAME, {Reason, StackT}]),
+    case emqx_rule_engine:delete_resource(Id) of
+        ok -> return(ok);
+        {error, not_found} -> return(ok);
+        {error, Reason} ->
             return({error, 400, ?ERR_BADARGS(Reason)})
     end.
 
@@ -417,7 +382,7 @@ show_resource_type(#{name := Name}, _Params) ->
 %%------------------------------------------------------------------------------
 
 list_events(#{}, _Params) ->
-    return({ok, ?EVENT_INFO}).
+    return({ok, emqx_rule_events:event_info()}).
 
 %%------------------------------------------------------------------------------
 %% Internal functions
@@ -551,13 +516,13 @@ parse_action(Action) ->
 parse_resource_params(Params) ->
     parse_resource_params(Params, #{config => #{}, description => <<"">>}).
 parse_resource_params([], Res) ->
-    Res;
+    {ok, Res};
 parse_resource_params([{<<"id">>, Id} | Params], Res) ->
     parse_resource_params(Params, Res#{id => Id});
 parse_resource_params([{<<"type">>, ResourceType} | Params], Res) ->
     try parse_resource_params(Params, Res#{type => binary_to_existing_atom(ResourceType, utf8)})
     catch error:badarg ->
-        throw({resource_type_not_found, ResourceType})
+        {error, {resource_type_not_found, ResourceType}}
     end;
 parse_resource_params([{<<"config">>, Config} | Params], Res) ->
     parse_resource_params(Params, Res#{config => json_term_to_map(Config)});

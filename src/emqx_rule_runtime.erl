@@ -49,7 +49,7 @@ apply_rules([], _Input) ->
 apply_rules([#rule{enabled = false}|More], Input) ->
     apply_rules(More, Input);
 apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
-    try apply_rule(Rule, Input)
+    try apply_rule_discard_result(Rule, Input)
     catch
         %% ignore the errors if select or match failed
         _:{select_and_transform_error, Error} ->
@@ -70,6 +70,10 @@ apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
     end,
     apply_rules(More, Input).
 
+apply_rule_discard_result(Rule, Input) ->
+    _ = apply_rule(Rule, Input),
+    ok.
+
 apply_rule(Rule = #rule{id = RuleID}, Input) ->
     clear_rule_payload(),
     do_apply_rule(Rule, add_metadata(Input, #{rule_id => RuleID})).
@@ -83,10 +87,10 @@ do_apply_rule(#rule{id = RuleId,
                     on_action_failed = OnFailed,
                     actions = Actions}, Input) ->
     {Selected, Collection} = ?RAISE(select_and_collect(Fields, Input),
-                                        {select_and_collect_error, {_REASON_,_ST_}}),
+                                        {select_and_collect_error, {_EXCLASS_,_EXCPTION_,_ST_}}),
     ColumnsAndSelected = maps:merge(Input, Selected),
     case ?RAISE(match_conditions(Conditions, ColumnsAndSelected),
-                {match_conditions_error, {_REASON_,_ST_}}) of
+                {match_conditions_error, {_EXCLASS_,_EXCPTION_,_ST_}}) of
         true ->
             ok = emqx_rule_metrics:inc(RuleId, 'rules.matched'),
             Collection2 = filter_collection(Input, InCase, DoEach, Collection),
@@ -102,9 +106,9 @@ do_apply_rule(#rule{id = RuleId,
                     on_action_failed = OnFailed,
                     actions = Actions}, Input) ->
     Selected = ?RAISE(select_and_transform(Fields, Input),
-                      {select_and_transform_error, {_REASON_,_ST_}}),
+                      {select_and_transform_error, {_EXCLASS_,_EXCPTION_,_ST_}}),
     case ?RAISE(match_conditions(Conditions, maps:merge(Input, Selected)),
-                {match_conditions_error, {_REASON_,_ST_}}) of
+                {match_conditions_error, {_EXCLASS_,_EXCPTION_,_ST_}}) of
         true ->
             ok = emqx_rule_metrics:inc(RuleId, 'rules.matched'),
             {ok, take_actions(Actions, Selected, Input, OnFailed)};
@@ -160,16 +164,17 @@ select_and_collect([Field|More], Input, {Output, LastKV}) ->
         {nested_put(Key, Val, Output), LastKV}).
 
 %% Filter each item got from FOREACH
+-dialyzer({nowarn_function, filter_collection/4}).
 filter_collection(Input, InCase, DoEach, {CollKey, CollVal}) ->
     lists:filtermap(
         fun(Item) ->
             InputAndItem = maps:merge(Input, #{CollKey => Item}),
             case ?RAISE(match_conditions(InCase, InputAndItem),
-                    {match_incase_error, {_REASON_,_ST_}}) of
+                    {match_incase_error, {_EXCLASS_,_EXCPTION_,_ST_}}) of
                 true when DoEach == [] -> {true, InputAndItem};
                 true ->
                     {true, ?RAISE(select_and_transform(DoEach, InputAndItem),
-                                  {doeach_error, {_REASON_,_ST_}})};
+                                  {doeach_error, {_EXCLASS_,_EXCPTION_,_ST_}})};
                 false -> false
             end
         end, CollVal).
@@ -242,7 +247,7 @@ take_action(#action_instance{id = Id, name = ActName, fallbacks = Fallbacks} = A
         error:{badfun, _Func}:_ST ->
             %?LOG(warning, "Action ~p maybe outdated, refresh it and try again."
             %              "Func: ~p~nST:~0p", [Id, Func, ST]),
-            trans_action_on(Id, fun() ->
+            _ = trans_action_on(Id, fun() ->
                 emqx_rule_engine:refresh_actions([ActInst])
             end, 5000),
             emqx_rule_metrics:inc_actions_retry(Id),
@@ -291,11 +296,11 @@ wait_action_on(Id, RetryN) ->
 
 handle_action_failure(continue, Id, Fallbacks, Selected, Envs, Reason) ->
     ?LOG(error, "Take action ~p failed, continue next action, reason: ~0p", [Id, Reason]),
-    take_actions(Fallbacks, Selected, Envs, continue),
+    _ = take_actions(Fallbacks, Selected, Envs, continue),
     failed;
 handle_action_failure(stop, Id, Fallbacks, Selected, Envs, Reason) ->
     ?LOG(error, "Take action ~p failed, skip all actions, reason: ~0p", [Id, Reason]),
-    take_actions(Fallbacks, Selected, Envs, continue),
+    _ = take_actions(Fallbacks, Selected, Envs, continue),
     error({take_action_failed, {Id, Reason}}).
 
 eval({path, [{key, <<"payload">>} | Path]}, #{payload := Payload}) ->

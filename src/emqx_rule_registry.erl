@@ -19,7 +19,6 @@
 -behaviour(gen_server).
 
 -include("rule_engine.hrl").
--include("rule_events.hrl").
 -include_lib("emqx/include/logger.hrl").
 
 -export([start_link/0]).
@@ -132,13 +131,13 @@ mnesia(boot) ->
 
 mnesia(copy) ->
     %% Copy rule table
-    ok = ekka_mnesia:copy_table(?RULE_TAB),
+    ok = ekka_mnesia:copy_table(?RULE_TAB, disc_copies),
     %% Copy rule action table
-    ok = ekka_mnesia:copy_table(?ACTION_TAB),
+    ok = ekka_mnesia:copy_table(?ACTION_TAB, ram_copies),
     %% Copy resource table
-    ok = ekka_mnesia:copy_table(?RES_TAB),
+    ok = ekka_mnesia:copy_table(?RES_TAB, disc_copies),
     %% Copy resource type table
-    ok = ekka_mnesia:copy_table(?RES_TYPE_TAB).
+    ok = ekka_mnesia:copy_table(?RES_TYPE_TAB, ram_copies).
 
 dump() ->
     io:format("Rules: ~p~n"
@@ -169,7 +168,7 @@ get_rules() ->
 -spec(get_rules_for(Topic :: binary()) -> list(emqx_rule_engine:rule())).
 get_rules_for(Topic) ->
     [Rule || Rule = #rule{for = For} <- get_rules(),
-             Topic =:= For orelse emqx_rule_utils:can_topic_match_oneof(Topic, For)].
+             emqx_rule_utils:can_topic_match_oneof(Topic, For)].
 
 -spec(get_rule(Id :: rule_id()) -> {ok, emqx_rule_engine:rule()} | not_found).
 get_rule(Id) ->
@@ -329,9 +328,14 @@ remove_resource_params(ResId) ->
 
 %% @private
 delete_resource(ResId) ->
-    [[ResId =:= ResId1 andalso throw({dependency_exists, {rule, Id}})
-        || #action_instance{args = #{<<"$resource">> := ResId1}} <- Actions]
-            || #rule{id = Id, actions = Actions} <- get_rules()],
+    lists:foreach(fun(#rule{id = Id, actions = Actions}) ->
+        lists:foreach(
+            fun (#action_instance{args = #{<<"$resource">> := ResId1}})
+                when ResId =:= ResId1 ->
+                    throw({dependency_exists, {rule, Id}});
+                (_) -> ok
+            end, Actions)
+    end, get_rules()),
     mnesia:delete(?RES_TAB, ResId, write).
 
 %% @private
@@ -383,6 +387,8 @@ delete_resource_type(Type) ->
 init([]) ->
     %% Enable stats timer
     ok = emqx_stats:update_interval(rule_registery_stats, fun update_stats/0),
+    ets:new(?KV_TAB, [named_table, set, public, {write_concurrency, true},
+        {read_concurrency, true}]),
     {ok, #{}}.
 
 handle_call(Req, _From, State) ->

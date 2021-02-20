@@ -99,18 +99,18 @@
 
 -record(state, {
             metric_ids = sets:new(),
-            rule_speeds :: #{rule_id() => #rule_speed{}},
+            rule_speeds :: undefined | #{rule_id() => #rule_speed{}},
             overall_rule_speed :: #rule_speed{}
         }).
 
 %%------------------------------------------------------------------------------
 %% APIs
 %%------------------------------------------------------------------------------
--spec(create_rule_metrics(rule_id()) -> Ref :: reference()).
+-spec(create_rule_metrics(rule_id()) -> ok).
 create_rule_metrics(Id) ->
     gen_server:call(?MODULE, {create_rule_metrics, Id}).
 
--spec(create_metrics(rule_id()) -> Ref :: reference()).
+-spec(create_metrics(rule_id()) -> ok).
 create_metrics(Id) ->
     gen_server:call(?MODULE, {create_metrics, Id}).
 
@@ -133,7 +133,7 @@ get(Id, Metric) ->
 get_overall(Metric) ->
     emqx_metrics:val(Metric).
 
--spec(get_rule_speed(atom()) -> map()).
+-spec(get_rule_speed(rule_id()) -> map()).
 get_rule_speed(Id) ->
     gen_server:call(?MODULE, {get_rule_speed, Id}).
 
@@ -157,9 +157,11 @@ get_action_metrics(Id) ->
       taken => get_actions_taken(Id)
      }.
 
--spec(inc(rule_id(), atom()) -> ok).
+-spec inc(rule_id(), atom()) -> ok.
 inc(Id, Metric) ->
     inc(Id, Metric, 1).
+
+-spec inc(rule_id(), atom(), pos_integer()) -> ok.
 inc(Id, Metric, Val) ->
     case couters_ref(Id) of
         not_found ->
@@ -175,7 +177,7 @@ inc(Id, Metric, Val) ->
     end,
     inc_overall(Metric, Val).
 
--spec(inc_overall(rule_id(), atom()) -> ok).
+-spec(inc_overall(atom(), pos_integer()) -> ok).
 inc_overall(Metric, Val) ->
     emqx_metrics:inc(Metric, Val).
 
@@ -250,7 +252,6 @@ handle_call(get_overall_rule_speed, _From, State = #state{overall_rule_speed = R
     {reply, format_rule_speed(RuleSpeed), State};
 
 handle_call({create_metrics, Id}, _From, State = #state{metric_ids = MIDs}) ->
-
     {reply, create_counters(Id), State#state{metric_ids = sets:add_element(Id, MIDs)}};
 
 handle_call({create_rule_metrics, Id}, _From,

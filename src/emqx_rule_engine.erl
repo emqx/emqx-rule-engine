@@ -65,6 +65,8 @@
              , action_instance_params/0
              ]).
 
+-define(T_RETRY, 60000).
+
 %%------------------------------------------------------------------------------
 %% Load resource/action providers from all available applications
 %%------------------------------------------------------------------------------
@@ -72,8 +74,9 @@
 %% Load all providers .
 -spec(load_providers() -> ok).
 load_providers() ->
-    [load_provider(App) || App <- ignore_lib_apps(application:loaded_applications())],
-    ok.
+    lists:foreach(fun(App) ->
+        load_provider(App)
+    end, ignore_lib_apps(application:loaded_applications())).
 
 -spec(load_provider(App :: atom()) -> ok).
 load_provider(App) when is_atom(App) ->
@@ -86,8 +89,9 @@ load_provider(App) when is_atom(App) ->
 %% Load all providers .
 -spec(unload_providers() -> ok).
 unload_providers() ->
-    [unload_provider(App) || App <- ignore_lib_apps(application:loaded_applications())],
-    ok.
+    lists:foreach(fun(App) ->
+        unload_provider(App)
+    end, ignore_lib_apps(application:loaded_applications())).
 
 %% @doc Unload a provider.
 -spec(unload_provider(App :: atom()) -> ok).
@@ -147,45 +151,60 @@ find_attrs(App, Def) ->
 module_attributes(Module) ->
     try Module:module_info(attributes)
     catch
-        error:undef -> [];
-        error:Reason -> error(Reason)
+        error:undef -> []
     end.
 
 %%------------------------------------------------------------------------------
 %% APIs for rules and resources
 %%------------------------------------------------------------------------------
 
--spec(create_rule(#{}) -> {ok, rule()} | no_return()).
-create_rule(Params = #{rawsql := Sql, actions := Actions}) ->
+-dialyzer([{nowarn_function, [create_rule/1, rule_id/0]}]).
+-spec create_rule(map()) -> {ok, rule()} | {error, term()}.
+create_rule(Params = #{rawsql := Sql, actions := ActArgs}) ->
     case emqx_rule_sqlparser:parse_select(Sql) of
         {ok, Select} ->
             RuleId = maps:get(id, Params, rule_id()),
             Enabled = maps:get(enabled, Params, true),
-            Rule = #rule{id = RuleId,
-                         rawsql = Sql,
-                         for = emqx_rule_sqlparser:select_from(Select),
-                         is_foreach = emqx_rule_sqlparser:select_is_foreach(Select),
-                         fields = emqx_rule_sqlparser:select_fields(Select),
-                         doeach = emqx_rule_sqlparser:select_doeach(Select),
-                         incase = emqx_rule_sqlparser:select_incase(Select),
-                         conditions = emqx_rule_sqlparser:select_where(Select),
-                         on_action_failed = maps:get(on_action_failed, Params, continue),
-                         actions = prepare_actions(Actions, Enabled),
-                         enabled = Enabled,
-                         description = maps:get(description, Params, "")},
-            ok = emqx_rule_registry:add_rule(Rule),
-            ok = emqx_rule_metrics:create_rule_metrics(RuleId),
-            {ok, Rule};
-        Error -> error(Error)
+            try prepare_actions(ActArgs, Enabled) of
+                Actions ->
+                    Rule = #rule{
+                        id = RuleId,
+                        rawsql = Sql,
+                        for = emqx_rule_sqlparser:select_from(Select),
+                        is_foreach = emqx_rule_sqlparser:select_is_foreach(Select),
+                        fields = emqx_rule_sqlparser:select_fields(Select),
+                        doeach = emqx_rule_sqlparser:select_doeach(Select),
+                        incase = emqx_rule_sqlparser:select_incase(Select),
+                        conditions = emqx_rule_sqlparser:select_where(Select),
+                        on_action_failed = maps:get(on_action_failed, Params, continue),
+                        actions = Actions,
+                        enabled = Enabled,
+                        description = maps:get(description, Params, "")
+                    },
+                    ok = emqx_rule_registry:add_rule(Rule),
+                    ok = emqx_rule_metrics:create_rule_metrics(RuleId),
+                    {ok, Rule}
+            catch
+                throw:{action_not_found, ActionName} ->
+                    {error, {action_not_found, ActionName}};
+                throw:Reason ->
+                    {error, Reason}
+            end;
+        Reason -> {error, Reason}
     end.
 
--spec(update_rule(#{}) -> {ok, rule()} | no_return()).
+-spec(update_rule(#{id := binary(), _=>_}) -> {ok, rule()} | {error, {not_found, rule_id()}}).
 update_rule(Params = #{id := RuleId}) ->
     case emqx_rule_registry:get_rule(RuleId) of
         {ok, Rule0} ->
-            Rule = may_update_rule_params(Rule0, Params),
-            ok = emqx_rule_registry:add_rule(Rule),
-            {ok, Rule};
+            try may_update_rule_params(Rule0, Params) of
+                Rule ->
+                    ok = emqx_rule_registry:add_rule(Rule),
+                    {ok, Rule}
+            catch
+                throw:Reason ->
+                    {error, Reason}
+            end;
         not_found ->
             {error, {not_found, RuleId}}
     end.
@@ -200,42 +219,31 @@ delete_rule(RuleId) ->
             catch
                 Error:Reason:ST ->
                     ?LOG(error, "clear_rule ~p failed: ~p", [RuleId, {Error, Reason, ST}]),
-                    refresh_actions(Actions, fun(_) -> true end)
+                    refresh_actions(Actions)
             end;
         not_found ->
             ok
     end.
 
--spec(create_resource(#{}) -> {ok, resource()} | {error, Reason :: term()}).
-create_resource(#{type := Type, config := Config} = Params) ->
+-spec(create_resource(#{type := _, config := _, _ => _}) -> {ok, resource()} | {error, Reason :: term()}).
+create_resource(#{type := Type, config := Config0} = Params) ->
     case emqx_rule_registry:find_resource_type(Type) of
         {ok, #resource_type{on_create = {M, F}, params_spec = ParamSpec}} ->
-            ok = emqx_rule_validator:validate_params(Config, ParamSpec),
+            Config = emqx_rule_validator:validate_params(Config0, ParamSpec),
             ResId = maps:get(id, Params, resource_id()),
             Resource = #resource{id = ResId,
                                  type = Type,
                                  config = Config,
-                                 description = iolist_to_binary(maps:get(description, Params, ""))},
+                                 description = iolist_to_binary(maps:get(description, Params, "")),
+                                 created_at = erlang:system_time(millisecond)
+                                },
             ok = emqx_rule_registry:add_resource(Resource),
             %% Note that we will return OK in case of resource creation failure,
-            %% users can always re-start the resource later.
+            %% A timer is started to re-start the resource later.
             catch cluster_call(init_resource, [M, F, ResId, Config]),
             {ok, Resource};
         not_found ->
             {error, {resource_type_not_found, Type}}
-    end.
-
--spec(start_resource(resource_id()) -> ok | {error, Reason :: term()}).
-start_resource(ResId) ->
-    case emqx_rule_registry:find_resource(ResId) of
-        {ok, #resource{type = ResType, config = Config}} ->
-            {ok, #resource_type{on_create = {Mod, Create}}}
-                = emqx_rule_registry:find_resource_type(ResType),
-            init_resource(Mod, Create, ResId, Config),
-            refresh_actions_of_a_resource(ResId),
-            ok;
-        not_found ->
-            {error, {resource_not_found, ResId}}
     end.
 
 -spec(update_resource(resource_id(), map()) -> ok | {error, Reason :: term()}).
@@ -244,7 +252,7 @@ update_resource(ResId, NewParams) ->
         lists:foreach(fun(#rule{id = RuleId, enabled = Enabled, actions = Actions}) ->
             lists:foreach(
                 fun (#action_instance{args = #{<<"$resource">> := ResId1}})
-                    when ResId =:= ResId1, Enabled == true ->
+                    when ResId =:= ResId1, Enabled =:= true ->
                         throw({dependency_exists, RuleId});
                     (_) -> ok
                 end, Actions)
@@ -260,50 +268,74 @@ do_update_resource_check(Id, NewParams) ->
                        type = Type,
                        config = OldConfig,
                        description = OldDescription} = _OldResource} ->
-                try
-                    do_update_resource(#{id => Id,
-                                         config => case maps:find(<<"config">>, NewParams) of
-                                                        {ok, NewConfig} -> NewConfig;
-                                                        error -> OldConfig
-                                                   end,
-                                         type => Type,
-                                         description => case maps:find(<<"description">>, NewParams) of
-                                                             {ok, NewDescription} -> NewDescription;
-                                                             error -> OldDescription
-                                                        end}),
-                    ok
-                catch _ : Reason ->
-                    {error, Reason}
-                end;
+            try
+                do_update_resource(#{id => Id,
+                                     config => case maps:find(<<"config">>, NewParams) of
+                                                    {ok, NewConfig} -> NewConfig;
+                                                    error -> OldConfig
+                                               end,
+                                     type => Type,
+                                     description => case maps:find(<<"description">>, NewParams) of
+                                                         {ok, NewDescription} -> NewDescription;
+                                                         error -> OldDescription
+                                                    end}),
+                ok
+            catch _ : Reason ->
+                {error, Reason}
+            end;
         _Other ->
             {error, not_found}
     end.
 
 do_update_resource(#{id := Id, type := Type, description := NewDescription, config := NewConfig}) ->
     case emqx_rule_registry:find_resource_type(Type) of
-       {ok, #resource_type{on_create = {Module, Create},
-                           on_destroy = {Module, Destroy},
-                           params_spec = ParamSpec}} ->
-            ok = emqx_rule_validator:validate_params(NewConfig, ParamSpec),
-            test_resource(#{type => Type, config => NewConfig}),
-            catch cluster_call(clear_resource, [Module, Destroy, Id]),
-            cluster_call(init_resource, [Module, Create, Id, NewConfig]),
-            emqx_rule_registry:add_resource(#resource{id = Id,
-                                                      type = Type,
-                                                      config = NewConfig,
-                                                      description = NewDescription,
-                                                      created_at = erlang:system_time(millisecond)})
+        {ok, #resource_type{on_create = {Module, Create},
+                            params_spec = ParamSpec}} ->
+            Config = emqx_rule_validator:validate_params(NewConfig, ParamSpec),
+            case test_resource(#{type => Type, config => NewConfig}) of
+                ok ->
+                    Resource = #resource{id = Id,
+                                         type = Type,
+                                         config = Config,
+                                         description = NewDescription,
+                                         created_at = erlang:system_time(millisecond)},
+                    cluster_call(init_resource, [Module, Create, Id, Config]),
+                    emqx_rule_registry:add_resource(Resource);
+               {error, Reason} ->
+                    error({error, Reason})
+            end
     end.
 
--spec(test_resource(#{}) -> ok | {error, Reason :: term()}).
-test_resource(#{type := Type, config := Config}) ->
+-spec(start_resource(resource_id()) -> ok | {error, Reason :: term()}).
+start_resource(ResId) ->
+    case emqx_rule_registry:find_resource(ResId) of
+        {ok, #resource{type = ResType, config = Config}} ->
+            {ok, #resource_type{on_create = {Mod, Create}}}
+                = emqx_rule_registry:find_resource_type(ResType),
+            try
+                init_resource(Mod, Create, ResId, Config),
+                refresh_actions_of_a_resource(ResId)
+            catch
+                throw:Reason -> {error, Reason}
+            end;
+        not_found ->
+            {error, {resource_not_found, ResId}}
+    end.
+
+-spec(test_resource(#{type := _, config := _, _ => _}) -> ok | {error, Reason :: term()}).
+test_resource(#{type := Type, config := Config0}) ->
     case emqx_rule_registry:find_resource_type(Type) of
-        {ok, #resource_type{on_create = {ModC,Create}, on_destroy = {ModD,Destroy}, params_spec = ParamSpec}} ->
-            ok = emqx_rule_validator:validate_params(Config, ParamSpec),
+        {ok, #resource_type{on_create = {ModC, Create},
+                            on_destroy = {ModD, Destroy},
+                            params_spec = ParamSpec}} ->
+            Config = emqx_rule_validator:validate_params(Config0, ParamSpec),
             ResId = resource_id(),
-            cluster_call(init_resource, [ModC, Create, ResId, Config]),
-            cluster_call(clear_resource, [ModD, Destroy, ResId]),
-            ok;
+            try
+                cluster_call(init_resource, [ModC, Create, ResId, Config]),
+                cluster_call(clear_resource, [ModD, Destroy, ResId])
+            catch
+                throw:Reason -> {error, Reason}
+            end;
         not_found ->
             {error, {resource_type_not_found, Type}}
     end.
@@ -333,12 +365,16 @@ get_resource_params(ResId) ->
 delete_resource(ResId) ->
     case emqx_rule_registry:find_resource(ResId) of
         {ok, #resource{type = ResType}} ->
-            {ok, #resource_type{on_destroy = {ModD,Destroy}}}
+            {ok, #resource_type{on_destroy = {ModD, Destroy}}}
                 = emqx_rule_registry:find_resource_type(ResType),
-            ok = emqx_rule_registry:remove_resource(ResId),
-            cluster_call(clear_resource, [ModD, Destroy, ResId]);
+            try
+                ok = emqx_rule_registry:remove_resource(ResId),
+                cluster_call(clear_resource, [ModD, Destroy, ResId])
+            catch
+                throw:Reason -> {error, Reason}
+            end;
         not_found ->
-            {error, {resource_not_found, ResId}}
+            {error, not_found}
     end.
 
 %%------------------------------------------------------------------------------
@@ -354,33 +390,25 @@ refresh_resource(Type) when is_atom(Type) ->
     lists:foreach(fun refresh_resource/1,
                   emqx_rule_registry:get_resources_by_type(Type));
 
-refresh_resource(#resource{id = ResId, config = Config, type = Type}) ->
-    {ok, #resource_type{on_create = {M, F}}} = emqx_rule_registry:find_resource_type(Type),
-        try cluster_call(init_resource, [M, F, ResId, Config])
-        catch Error:Reason:ST ->
-            logger:critical(
-                "Can not re-stablish resource ~p: ~0p. The resource is disconnected."
-                "Fix the issue and establish it manually.\n"
-                "Stacktrace: ~0p",
-                [ResId, {Error, Reason}, ST])
-        end.
+refresh_resource(#resource{id = ResId}) ->
+    emqx_rule_monitor:ensure_resource_retrier(ResId, ?T_RETRY).
 
 -spec(refresh_rules() -> ok).
 refresh_rules() ->
-    [try refresh_rule(Rule)
-     catch _:Error:ST ->
-        logger:critical(
-            "Can not re-build rule ~p: ~0p. The rule is disabled."
-            "Fix the issue and enable it manually.\n"
-            "Stacktrace: ~0p",
-            [RuleId, Error, ST])
-     end || Rule = #rule{id = RuleId}
-            <- emqx_rule_registry:get_rules()],
-    ok.
+    lists:foreach(fun(#rule{id = RuleId} = Rule) ->
+        try refresh_rule(Rule)
+        catch Error:Reason:ST ->
+            logger:critical(
+                "Can not re-build rule ~p: ~0p. The rule is disabled."
+                "Fix the issue and enable it manually.\n"
+                "Stacktrace: ~0p",
+                [RuleId, {Error,Reason}, ST])
+        end
+    end, emqx_rule_registry:get_rules()).
 
 refresh_rule(#rule{id = RuleId, actions = Actions}) ->
     ok = emqx_rule_metrics:create_rule_metrics(RuleId),
-    refresh_actions(Actions, fun(_) -> true end).
+    refresh_actions(Actions).
 
 -spec(refresh_resource_status() -> ok).
 refresh_resource_status() ->
@@ -399,10 +427,10 @@ refresh_resource_status() ->
 prepare_actions(Actions, NeedInit) ->
     [prepare_action(Action, NeedInit) || Action <- Actions].
 
-prepare_action(#{name := Name, args := Args} = Action, NeedInit) ->
+prepare_action(#{name := Name, args := Args0} = Action, NeedInit) ->
     case emqx_rule_registry:find_action(Name) of
         {ok, #action{module = Mod, on_create = Create, params_spec = ParamSpec}} ->
-            ok = emqx_rule_validator:validate_params(Args, ParamSpec),
+            Args = emqx_rule_validator:validate_params(Args0, ParamSpec),
             ActionInstId = maps:get(id, Action, action_instance_id(Name)),
             NeedInit andalso cluster_call(init_action, [Mod, Create, ActionInstId, with_resource_params(Args)]),
             #action_instance{
@@ -422,8 +450,7 @@ with_resource_params(Args = #{<<"$resource">> := ResId}) ->
     end;
 with_resource_params(Args) -> Args.
 
-may_update_rule_params(Rule, Params) when map_size(Params) =:= 0 ->
-    Rule;
+-dialyzer([{nowarn_function, may_update_rule_params/2}]).
 may_update_rule_params(Rule, Params = #{rawsql := SQL}) ->
     case emqx_rule_sqlparser:parse_select(SQL) of
         {ok, Select} ->
@@ -438,16 +465,11 @@ may_update_rule_params(Rule, Params = #{rawsql := SQL}) ->
                     conditions = emqx_rule_sqlparser:select_where(Select)
                 },
                 maps:remove(rawsql, Params));
-        Error -> error(Error)
+        Reason -> throw(Reason)
     end;
-may_update_rule_params(Rule = #rule{enabled = OldE, actions = Actions},
-        Params = #{enabled := ToE}) ->
-    case {OldE, ToE} of
-        {false, true} -> refresh_rule(Rule);
-        {true, false} -> clear_actions(Actions);
-        _ -> ok
-    end,
-    may_update_rule_params(Rule#rule{enabled = ToE}, maps:remove(enabled, Params));
+may_update_rule_params(Rule, Params = #{enabled := Enabled}) ->
+    Enabled andalso refresh_rule(Rule),
+    may_update_rule_params(Rule#rule{enabled = Enabled}, maps:remove(enabled, Params));
 may_update_rule_params(Rule, Params = #{description := Descr}) ->
     may_update_rule_params(Rule#rule{description = Descr}, maps:remove(description, Params));
 may_update_rule_params(Rule, Params = #{on_action_failed := OnFailed}) ->
@@ -497,17 +519,22 @@ cluster_call(Func, Args) ->
             end;
         {ResL, BadNodes} ->
             ?LOG(error, "cluster_call bad nodes found: ~p, ResL: ~p", [BadNodes, ResL]),
-            throw({func_fail(Func), {nodes_not_exist, BadNodes}})
+            throw({func_fail(Func), {failed_on_nodes, BadNodes}})
    end.
 
 init_resource(Module, OnCreate, ResId, Config) ->
     Params = ?RAISE(Module:OnCreate(ResId, Config),
-                    {{init_resource_failure, node()}, {{Module, OnCreate}, {_REASON_,_ST_}}}),
-    emqx_rule_registry:add_resource_params(#resource_params{id = ResId, params = Params, status = #{is_alive => true}}).
+        {{Module, OnCreate}, {_EXCLASS_, _EXCPTION_, _ST_}}),
+    ResParams = #resource_params{id = ResId,
+                                 params = Params,
+                                 status = #{is_alive => true}},
+    emqx_rule_registry:add_resource_params(ResParams).
 
 init_action(Module, OnCreate, ActionInstId, Params) ->
     ok = emqx_rule_metrics:create_metrics(ActionInstId),
-    case ?RAISE(Module:OnCreate(ActionInstId, Params), {{init_action_failure, node()}, {{Module,OnCreate},{_REASON_,_ST_}}}) of
+    case ?RAISE(Module:OnCreate(ActionInstId, Params),
+                {{init_action_failure, node()},
+                 {{Module, OnCreate}, {_EXCLASS_, _EXCPTION_, _ST_}}}) of
         {Apply, NewParams} when is_function(Apply) -> %% BACKW: =< e4.2.2
             ok = emqx_rule_registry:add_action_instance_params(
                 #action_instance_params{id = ActionInstId, params = NewParams, apply = Apply});
@@ -527,7 +554,7 @@ clear_resource(Module, Destroy, ResId) ->
     case emqx_rule_registry:find_resource_params(ResId) of
         {ok, #resource_params{params = Params}} ->
             ?RAISE(Module:Destroy(ResId, Params),
-                   {{destroy_resource_failure, node()}, {{Module, Destroy}, {_REASON_,_ST_}}}),
+                   {{destroy_resource_failure, node()}, {{Module, Destroy}, {_EXCLASS_,_EXCPTION_,_ST_}}}),
             ok = emqx_rule_registry:remove_resource_params(ResId);
         not_found ->
             ok
@@ -556,7 +583,7 @@ clear_action(Module, Destroy, ActionInstId) ->
             case emqx_rule_registry:get_action_instance_params(ActionInstId) of
                 {ok, #action_instance_params{params = Params}} ->
                     ?RAISE(Module:Destroy(ActionInstId, Params),{{destroy_action_failure, node()},
-                                                {{Module, Destroy}, {_REASON_,_ST_}}}),
+                                                {{Module, Destroy}, {_EXCLASS_,_EXCPTION_,_ST_}}}),
                     ok = emqx_rule_registry:remove_action_instance_params(ActionInstId);
                 not_found ->
                     ok
@@ -593,12 +620,12 @@ fetch_resource_status(Module, OnStatus, ResId) ->
     end.
 
 refresh_actions_of_a_resource(ResId) ->
-    [refresh_actions(Actions,
-        fun (#action_instance{args = #{<<"$resource">> := ResId0}})
+    R = fun (#action_instance{args = #{<<"$resource">> := ResId0}})
                 when ResId0 =:= ResId -> true;
             (_) -> false
-        end)
-     || #rule{actions = Actions} <- emqx_rule_registry:get_rules()].
+        end,
+    F = fun(#rule{actions = Actions}) -> refresh_actions(Actions, R) end,
+    lists:foreach(F, emqx_rule_registry:get_rules()).
 
 refresh_actions(Actions) ->
     refresh_actions(Actions, fun(_) -> true end).
