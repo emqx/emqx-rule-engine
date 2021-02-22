@@ -37,6 +37,11 @@
         , on_message_acked/3
         ]).
 
+-export([ event_info/0
+        , columns/1
+        , columns_with_exam/1
+        ]).
+
 -define(SUPPORTED_HOOK,
         [ 'client.connected'
         , 'client.disconnected'
@@ -56,9 +61,10 @@
 -endif.
 
 load(Env) ->
-    [emqx_hooks:add(HookPoint, {?MODULE, hook_fun(HookPoint), [hook_conf(HookPoint, Env)]})
-     || HookPoint <- ?SUPPORTED_HOOK],
-    ok.
+    lists:foreach(
+      fun(HookPoint) ->
+              ok = emqx_hooks:put(HookPoint, {?MODULE, hook_fun(HookPoint), [hook_conf(HookPoint, Env)]})
+      end, ?SUPPORTED_HOOK).
 
 unload(_Env) ->
     [emqx_hooks:del(HookPoint, {?MODULE, hook_fun(HookPoint)})
@@ -291,7 +297,8 @@ may_publish_and_apply(EventName, GenEventMsg, #{enabled := true, qos := QoS}) ->
     EventMsg = GenEventMsg(),
     case emqx_json:safe_encode(EventMsg) of
         {ok, Payload} ->
-            emqx_broker:safe_publish(make_msg(QoS, EventTopic, Payload));
+            _ = emqx_broker:safe_publish(make_msg(QoS, EventTopic, Payload)),
+            ok;
         {error, _Reason} ->
             ?LOG(error, "Failed to encode event msg for ~p, msg: ~p", [EventName, EventMsg])
     end,
@@ -306,6 +313,239 @@ may_publish_and_apply(EventName, GenEventMsg, _Env) ->
 make_msg(QoS, Topic, Payload) ->
     emqx_message:set_flags(#{sys => true, event => true},
         emqx_message:make(emqx_events, QoS, Topic, iolist_to_binary(Payload))).
+
+%%--------------------------------------------------------------------
+%% Columns
+%%--------------------------------------------------------------------
+columns(Event) ->
+    [Key || {Key, _ExampleVal} <- columns_with_exam(Event)].
+
+event_info() ->
+    [ event_info_message_publish()
+    , event_info_message_deliver()
+    , event_info_message_acked()
+    , event_info_message_dropped()
+    , event_info_client_connected()
+    , event_info_client_disconnected()
+    , event_info_session_subscribed()
+    , event_info_session_unsubscribed()
+    ].
+
+event_info_message_publish() ->
+    event_info_common(
+        'message.publish',
+        {<<"message publish">>, <<"消息发布"/utf8>>},
+        {<<"message publish">>, <<"消息发布"/utf8>>},
+        <<"SELECT payload.msg as msg FROM \"t/#\" WHERE msg = 'hello'">>
+    ).
+event_info_message_deliver() ->
+    event_info_common(
+        'message.delivered',
+        {<<"message delivered">>, <<"消息已投递"/utf8>>},
+        {<<"message delivered">>, <<"消息已投递"/utf8>>},
+        <<"SELECT * FROM \"$events/message_delivered\" WHERE topic =~ 't/#'">>
+    ).
+event_info_message_acked() ->
+    event_info_common(
+        'message.acked',
+        {<<"message acked">>, <<"消息应答"/utf8>>},
+        {<<"message acked">>, <<"消息应答"/utf8>>},
+        <<"SELECT * FROM \"$events/message_acked\" WHERE topic =~ 't/#'">>
+    ).
+event_info_message_dropped() ->
+    event_info_common(
+        'message.dropped',
+        {<<"message dropped">>, <<"消息丢弃"/utf8>>},
+        {<<"message dropped">>, <<"消息丢弃"/utf8>>},
+        <<"SELECT * FROM \"$events/message_dropped\" WHERE topic =~ 't/#'">>
+    ).
+event_info_client_connected() ->
+    event_info_common(
+        'client.connected',
+        {<<"client connected">>, <<"连接建立"/utf8>>},
+        {<<"client connected">>, <<"连接建立"/utf8>>},
+        <<"SELECT * FROM \"$events/client_connected\"">>
+    ).
+event_info_client_disconnected() ->
+    event_info_common(
+        'client.disconnected',
+        {<<"client disconnected">>, <<"连接断开"/utf8>>},
+        {<<"client disconnected">>, <<"连接断开"/utf8>>},
+        <<"SELECT * FROM \"$events/client_disconnected\" WHERE topic =~ 't/#'">>
+    ).
+event_info_session_subscribed() ->
+    event_info_common(
+        'session.subscribed',
+        {<<"session subscribed">>, <<"会话订阅完成"/utf8>>},
+        {<<"session subscribed">>, <<"会话订阅完成"/utf8>>},
+        <<"SELECT * FROM \"$events/session_subscribed\" WHERE topic =~ 't/#'">>
+    ).
+event_info_session_unsubscribed() ->
+    event_info_common(
+        'session.unsubscribed',
+        {<<"session unsubscribed">>, <<"会话取消订阅完成"/utf8>>},
+        {<<"session unsubscribed">>, <<"会话取消订阅完成"/utf8>>},
+        <<"SELECT * FROM \"$events/session_unsubscribed\" WHERE topic =~ 't/#'">>
+    ).
+
+event_info_common(Event, {TitleEN, TitleZH}, {DescrEN, DescrZH}, SqlExam) ->
+    #{event => event_topic(Event),
+      title => #{en => TitleEN, zh => TitleZH},
+      description => #{en => DescrEN, zh => DescrZH},
+      test_columns => test_columns(Event),
+      columns => columns(Event),
+      sql_example => SqlExam
+    }.
+
+test_columns('message.dropped') ->
+    test_columns('message.publish');
+test_columns('message.publish') ->
+    [ {<<"clientid">>, <<"c_emqx">>}
+    , {<<"username">>, <<"u_emqx">>}
+    , {<<"topic">>, <<"t/a">>}
+    , {<<"qos">>, 1}
+    , {<<"payload">>, <<"{\"msg\": \"hello\"}">>}
+    ];
+test_columns('message.acked') ->
+    test_columns('message.delivered');
+test_columns('message.delivered') ->
+    [ {<<"from_clientid">>, <<"c_emqx_1">>}
+    , {<<"from_username">>, <<"u_emqx_1">>}
+    , {<<"clientid">>, <<"c_emqx_2">>}
+    , {<<"username">>, <<"u_emqx_2">>}
+    , {<<"topic">>, <<"t/a">>}
+    , {<<"qos">>, 1}
+    , {<<"payload">>, <<"{\"msg\": \"hello\"}">>}
+    ];
+test_columns('client.connected') ->
+    [ {<<"clientid">>, <<"c_emqx">>}
+    , {<<"username">>, <<"u_emqx">>}
+    , {<<"peername">>, <<"127.0.0.1:52918">>}
+    ];
+test_columns('client.disconnected') ->
+    [ {<<"clientid">>, <<"c_emqx">>}
+    , {<<"username">>, <<"u_emqx">>}
+    , {<<"reason">>, <<"normal">>}
+    ];
+test_columns('session.unsubscribed') ->
+    test_columns('session.subscribed');
+test_columns('session.subscribed') ->
+    [ {<<"clientid">>, <<"c_emqx">>}
+    , {<<"username">>, <<"u_emqx">>}
+    , {<<"topic">>, <<"t/a">>}
+    , {<<"qos">>, 1}
+    ].
+
+columns_with_exam('message.publish') ->
+    [ {<<"event">>, 'message.publish'}
+    , {<<"id">>, emqx_guid:to_hexstr(emqx_guid:gen())}
+    , {<<"clientid">>, <<"c_emqx">>}
+    , {<<"username">>, <<"u_emqx">>}
+    , {<<"payload">>, <<"{\"msg\": \"hello\"}">>}
+    , {<<"peerhost">>, <<"192.168.0.10">>}
+    , {<<"topic">>, <<"t/a">>}
+    , {<<"qos">>, 1}
+    , {<<"flags">>, #{}}
+    , {<<"headers">>, undefined}
+    , {<<"publish_received_at">>, erlang:system_time(millisecond)}
+    , {<<"timestamp">>, erlang:system_time(millisecond)}
+    , {<<"node">>, node()}
+    ];
+columns_with_exam('message.delivered') ->
+    [ {<<"event">>, 'message.delivered'}
+    , {<<"id">>, emqx_guid:to_hexstr(emqx_guid:gen())}
+    , {<<"from_clientid">>, <<"c_emqx_1">>}
+    , {<<"from_username">>, <<"u_emqx_1">>}
+    , {<<"clientid">>, <<"c_emqx_2">>}
+    , {<<"username">>, <<"u_emqx_2">>}
+    , {<<"payload">>, <<"{\"msg\": \"hello\"}">>}
+    , {<<"peerhost">>, <<"192.168.0.10">>}
+    , {<<"topic">>, <<"t/a">>}
+    , {<<"qos">>, 1}
+    , {<<"flags">>, #{}}
+    , {<<"publish_received_at">>, erlang:system_time(millisecond)}
+    , {<<"timestamp">>, erlang:system_time(millisecond)}
+    , {<<"node">>, node()}
+    ];
+columns_with_exam('message.acked') ->
+    [ {<<"event">>, 'message.acked'}
+    , {<<"id">>, emqx_guid:to_hexstr(emqx_guid:gen())}
+    , {<<"from_clientid">>, <<"c_emqx_1">>}
+    , {<<"from_username">>, <<"u_emqx_1">>}
+    , {<<"clientid">>, <<"c_emqx_2">>}
+    , {<<"username">>, <<"u_emqx_2">>}
+    , {<<"payload">>, <<"{\"msg\": \"hello\"}">>}
+    , {<<"peerhost">>, <<"192.168.0.10">>}
+    , {<<"topic">>, <<"t/a">>}
+    , {<<"qos">>, 1}
+    , {<<"flags">>, #{}}
+    , {<<"publish_received_at">>, erlang:system_time(millisecond)}
+    , {<<"timestamp">>, erlang:system_time(millisecond)}
+    , {<<"node">>, node()}
+    ];
+columns_with_exam('message.dropped') ->
+    [ {<<"event">>, 'message.dropped'}
+    , {<<"id">>, emqx_guid:to_hexstr(emqx_guid:gen())}
+    , {<<"reason">>, no_subscribers}
+    , {<<"clientid">>, <<"c_emqx">>}
+    , {<<"username">>, <<"u_emqx">>}
+    , {<<"payload">>, <<"{\"msg\": \"hello\"}">>}
+    , {<<"peerhost">>, <<"192.168.0.10">>}
+    , {<<"topic">>, <<"t/a">>}
+    , {<<"qos">>, 1}
+    , {<<"flags">>, #{}}
+    , {<<"publish_received_at">>, erlang:system_time(millisecond)}
+    , {<<"timestamp">>, erlang:system_time(millisecond)}
+    , {<<"node">>, node()}
+    ];
+columns_with_exam('client.connected') ->
+    [ {<<"event">>, 'client.connected'}
+    , {<<"clientid">>, <<"c_emqx">>}
+    , {<<"username">>, <<"u_emqx">>}
+    , {<<"mountpoint">>, undefined}
+    , {<<"peername">>, <<"192.168.0.10:56431">>}
+    , {<<"sockname">>, <<"0.0.0.0:1883">>}
+    , {<<"proto_name">>, <<"MQTT">>}
+    , {<<"proto_ver">>, 5}
+    , {<<"keepalive">>, 60}
+    , {<<"clean_start">>, true}
+    , {<<"expiry_interval">>, 3600}
+    , {<<"is_bridge">>, false}
+    , {<<"connected_at">>, erlang:system_time(millisecond)}
+    , {<<"timestamp">>, erlang:system_time(millisecond)}
+    , {<<"node">>, node()}
+    ];
+columns_with_exam('client.disconnected') ->
+    [ {<<"event">>, 'client.disconnected'}
+    , {<<"reason">>, normal}
+    , {<<"clientid">>, <<"c_emqx">>}
+    , {<<"username">>, <<"u_emqx">>}
+    , {<<"peername">>, <<"192.168.0.10:56431">>}
+    , {<<"sockname">>, <<"0.0.0.0:1883">>}
+    , {<<"disconnected_at">>, erlang:system_time(millisecond)}
+    , {<<"timestamp">>, erlang:system_time(millisecond)}
+    , {<<"node">>, node()}
+    ];
+columns_with_exam('session.subscribed') ->
+    [ {<<"event">>, 'session.subscribed'}
+    , {<<"clientid">>, <<"c_emqx">>}
+    , {<<"username">>, <<"u_emqx">>}
+    , {<<"peerhost">>, <<"192.168.0.10">>}
+    , {<<"topic">>, <<"t/a">>}
+    , {<<"qos">>, 1}
+    , {<<"timestamp">>, erlang:system_time(millisecond)}
+    , {<<"node">>, node()}
+    ];
+columns_with_exam('session.unsubscribed') ->
+    [ {<<"event">>, 'session.unsubscribed'}
+    , {<<"clientid">>, <<"c_emqx">>}
+    , {<<"username">>, <<"u_emqx">>}
+    , {<<"peerhost">>, <<"192.168.0.10">>}
+    , {<<"topic">>, <<"t/a">>}
+    , {<<"qos">>, 1}
+    , {<<"timestamp">>, erlang:system_time(millisecond)}
+    , {<<"node">>, node()}
+    ].
 
 %%--------------------------------------------------------------------
 %% Helper functions
@@ -352,7 +592,8 @@ event_topic('session.subscribed') -> <<"$events/session_subscribed">>;
 event_topic('session.unsubscribed') -> <<"$events/session_unsubscribed">>;
 event_topic('message.delivered') -> <<"$events/message_delivered">>;
 event_topic('message.acked') -> <<"$events/message_acked">>;
-event_topic('message.dropped') -> <<"$events/message_dropped">>.
+event_topic('message.dropped') -> <<"$events/message_dropped">>;
+event_topic('message.publish') -> <<"$events/message_publish">>.
 
 printable_maps(undefined) -> #{};
 printable_maps(Headers) ->
@@ -360,6 +601,12 @@ printable_maps(Headers) ->
         fun (K, V0, AccIn) when K =:= peerhost; K =:= peername; K =:= sockname ->
                 AccIn#{K => ntoa(V0)};
             ('User-Property', V0, AccIn) when is_list(V0) ->
-                AccIn#{'User-Property' => maps:from_list(V0)};
+                AccIn#{
+                    'User-Property' => maps:from_list(V0),
+                    'User-Property-Pairs' => [#{
+                        key => Key,
+                        value => Value
+                     } || {Key, Value} <- V0]
+                };
             (K, V0, AccIn) -> AccIn#{K => V0}
         end, #{}, Headers).

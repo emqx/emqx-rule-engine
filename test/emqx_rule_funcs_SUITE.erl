@@ -143,6 +143,40 @@ t_bool(_) ->
     ?assertEqual(false, emqx_rule_funcs:bool(<<"false">>)),
     ?assertError({invalid_boolean, _}, emqx_rule_funcs:bool(3)).
 
+t_proc_dict_put_get_del(_) ->
+    ?assertEqual(undefined, emqx_rule_funcs:proc_dict_get(<<"abc">>)),
+    emqx_rule_funcs:proc_dict_put(<<"abc">>, 1),
+    ?assertEqual(1, emqx_rule_funcs:proc_dict_get(<<"abc">>)),
+    emqx_rule_funcs:proc_dict_del(<<"abc">>),
+    ?assertEqual(undefined, emqx_rule_funcs:proc_dict_get(<<"abc">>)).
+
+t_term_encode(_) ->
+    TestData = [<<"abc">>, #{a => 1}, #{<<"3">> => [1,2,4]}],
+    lists:foreach(fun(Data) ->
+            ?assertEqual(Data,
+                emqx_rule_funcs:term_decode(
+                    emqx_rule_funcs:term_encode(Data)))
+        end, TestData).
+
+t_hexstr2bin(_) ->
+    ?assertEqual(<<1,2>>, emqx_rule_funcs:hexstr2bin(<<"0102">>)),
+    ?assertEqual(<<17,33>>, emqx_rule_funcs:hexstr2bin(<<"1121">>)).
+
+t_bin2hexstr(_) ->
+    ?assertEqual(<<"0102">>, emqx_rule_funcs:bin2hexstr(<<1,2>>)),
+    ?assertEqual(<<"1121">>, emqx_rule_funcs:bin2hexstr(<<17,33>>)).
+
+t_hex_convert(_) ->
+    ?PROPTEST(hex_convert).
+
+hex_convert() ->
+    ?FORALL(L, list(range(0, 255)),
+            begin
+                AbitraryBin = list_to_binary(L),
+                AbitraryBin == emqx_rule_funcs:hexstr2bin(
+                    emqx_rule_funcs:bin2hexstr(AbitraryBin))
+            end).
+
 t_is_null(_) ->
     ?assertEqual(true, emqx_rule_funcs:is_null(undefined)),
     ?assertEqual(false, emqx_rule_funcs:is_null(a)),
@@ -491,13 +525,15 @@ t_map_get(_) ->
     ?assertEqual(1, apply_func(map_get, [<<"a">>, #{a => 1}])),
     ?assertEqual(undefined, apply_func(map_get, [<<"a">>, #{}])),
     ?assertEqual(1, apply_func(map_get, [<<"a.b">>, #{a => #{b => 1}}])),
-    ?assertEqual(undefined, apply_func(map_get, [<<"a.c">>, #{a => #{b => 1}}])).
+    ?assertEqual(undefined, apply_func(map_get, [<<"a.c">>, #{a => #{b => 1}}])),
+    ?assertEqual(undefined, apply_func(map_get, [<<"a">>, #{}])).
 
 t_map_put(_) ->
     ?assertEqual(#{<<"a">> => 1}, apply_func(map_put, [<<"a">>, 1, #{}])),
     ?assertEqual(#{a => 2}, apply_func(map_put, [<<"a">>, 2, #{a => 1}])),
     ?assertEqual(#{<<"a">> => #{<<"b">> => 1}}, apply_func(map_put, [<<"a.b">>, 1, #{}])),
-    ?assertEqual(#{a => #{b => 1, <<"c">> => 1}}, apply_func(map_put, [<<"a.c">>, 1, #{a => #{b => 1}}])).
+    ?assertEqual(#{a => #{b => 1, <<"c">> => 1}}, apply_func(map_put, [<<"a.c">>, 1, #{a => #{b => 1}}])),
+    ?assertEqual(#{a => 2}, apply_func(map_put, [<<"a">>, 2, #{a => 1}])).
 
 t_mget(_) ->
     ?assertEqual(1, apply_func(map_get, [<<"a">>, #{a => 1}])),
@@ -542,7 +578,6 @@ t_subbits2_1(_) ->
     ?assertEqual(63, apply_func(subbits, [<<255:8>>, 2, 6])),
     ?assertEqual(127, apply_func(subbits, [<<255:8>>, 2, 7])),
     ?assertEqual(127, apply_func(subbits, [<<255:8>>, 2, 8])).
-
 t_subbits2_integer(_) ->
     ?assertEqual(456, apply_func(subbits, [<<456:32/integer>>, 1, 32, <<"integer">>, <<"signed">>, <<"big">>])),
     ?assertEqual(-456, apply_func(subbits, [<<-456:32/integer>>, 1, 32, <<"integer">>, <<"signed">>, <<"big">>])).

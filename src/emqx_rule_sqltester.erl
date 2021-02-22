@@ -15,30 +15,36 @@
 -module(emqx_rule_sqltester).
 
 -include("rule_engine.hrl").
--include("rule_events.hrl").
 -include_lib("emqx/include/logger.hrl").
 
 -export([ test/1
         ]).
 
--spec(test(#{}) -> {ok, Result::map()} | no_return()).
+%% Dialyzer gives up on the generated code.
+%% probably due to stack depth, or inlines.
+-dialyzer({nowarn_function, [test/1,
+                             test_rule/4,
+                             flatten/1,
+                             sql_test_action/0,
+                             fill_default_values/2,
+                             envs_examp/1
+                             ]}).
+
+-spec(test(#{}) -> {ok, map() | list()} | {error, term()}).
 test(#{<<"rawsql">> := Sql, <<"ctx">> := Context}) ->
-    case emqx_rule_sqlparser:parse_select(Sql) of
-        {ok, Select} ->
-            InTopic = maps:get(<<"topic">>, Context, <<>>),
-            EventTopics = emqx_rule_sqlparser:select_from(Select),
-            case lists:all(fun is_publish_topic/1, EventTopics) of
-                true ->
-                    %% test if the topic matches the topic filters in the rule
-                    case emqx_rule_utils:can_topic_match_oneof(InTopic, EventTopics) of
-                        true -> test_rule(Sql, Select, Context, EventTopics);
-                        false -> {error, nomatch}
-                    end;
-                false ->
-                    %% the rule is for both publish and events, test it directly
-                    test_rule(Sql, Select, Context, EventTopics)
+    {ok, Select} = emqx_rule_sqlparser:parse_select(Sql),
+    InTopic = maps:get(<<"topic">>, Context, <<>>),
+    EventTopics = emqx_rule_sqlparser:select_from(Select),
+    case lists:all(fun is_publish_topic/1, EventTopics) of
+        true ->
+            %% test if the topic matches the topic filters in the rule
+            case emqx_rule_utils:can_topic_match_oneof(InTopic, EventTopics) of
+                true -> test_rule(Sql, Select, Context, EventTopics);
+                false -> {error, nomatch}
             end;
-        Error -> error(Error)
+        false ->
+            %% the rule is for both publish and events, test it directly
+            test_rule(Sql, Select, Context, EventTopics)
     end.
 
 test_rule(Sql, Select, Context, EventTopics) ->
@@ -90,4 +96,23 @@ sql_test_action() ->
     end.
 
 fill_default_values(Event, Context) ->
-    maps:merge(?EG_ENVS(Event), Context).
+    maps:merge(envs_examp(Event), Context).
+
+envs_examp(<<"$events/", _/binary>> = EVENT_TOPIC) ->
+    EventName = emqx_rule_events:event_name(EVENT_TOPIC),
+    emqx_rule_maps:atom_key_map(
+        maps:from_list(
+            emqx_rule_events:columns_with_exam(EventName)));
+envs_examp(_) ->
+    #{id => emqx_guid:to_hexstr(emqx_guid:gen()),
+      clientid => <<"c_emqx">>,
+      username => <<"u_emqx">>,
+      payload => <<"{\"id\": 1, \"name\": \"ha\"}">>,
+      peerhost => <<"127.0.0.1">>,
+      topic => <<"t/a">>,
+      qos => 1,
+      flags => #{sys => true, event => true},
+      publish_received_at => emqx_rule_utils:now_ms(),
+      timestamp => emqx_rule_utils:now_ms(),
+      node => node()
+    }.

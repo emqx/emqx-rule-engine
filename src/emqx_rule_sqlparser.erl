@@ -17,7 +17,6 @@
 -module(emqx_rule_sqlparser).
 
 -include("rule_engine.hrl").
--include("rule_events.hrl").
 
 -export([parse_select/1]).
 
@@ -49,6 +48,10 @@
 
 -export_type([select/0]).
 
+%% Dialyzer gives up on the generated code.
+%% probably due to stack depth, or inlines.
+-dialyzer({nowarn_function, [parse_select/1]}).
+
 %% Parse one select statement.
 -spec(parse_select(string() | binary())
       -> {ok, select()} | {parse_error, term()} | {lex_error, term()}).
@@ -76,7 +79,7 @@ parse_select(Sql) ->
         end
     catch
         _Error:Reason:StackTrace ->
-            {parse_error, Reason, StackTrace}
+            {parse_error, {Reason, StackTrace}}
     end.
 
 -spec(select_fields(select()) -> list(field())).
@@ -103,12 +106,3 @@ select_from(#select{from = From}) ->
 select_where(#select{where = Where}) ->
     Where.
 
-fixed_columns() ->
-    ?COLUMNS('message.publish') ++
-    ?COLUMNS('message.acked') ++
-    ?COLUMNS('message.dropped') ++
-    ?COLUMNS('client.connected') ++
-    ?COLUMNS('client.disconnected') ++
-    ?COLUMNS('session.subscribed') ++
-    ?COLUMNS('session.unsubscribed') ++
-    [<<"item">>].

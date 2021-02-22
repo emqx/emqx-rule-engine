@@ -16,6 +16,8 @@
 
 -define(APP, emqx_rule_engine).
 
+-define(KV_TAB, '@rule_engine_db').
+
 -type(maybe(T) :: T | undefined).
 
 -type(rule_id() :: binary()).
@@ -34,6 +36,8 @@
 -type(mf() :: {Module::atom(), Fun::atom()}).
 
 -type(hook() :: atom() | 'any').
+
+-type(topic() :: binary()).
 
 -type(resource_status() :: #{ alive := boolean()
                             , atom() => binary() | atom() | list(binary()|atom())
@@ -60,12 +64,12 @@
         { id :: action_instance_id()
         , name :: action_name()
         , fallbacks :: list(#action_instance{})
-        , args :: #{atom() => term()} %% the args got from API for initializing action_instance
+        , args :: #{binary() => term()} %% the args got from API for initializing action_instance
         }).
 
 -record(rule,
         { id :: rule_id()
-        , for :: hook()
+        , for :: list(topic())
         , rawsql :: binary()
         , is_foreach :: boolean()
         , fields :: list()
@@ -82,7 +86,7 @@
         { id :: resource_id()
         , type :: resource_type_name()
         , config :: #{} %% the configs got from API for initializing resource
-        , created_at :: erlang:timestamp()
+        , created_at :: integer() %% epoch in millisecond precision
         , description :: binary()
         }).
 
@@ -110,9 +114,11 @@
 
 -record(action_instance_params,
         { id :: action_instance_id()
-        , params :: #{} %% the params got after initializing the action
+        %% the params got after initializing the action
+        , params :: #{}
+        %% the Func/Bindings got after initializing the action
         , apply :: fun((Data::map(), Envs::map()) -> any())
-                 | {M::module(), F::atom(), Args::list()} %% the func got after initializing the action
+                 | #{mod := module(), bindings := #{atom() => term()}}
         }).
 
 %% Arithmetic operators
@@ -136,16 +142,16 @@
 -define(is_logical(Op), (Op =:= 'and' orelse Op =:= 'or')).
 
 -define(RAISE(_EXP_, _ERROR_),
-        begin
-          fun() ->
-            try (_EXP_) catch _:_REASON_:_ST_ -> throw(_ERROR_) end
-          end()
-        end).
+        ?RAISE(_EXP_, _ = do_nothing, _ERROR_)).
 
--define(THROW(_EXP_, _ERROR_),
-        begin
-            try (_EXP_) catch _:_ -> throw(_ERROR_) end
-        end).
+-define(RAISE(_EXP_, _EXP_ON_FAIL_, _ERROR_),
+        fun() ->
+            try (_EXP_)
+            catch _EXCLASS_:_EXCPTION_:_ST_ ->
+                _EXP_ON_FAIL_,
+                throw(_ERROR_)
+            end
+        end()).
 
 %% Tables
 -define(RULE_TAB, emqx_rule).
