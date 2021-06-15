@@ -50,6 +50,10 @@
       {load_module, emqx_rule_engine_cli, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []}
     ]},
+    {"4.2.[4-6]", [
+      {load_module, emqx_rule_engine_api, brutal_purge, soft_purge, []},
+      {load_module, emqx_rule_engine, brutal_purge, soft_purge, []}
+    ]},
     {<<".*">>, []}
   ],
   [
@@ -99,6 +103,10 @@
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_api, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_cli, brutal_purge, soft_purge, []}
+    ]},
+    {"4.2.[4-6]", [
+      {load_module, emqx_rule_engine_api, brutal_purge, soft_purge, []},
+      {load_module, emqx_rule_engine, brutal_purge, soft_purge, []}
     ]},
     {<<".*">>, []}
   ]

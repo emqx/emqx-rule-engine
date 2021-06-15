@@ -262,12 +262,12 @@ do_update_resource_check(Id, NewParams) ->
                        description = OldDescription} = _OldResource} ->
                 try
                     do_update_resource(#{id => Id,
-                                         config => case maps:find(<<"config">>, NewParams) of
+                                         config => case maps:find(config, NewParams) of
                                                         {ok, NewConfig} -> NewConfig;
                                                         error -> OldConfig
                                                    end,
                                          type => Type,
-                                         description => case maps:find(<<"description">>, NewParams) of
+                                         description => case maps:find(description, NewParams) of
                                                              {ok, NewDescription} -> NewDescription;
                                                              error -> OldDescription
                                                         end}),
