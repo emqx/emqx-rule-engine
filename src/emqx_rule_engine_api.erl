@@ -334,16 +334,7 @@ show_resource(#{id := Id}, _Params) ->
     end.
 
 update_resource(#{id := Id}, NewParams) ->
-    P1 = case proplists:get_value(<<"description">>, NewParams) of
-        undefined -> #{};
-        Value -> #{<<"description">> => Value}
-    end,
-    P2 = case proplists:get_value(<<"config">>, NewParams) of
-        undefined -> #{};
-        [{}] -> #{};
-        Map -> #{<<"config">> => ?RAISE(maps:from_list(Map), {invalid_config, Map})}
-    end,
-    case emqx_rule_engine:update_resource(Id, maps:merge(P1, P2)) of
+    case emqx_rule_engine:update_resource(Id, parse_resource_params(NewParams)) of
         ok ->
             return(ok);
         {error, not_found} ->
@@ -549,7 +540,7 @@ parse_action(Action) ->
       fallbacks => parse_actions(maps:get(<<"fallbacks">>, Action, []))}.
 
 parse_resource_params(Params) ->
-    parse_resource_params(Params, #{config => #{}, description => <<"">>}).
+    parse_resource_params(Params, #{}).
 parse_resource_params([], Res) ->
     Res;
 parse_resource_params([{<<"id">>, Id} | Params], Res) ->
