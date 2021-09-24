@@ -443,8 +443,10 @@ may_update_rule_params(Rule, Params = #{rawsql := SQL}) ->
 may_update_rule_params(Rule = #rule{enabled = OldE, actions = Actions},
         Params = #{enabled := ToE}) ->
     case {OldE, ToE} of
-        {false, true} -> refresh_rule(Rule);
-        {true, false} -> clear_actions(Actions);
+        {false, true} ->
+            cluster_call(refresh_rule, [Rule]);
+        {true, false} ->
+            cluster_call(clear_actions, [Actions]);
         _ -> ok
     end,
     may_update_rule_params(Rule#rule{enabled = ToE}, maps:remove(enabled, Params));
@@ -487,7 +489,7 @@ action_instance_id(ActionName) ->
     iolist_to_binary([atom_to_list(ActionName), "_", integer_to_list(erlang:system_time())]).
 
 cluster_call(Func, Args) ->
-    case rpc:multicall(ekka_mnesia:running_nodes(), ?MODULE, Func, Args, 5000) of
+    case rpc:multicall(ekka_mnesia:running_nodes(), ?MODULE, Func, Args, 30000) of
         {ResL, []} ->
             case lists:filter(fun(ok) -> false; (_) -> true end, ResL) of
                 [] -> ok;
@@ -611,7 +613,7 @@ refresh_actions(Actions, Pred) ->
                 true ->
                     {ok, #action{module = Mod, on_create = Create}}
                         = emqx_rule_registry:find_action(ActName),
-                    cluster_call(init_action, [Mod, Create, Id, with_resource_params(Args)]),
+                    init_action(Mod, Create, Id, with_resource_params(Args)),
                     refresh_actions(Fallbacks, Pred);
                 false -> ok
             end
