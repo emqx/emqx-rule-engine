@@ -94,9 +94,8 @@ do_apply_rule(#rule{id = RuleId,
     case ?RAISE(match_conditions(Conditions, ColumnsAndSelected),
                 {match_conditions_error, {_REASON_,_ST_}}) of
         true ->
-            ok = emqx_rule_metrics:inc(RuleId, 'rules.matched'),
             Collection2 = filter_collection(Input, InCase, DoEach, Collection),
-            case Collection2 of 
+            case Collection2 of
                 [] -> emqx_rule_metrics:inc_rules_no_result(RuleId);
                 _ -> emqx_rule_metrics:inc_rules_passed(RuleId)
             end,
