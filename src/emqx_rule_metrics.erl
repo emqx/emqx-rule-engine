@@ -50,14 +50,11 @@
 -export([ inc/2
         , inc/3
         , get/2
-        , get_overall/1
         , get_rule_speed/1
-        , get_overall_rule_speed/0
         , create_rule_metrics/1
         , create_metrics/1
         , clear_rule_metrics/1
         , clear_metrics/1
-        , overall_metrics/0
         ]).
 
 -export([ get_rule_metrics/1
@@ -129,17 +126,10 @@ get(Id, Metric) ->
         Ref -> counters:get(Ref, metrics_idx(Metric))
     end.
 
--spec(get_overall(atom()) -> number()).
-get_overall(Metric) ->
-    emqx_metrics:val(Metric).
-
 -spec(get_rule_speed(atom()) -> map()).
 get_rule_speed(Id) ->
     gen_server:call(?MODULE, {get_rule_speed, Id}).
 
--spec(get_overall_rule_speed() -> map()).
-get_overall_rule_speed() ->
-    gen_server:call(?MODULE, get_overall_rule_speed).
 
 -spec(get_rule_metrics(rule_id()) -> map()).
 get_rule_metrics(Id) ->
@@ -172,12 +162,7 @@ inc(Id, Metric, Val) ->
             counters:add(couters_ref(Id), metrics_idx(Metric), Val);
         Ref ->
             counters:add(Ref, metrics_idx(Metric), Val)
-    end,
-    inc_overall(Metric, Val).
-
--spec(inc_overall(rule_id(), atom()) -> ok).
-inc_overall(Metric, Val) ->
-    emqx_metrics:inc(Metric, Val).
+    end.
 
 inc_rules_matched(Id) ->
     inc_rules_matched(Id, 1).
@@ -232,8 +217,6 @@ start_link() ->
 
 init([]) ->
     erlang:process_flag(trap_exit, true),
-    %% the overall counters
-    [ok = emqx_metrics:ensure(Metric)|| Metric <- overall_metrics()],
     %% the speed metrics
     erlang:send_after(timer:seconds(?SAMPLING), self(), ticking),
     {ok, #state{overall_rule_speed = #rule_speed{}}}.
@@ -245,9 +228,6 @@ handle_call({get_rule_speed, Id}, _From, State = #state{rule_speeds = RuleSpeeds
                 undefined -> format_rule_speed(#rule_speed{});
                 Speed -> format_rule_speed(Speed)
             end, State};
-
-handle_call(get_overall_rule_speed, _From, State = #state{overall_rule_speed = RuleSpeed}) ->
-    {reply, format_rule_speed(RuleSpeed), State};
 
 handle_call({create_metrics, Id}, _From, State = #state{metric_ids = MIDs}) ->
 
@@ -286,17 +266,14 @@ handle_info(ticking, State = #state{rule_speeds = undefined}) ->
     erlang:send_after(timer:seconds(?SAMPLING), self(), ticking),
     {noreply, State};
 
-handle_info(ticking, State = #state{rule_speeds = RuleSpeeds0,
-                                       overall_rule_speed = OverallRuleSpeed0}) ->
+handle_info(ticking, State = #state{rule_speeds = RuleSpeeds0}) ->
     RuleSpeeds = maps:map(
                     fun(Id, RuleSpeed) ->
                         calculate_speed(get_rules_matched(Id), RuleSpeed)
                     end, RuleSpeeds0),
-    OverallRuleSpeed = calculate_speed(get_overall('rules.matched'), OverallRuleSpeed0),
     async_refresh_resource_status(),
     erlang:send_after(timer:seconds(?SAMPLING), self(), ticking),
-    {noreply, State#state{rule_speeds = RuleSpeeds,
-                          overall_rule_speed = OverallRuleSpeed}};
+    {noreply, State#state{rule_speeds = RuleSpeeds}};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -428,12 +405,3 @@ metrics_idx('actions.taken') ->       4;
 metrics_idx('actions.exception') ->   5;
 metrics_idx('actions.retry') ->       6;
 metrics_idx(_) ->                     7.
-
-overall_metrics() ->
-    [ 'rules.matched'
-    , 'actions.success'
-    , 'actions.error'
-    , 'actions.taken'
-    , 'actions.exception'
-    , 'actions.retry'
-    ].
