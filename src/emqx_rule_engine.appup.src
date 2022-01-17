@@ -35,6 +35,7 @@
       {load_module, emqx_rule_validator, brutal_purge, soft_purge, []}
     ]},
     {"4.2.2", [
+      {update, emqx_rule_metrics, {advanced, []}},
       {load_module, emqx_rule_utils, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_api, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_cli, brutal_purge, soft_purge, []},
@@ -46,6 +47,7 @@
       {load_module, emqx_rule_runtime, brutal_purge, soft_purge, []}
     ]},
     {"4.2.3", [
+      {update, emqx_rule_metrics, {advanced, []}},
       {load_module, emqx_rule_utils, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_api, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_cli, brutal_purge, soft_purge, []},
@@ -53,11 +55,13 @@
       {load_module, emqx_rule_runtime, brutal_purge, soft_purge, []}
     ]},
     {<<"4\\.2\\.[4-6]">>, [
+      {update, emqx_rule_metrics, {advanced, []}},
       {load_module, emqx_rule_engine_api, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_runtime, brutal_purge, soft_purge, []}
     ]},
-    {<<"4\\.2\\.[7-9]">>, [
+    {<<"4\\.2\\.[7-10]">>, [
+      {update, emqx_rule_metrics, {advanced, []}},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_runtime, brutal_purge, soft_purge, []}
     ]},
@@ -96,6 +100,7 @@
       {apply, {supervisor, delete_child, [emqx_rule_engine_sup, emqx_rule_locker]}}
     ]},
     {"4.2.2", [
+      {update, emqx_rule_metrics, {advanced, []}},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_utils, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_api, brutal_purge, soft_purge, []},
@@ -107,6 +112,7 @@
       {load_module, emqx_rule_runtime, brutal_purge, soft_purge, []}
     ]},
     {"4.2.3", [
+      {update, emqx_rule_metrics, {advanced, []}},
       {load_module, emqx_rule_utils, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine_api, brutal_purge, soft_purge, []},
@@ -114,11 +120,13 @@
       {load_module, emqx_rule_runtime, brutal_purge, soft_purge, []}
     ]},
     {<<"4\\.2\\.[4-6]">>, [
+      {update, emqx_rule_metrics, {advanced, []}},
       {load_module, emqx_rule_engine_api, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_runtime, brutal_purge, soft_purge, []}
     ]},
-    {<<"4\\.2\\.[7-9]">>, [
+    {<<"4\\.2\\.[7-10]">>, [
+      {update, emqx_rule_metrics, {advanced, []}},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_runtime, brutal_purge, soft_purge, []}
     ]},
