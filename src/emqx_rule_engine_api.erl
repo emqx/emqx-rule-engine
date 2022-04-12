@@ -320,7 +320,10 @@ show_resource(#{id := Id}, _Params) ->
         {ok, R} ->
             Status =
                 [begin
-                    {ok, St} = rpc:call(Node, emqx_rule_engine, get_resource_status, [Id]),
+                    St = case rpc:call(Node, emqx_rule_engine, get_resource_status, [Id]) of
+                        {ok, St0} -> St0;
+                        {error, _} -> #{is_alive => false}
+                    end,
                     maps:put(node, Node, St)
                 end || Node <- ekka_mnesia:running_nodes()],
             return({ok, maps:put(status, Status, record_to_map(R))});
@@ -350,8 +353,8 @@ get_resource_status(#{id := Id}, _Params) ->
     case emqx_rule_engine:get_resource_status(Id) of
         {ok, Status} ->
             return({ok, Status});
-        {error, {resource_not_found, ResId}} ->
-            return({error, 400, ?ERR_NO_RESOURCE(ResId)})
+        {error, resource_not_initialized} ->
+            return({error, 400, ?ERR_NO_RESOURCE(Id)})
     end.
 
 start_resource(#{id := Id}, _Params) ->
