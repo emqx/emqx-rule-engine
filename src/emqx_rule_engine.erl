@@ -36,6 +36,7 @@
         , create_resource/1
         , test_resource/1
         , start_resource/1
+        , is_source_alive/1
         , get_resource_status/1
         , get_resource_params/1
         , delete_resource/1
@@ -299,17 +300,45 @@ do_update_resource(#{id := Id, type := Type, description := NewDescription, conf
     end.
 
 -spec(test_resource(#{}) -> ok | {error, Reason :: term()}).
-test_resource(#{type := Type, config := Config}) ->
+test_resource(#{type := Type, config := Config} = Params) ->
     case emqx_rule_registry:find_resource_type(Type) of
-        {ok, #resource_type{on_create = {ModC,Create}, on_destroy = {ModD,Destroy}, params_spec = ParamSpec}} ->
+        {ok, #resource_type{params_spec = ParamSpec}} ->
             ok = emqx_rule_validator:validate_params(Config, ParamSpec),
             ResId = resource_id(),
-            cluster_call(init_resource, [ModC, Create, ResId, Config]),
-            cluster_call(clear_resource, [ModD, Destroy, ResId]),
-            ok;
+            try create_resource(maps:put(id, ResId, Params)) of
+                {ok, _} ->
+                    case is_source_alive(ResId) of
+                        true ->
+                            ok;
+                        false ->
+                            %% in is_source_alive, the cluster-call RPC logs errors
+                            %% so we do not log anything here
+                            {error, {resource_down, ResId}}
+                    end;
+                {error, Reason} ->
+                    {error, Reason}
+            catch E:R:S ->
+                ?LOG(warning, "test resource failed, ~0p:~0p ~0p", [E, R, S]),
+                {error, R}
+            after
+                _ = cluster_call(delete_resource, [ResId])
+            end;
         not_found ->
             {error, {resource_type_not_found, Type}}
     end.
+
+is_source_alive(ResId) ->
+    case rpc:multicall(ekka_mnesia:running_nodes(), ?MODULE, get_resource_status, [ResId], 5000) of
+        {ResL, []} ->
+            is_source_alive_(ResL);
+        {_, _Errors} ->
+            false
+    end.
+
+is_source_alive_([]) -> true;
+is_source_alive_([{ok, #{is_alive := true}} | ResL]) -> is_source_alive_(ResL);
+is_source_alive_([{ok, #{is_alive := false}} | _ResL]) -> false;
+is_source_alive_([_Error | _ResL]) -> false.
 
 -spec(get_resource_status(resource_id()) -> {ok, resource_status()} | {error, Reason :: term()}).
 get_resource_status(ResId) ->
