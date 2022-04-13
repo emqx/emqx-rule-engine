@@ -48,31 +48,42 @@ apply_rules([], _Input) ->
     ok;
 apply_rules([#rule{enabled = false}|More], Input) ->
     apply_rules(More, Input);
-apply_rules([Rule = #rule{id = RuleID}|More], Input) ->
-    try apply_rule(Rule, Input)
-    catch
-        %% ignore the errors if select or match failed
-        _:{select_and_transform_error, Error} ->
-            ?LOG(warning, "SELECT clause exception for ~s failed: ~p",
-                 [RuleID, Error]);
-        _:{match_conditions_error, Error} ->
-            ?LOG(warning, "WHERE clause exception for ~s failed: ~p",
-                 [RuleID, Error]);
-        _:{select_and_collect_error, Error} ->
-            ?LOG(warning, "FOREACH clause exception for ~s failed: ~p",
-                 [RuleID, Error]);
-        _:{match_incase_error, Error} ->
-            ?LOG(warning, "INCASE clause exception for ~s failed: ~p",
-                 [RuleID, Error]);
-        _:Error:StkTrace ->
-            ?LOG(error, "Apply rule ~s failed: ~p. Stacktrace:~n~p",
-                 [RuleID, Error, StkTrace])
-    end,
+apply_rules([Rule|More], Input) ->
+    apply_rule(Rule, Input),
     apply_rules(More, Input).
 
 apply_rule(Rule = #rule{id = RuleID}, Input) ->
     clear_rule_payload(),
-    do_apply_rule(Rule, add_metadata(Input, #{rule_id => RuleID})).
+    ok = emqx_rule_metrics:inc_rules_matched(RuleID),
+    try do_apply_rule(Rule, add_metadata(Input, #{rule_id => RuleID}))
+    catch
+        %% ignore the errors if select or match failed
+        _:Reason = {select_and_transform_error, Error} ->
+            emqx_rule_metrics:inc_rules_exception(RuleID),
+            ?LOG(warning, "SELECT clause exception for ~s failed: ~p",
+                 [RuleID, Error]),
+            {error, Reason};
+        _:Reason = {match_conditions_error, Error} ->
+            emqx_rule_metrics:inc_rules_exception(RuleID),
+            ?LOG(warning, "WHERE clause exception for ~s failed: ~p",
+                 [RuleID, Error]),
+            {error, Reason};
+        _:Reason = {select_and_collect_error, Error} ->
+            emqx_rule_metrics:inc_rules_exception(RuleID),
+            ?LOG(warning, "FOREACH clause exception for ~s failed: ~p",
+                 [RuleID, Error]),
+            {error, Reason};
+        _:Reason = {match_incase_error, Error} ->
+            emqx_rule_metrics:inc_rules_exception(RuleID),
+            ?LOG(warning, "INCASE clause exception for ~s failed: ~p",
+                 [RuleID, Error]),
+            {error, Reason};
+        _:Error:StkTrace ->
+            emqx_rule_metrics:inc_rules_exception(RuleID),
+            ?LOG(error, "Apply rule ~s failed: ~p. Stacktrace:~n~p",
+                 [RuleID, Error, StkTrace]),
+            {error, {Error, StkTrace}}
+    end.
 
 do_apply_rule(#rule{id = RuleId,
                     is_foreach = true,
@@ -88,10 +99,14 @@ do_apply_rule(#rule{id = RuleId,
     case ?RAISE(match_conditions(Conditions, ColumnsAndSelected),
                 {match_conditions_error, {_REASON_,_ST_}}) of
         true ->
-            ok = emqx_rule_metrics:inc(RuleId, 'rules.matched'),
             Collection2 = filter_collection(Input, InCase, DoEach, Collection),
+            case Collection2 of
+                [] -> emqx_rule_metrics:inc_rules_no_result(RuleId);
+                _ -> emqx_rule_metrics:inc_rules_passed(RuleId)
+            end,
             {ok, [take_actions(Actions, Coll, Input, OnFailed) || Coll <- Collection2]};
         false ->
+            ok = emqx_rule_metrics:inc_rules_no_result(RuleId),
             {error, nomatch}
     end;
 
@@ -106,9 +121,10 @@ do_apply_rule(#rule{id = RuleId,
     case ?RAISE(match_conditions(Conditions, maps:merge(Input, Selected)),
                 {match_conditions_error, {_REASON_,_ST_}}) of
         true ->
-            ok = emqx_rule_metrics:inc(RuleId, 'rules.matched'),
+            ok = emqx_rule_metrics:inc_rules_passed(RuleId),
             {ok, take_actions(Actions, Selected, Input, OnFailed)};
         false ->
+            ok = emqx_rule_metrics:inc_rules_no_result(RuleId),
             {error, nomatch}
     end.
 
@@ -434,7 +450,7 @@ cache_payload(DecodedP) ->
 
 safe_decode_and_cache(MaybeJson) ->
     try cache_payload(emqx_json:decode(MaybeJson, [return_maps]))
-    catch _:_ -> #{}
+    catch _:_ -> error({decode_json_failed, MaybeJson})
     end.
 
 ensure_list(List) when is_list(List) -> List;
