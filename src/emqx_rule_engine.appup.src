@@ -62,7 +62,7 @@
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_runtime, brutal_purge, soft_purge, []}
     ]},
-    {<<"4\\.2\\.[7-10]">>, [
+    {<<"4\\.2\\.([7-9])|(10)">>, [
       {update, emqx_rule_metrics, {advanced, []}},
       {load_module,emqx_rule_sqltester,brutal_purge,soft_purge,[]},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
@@ -131,7 +131,7 @@
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
       {load_module, emqx_rule_runtime, brutal_purge, soft_purge, []}
     ]},
-    {<<"4\\.2\\.[7-10]">>, [
+    {<<"4\\.2\\.([7-9])|(10)">>, [
       {update, emqx_rule_metrics, {advanced, []}},
       {load_module,emqx_rule_sqltester,brutal_purge,soft_purge,[]},
       {load_module, emqx_rule_engine, brutal_purge, soft_purge, []},
