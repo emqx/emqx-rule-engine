@@ -213,6 +213,16 @@ test_rule_sql(Params) ->
     end.
 
 do_create_rule(Params) ->
+    case proplists:get_value(<<"id">>, Params) of
+        undefined -> do_create_rule2(Params);
+        RuleId ->
+            case emqx_rule_registry:get_rule(RuleId) of
+                {ok, _} -> return({error, 400, <<"Already Exists">>});
+                not_found -> do_create_rule2(Params)
+            end
+    end.
+
+do_create_rule2(Params) ->
     try emqx_rule_engine:create_rule(parse_rule_params(Params)) of
         {ok, Rule} ->
             return({ok, record_to_map(Rule)});
