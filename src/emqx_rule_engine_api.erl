@@ -299,7 +299,9 @@ do_create_resource(Create, Params) ->
         {ok, Resource} ->
             return({ok, record_to_map(Resource)});
         {error, {resource_type_not_found, Type}} ->
-            return({error, 400, ?ERR_NO_RESOURCE_TYPE(Type)})
+            return({error, 400, ?ERR_NO_RESOURCE_TYPE(Type)});
+        {error, Reason} ->
+            return({error, 400, ?ERR_BADARGS(Reason)})
     catch
         throw:{resource_type_not_found, Type} ->
             return({error, 400, ?ERR_NO_RESOURCE_TYPE(Type)});
